@@ -14,7 +14,7 @@ db.version(11).stores({
     setlists: '++id, title, location, time, members, notes' 
 });
 
-// --- 2. MOTOR MUSICAL GLOBAL ---
+// --- 2. MOTOR MUSICAL ---
 const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
@@ -38,27 +38,6 @@ const transposeContent = (content, steps) => {
     if (matches && matches.length >= line.trim().split(/\s+/).length * 0.4) return line.replace(chordRegex, (m) => shiftNote(m, steps));
     return line;
   }).join('\n');
-};
-
-const formatChordsVisual = (text) => {
-    if (!text) return null;
-    return text.split('\n').map((line, i) => {
-        const matches = line.match(chordRegex);
-        const isChordLine = (matches?.length || 0) > 0 && (matches?.length || 0) >= line.trim().split(/\s+/).length * 0.4;
-        return (
-            <div key={i} style={{ 
-                color: isChordLine ? '#FFD700' : '#FFFFFF', 
-                fontWeight: isChordLine ? 'bold' : 'normal', 
-                minHeight: '1.2em', 
-                whiteSpace: 'pre-wrap', // MÁGICA: Quebra a linha se for maior que a tela
-                wordBreak: 'break-word', // Evita que palavras longas "furem" a tela
-                textAlign: 'left',
-                paddingRight: '10px'
-            }}>
-                {line || ' '}
-            </div>
-        );
-    });
 };
 
 export default function App() {
@@ -101,8 +80,10 @@ export default function App() {
   }, []);
 
   const refreshData = async () => {
-    setSongs(await db.songs.toArray());
-    setSetlists(await db.setlists.toArray());
+    const s = await db.songs.toArray();
+    const sl = await db.setlists.toArray();
+    setSongs(s);
+    setSetlists(sl);
   };
 
   const initMidi = () => {
@@ -130,7 +111,6 @@ export default function App() {
       };
       updateInputs();
       WebMidi.addListener("connected", updateInputs);
-      WebMidi.addListener("disconnected", updateInputs);
     }).catch(() => {});
   };
 
@@ -165,7 +145,7 @@ export default function App() {
                     await db.setlists.add({ ...sl, id: undefined, songs: newS });
                 }
             }
-            refreshData(); alert(`Importado com sucesso!`);
+            refreshData(); alert(`Importação concluída!`);
         } catch (err) { alert("Arquivo JSON inválido."); }
     };
     reader.readAsText(file);
@@ -179,7 +159,27 @@ export default function App() {
     link.href = url; link.download = filename; link.click();
   };
 
-  if (showWizard) return <Wizard onDone={() => { localStorage.setItem('wizardDone', 'true'); setShowWizard(false); }} />;
+  const formatChordsVisual = (text) => {
+    if (!text) return null;
+    return text.split('\n').map((line, i) => {
+        const matches = line.match(chordRegex);
+        const isChordLine = (matches?.length || 0) > 0 && (matches?.length || 0) >= line.trim().split(/\s+/).length * 0.4;
+        return (
+            <div key={i} style={{ 
+                color: isChordLine ? '#FFD700' : '#FFFFFF', 
+                fontWeight: isChordLine ? 'bold' : 'normal', 
+                minHeight: '1.2em', 
+                whiteSpace: 'pre-wrap', 
+                wordBreak: 'break-word',
+                textAlign: 'left',
+                paddingRight: '10px',
+                lineHeight: '1.8' // CORREÇÃO DE ESPAÇAMENTO (BUG 1)
+            }}>
+                {line || ' '}
+            </div>
+        );
+    });
+  };
 
   return (
     <div style={styles.appContainer}>
@@ -193,7 +193,7 @@ export default function App() {
         </div>
         <div style={{display:'flex', gap:'10px'}}>
             <label style={styles.headerBtn}><FileUp size={14}/> RESTAURAR BACKUP<input type="file" hidden onChange={(e) => handleGenericImport(e, "Backup")} /></label>
-            <button style={styles.headerBtn} onClick={() => triggerDownload({songs, setlists}, `ShowPad_Full_Backup_${new Date().toISOString().slice(0,10)}.json`)}><Download size={14}/> GERAR BACKUP</button>
+            <button style={styles.headerBtn} onClick={() => triggerDownload({songs, setlists}, `ShowPad_Backup_${new Date().toISOString().slice(0,10)}.json`)}><Download size={14}/> GERAR BACKUP</button>
             <button onClick={() => setShowInfo(true)} style={styles.infoBtn}><Info size={22}/></button>
         </div>
       </header>
@@ -214,7 +214,7 @@ export default function App() {
                         </div>
                         <div style={{display:'flex', gap:'6px'}}>
                             <button style={styles.listActionBtnShow} onClick={() => { setSelectedItem({type: view === 'library' ? 'song' : 'setlist', data: item}); setShowMode(true); }}><Monitor size={16}/></button>
-                            <button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Excluir item?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
+                            <button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
                         </div>
                     </div>
                 ))}
@@ -224,7 +224,7 @@ export default function App() {
                     <><button onClick={async () => { const id = await db.songs.add({title:"Nova Música", artist:"Artista", content:""}); refreshData(); setSelectedItem({type:'song', data: await db.songs.get(id)}); }} style={styles.addBtn}>+ MÚSICA</button><label style={styles.importBtnLabel}>IMPORTAR CIFRA<input type="file" hidden onChange={(e) => handleGenericImport(e, "Cifra")} /></label></>
                 ) : view === 'setlists' ? (
                     <><button onClick={async () => { const id = await db.setlists.add({title:"Novo Show", songs:[], location:"", time:"", members:"", notes:""}); refreshData(); setSelectedItem({type:'setlist', data: await db.setlists.get(id)}); }} style={styles.addBtn}>+ NOVO SHOW</button><label style={styles.importBtnLabel}>IMPORTAR SHOW<input type="file" hidden onChange={(e) => handleGenericImport(e, "Setlist")} /></label></>
-                ) : <div style={{color:'#666', fontSize:'11px', textAlign:'center', width:'100%'}}>Garimpo Ativo via Mac</div>}
+                ) : <div style={{color:'#666', fontSize:'11px', textAlign:'center', width:'100%'}}>Garimpo via Mac</div>}
             </div>
         </div>
 
@@ -232,20 +232,37 @@ export default function App() {
             {view === 'garimpo' ? (
                 <div style={styles.garimpoPanel}>
                     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><h2 style={{color: '#fff', margin: 0}}>Garimpar Cifras</h2><div style={isServerOnline ? styles.serverLedOn : styles.serverLedOff}><div style={styles.ledDot}></div>{isServerOnline ? "ASSISTENTE MAC: ONLINE" : "ASSISTENTE MAC: OFFLINE"}</div></div>
-                    <p style={{fontSize:'14px', color:'#aaa', margin:'10px 0 25px 0'}}>{isServerOnline ? "Tudo pronto! Cole os links do CifraClub." : "Servidor no Mac não detectado (rode: node server.js)."}</p>
-                    <div style={styles.inputRow}><input style={styles.inputField} placeholder="Link do CifraClub..." value={garimpoInput} onChange={e=>setGarimpoInput(e.target.value)} onKeyDown={e=>e.key==='Enter' && (()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}})()}/><button style={styles.addBtn} onClick={()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}}}>OK</button></div>
-                    <div style={styles.scrollList}>{garimpoQueue.map((url,i)=>(<div key={i} style={styles.miniItemGarimpo}><span>{url.split('/').pop()}</span><X size={14} onClick={()=>setGarimpoQueue(garimpoQueue.filter((_,idx)=>idx!==i))}/></div>))}</div>
+                    <div style={styles.inputRow}>
+                        <input style={styles.inputField} placeholder="Cole o link do CifraClub..." value={garimpoInput} onChange={e=>setGarimpoInput(e.target.value)} onKeyDown={e=>e.key==='Enter' && (()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}})()}/>
+                        <button style={styles.secondaryBtn} onClick={async ()=>{ try {const t = await navigator.clipboard.readText(); setGarimpoInput(t);} catch(e){alert("Cole manualmente")}}}>
+                            <ClipboardPaste size={18}/>
+                        </button>
+                        <button style={styles.addBtn} onClick={()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}}}>OK</button>
+                    </div>
+                    <div style={styles.scrollList}>
+                        {garimpoQueue.map((url,i)=>(
+                            <div key={i} style={styles.miniItemGarimpo}>
+                                <span>{url.replace(/\/$/, "").split('/').pop()}</span> {/* CORREÇÃO DE NOME (BUG 2.1) */}
+                                <X size={14} onClick={()=>setGarimpoQueue(garimpoQueue.filter((_,idx)=>idx!==i))} style={{cursor:'pointer'}}/>
+                            </div>
+                        ))}
+                    </div>
                     <button style={styles.processBtn} onClick={async () => {
-                        setIsScraping(true); setScrapingStatus("Processando...");
+                        setIsScraping(true); setScrapingStatus("Extraindo...");
                         for (const url of garimpoQueue) {
                             try {
                                 const response = await fetch('http://localhost:3001/scrape', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ url }) });
+                                if(!response.ok) throw new Error();
                                 const song = await response.json();
-                                if(song.title && !(await db.songs.where({title:song.title, artist:song.artist}).first())) await db.songs.add({...song, notes:""});
-                            } catch (err) { console.error(err); }
+                                if(song.title && !(await db.songs.where({title:song.title, artist:song.artist}).first())) {
+                                    await db.songs.add({...song, notes:""});
+                                }
+                            } catch (err) { console.error("Falha no link", url); }
                         }
                         setIsScraping(false); setScrapingStatus("✅ Biblioteca Atualizada!"); setGarimpoQueue([]); refreshData();
-                    }} disabled={isScraping || garimpoQueue.length===0 || !isServerOnline}>{isScraping ? <Loader2 className="spin" size={20}/> : "Garimpar e Salvar"}</button>
+                    }} disabled={isScraping || garimpoQueue.length===0 || !isServerOnline}>
+                        {isScraping ? <Loader2 className="spin" size={20}/> : "Garimpar e Salvar na Biblioteca"}
+                    </button>
                     <div style={styles.statusText}>{scrapingStatus}</div>
                 </div>
             ) : selectedItem?.type === 'song' ? (
@@ -308,7 +325,7 @@ const SetlistEditor = ({ setlist, allSongs, onClose, onShow, update, triggerDown
             <div style={styles.showMetaData}>
                 <div style={styles.metaRow}><input placeholder="Local" value={lLoc} onChange={e => setLLoc(e.target.value)} onBlur={persist} style={styles.metaInput}/><input placeholder="Hora" value={lTime} onChange={e => setLTime(e.target.value)} onBlur={persist} style={styles.metaInputSmall}/></div>
                 <input placeholder="Integrantes" value={lMem} onChange={e => setLMem(e.target.value)} onBlur={persist} style={styles.metaInputWide}/>
-                <textarea placeholder="Obs Gerais..." value={lNote} onChange={e => setLNote(e.target.value)} onBlur={persist} style={styles.metaTextArea}></textarea>
+                <textarea placeholder="Obs Gerais do Show..." value={lNote} onChange={e => setLNote(e.target.value)} onBlur={persist} style={styles.metaTextArea}></textarea>
             </div>
             <div style={styles.setlistSplit}>
                 <div style={styles.setlistHalf}><h3>Set List do Show</h3>{(setlist.songs || []).map((s, i) => (<div key={i} style={styles.miniItemReorder}><div style={{flex:1}}><b>{i+1}.</b> {s.title}</div><div style={styles.reorderControls}><button onClick={()=>moveSong(i,-1)} disabled={i===0}><ArrowUp size={14}/></button><button onClick={()=>moveSong(i,1)} disabled={i===setlist.songs.length-1}><ArrowDown size={14}/></button><button onClick={()=>{const n=[...setlist.songs]; n.splice(i,1); update({songs:n});}} style={{color:'#ff3b30'}}><Trash2 size={14}/></button></div></div>))}</div>
@@ -341,17 +358,7 @@ const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, setMidiLearning
 };
 
 const InfoView = ({ onClose, inputs }) => (
-    <div style={styles.wizard}>
-        <div style={styles.wizardCard}>
-            <h2 style={{color:'#007aff', margin:0}}>ShowPad Pro v10.4</h2>
-            <div style={{textAlign:'left', fontSize:'12px', color:'#333', marginTop:'15px'}}>
-                <p><b>Autor:</b> Edu Posada</p>
-                <hr/>
-                <p><b>Layout Responsivo:</b> Agora as cifras quebram a linha automaticamente para não sair da tela do iPad quando o zoom está alto.</p>
-            </div>
-            <button style={styles.primaryButton} onClick={onClose}>Fechar</button>
-        </div>
-    </div>
+    <div style={styles.wizard}><div style={styles.wizardCard}><h2>Painel ShowPad Pro v10.5</h2><div style={{textAlign:'left', fontSize:'12px', color:'#333'}}><p><b>Autor:</b> Edu Posada</p><hr/><p><b>MIDI:</b> {inputs.join(", ") || "Nenhum"}</p><hr/><p><b>Espaçamento:</b> Corrigido para evitar sobreposição de linhas em zooms altos.</p></div><button style={styles.primaryButton} onClick={onClose}>Fechar</button></div></div>
 );
 
 const Wizard = ({ onDone }) => (
@@ -402,13 +409,8 @@ const styles = {
     pageBtn: { padding:'20px', backgroundColor:'#222', border:'1px solid #444', color:'#888', borderRadius:'10px', fontSize:'16px', display:'flex', alignItems:'center', gap:'10px', cursor:'pointer' },
     pageBtnNext: { padding:'25px', backgroundColor:'#007aff22', border:'1px solid #007aff', color:'#fff', borderRadius:'10px', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', fontWeight:'bold', cursor:'pointer' },
     showMetaData: { padding: '15px 20px', backgroundColor: '#2c2c2e', display: 'flex', flexDirection: 'column', gap: '8px' },
-    metaRow: { display: 'flex', gap: '10px' },
-    metaInput: { flex: 1, background: '#1c1c1e', border: '1px solid #444', color: '#fff', padding: '8px', borderRadius: '5px', fontSize: '13px' },
-    metaInputSmall: { width: '80px', background: '#1c1c1e', border: '1px solid #444', color: '#fff', padding: '8px', borderRadius: '5px', fontSize: '13px' },
-    metaInputWide: { background: '#1c1c1e', border: '1px solid #444', color: '#fff', padding: '8px', borderRadius: '5px', fontSize: '13px' },
-    metaTextArea: { background: '#1c1c1e', border: '1px solid #444', color: '#fff', padding: '8px', borderRadius: '5px', fontSize: '13px', resize: 'none', height: '60px' },
     miniItem: { padding: '10px', borderBottom: '1px solid #333', cursor: 'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'13px' },
-    miniItemGarimpo: { padding: '10px', borderBottom: '1px solid #333', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'12px', color:'#fff' },
+    miniItemGarimpo: { padding: '10px', borderBottom: '1px solid #333', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'12px', color:'#fff' }, // FORÇADO TEXTO BRANCO (BUG 2.1)
     miniItemReorder: { padding: '10px', borderBottom: '1px solid #333', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'13px' },
     reorderControls: { display:'flex', gap:'10px', alignItems:'center' },
     setlistSplit: { display: 'flex', flex: 1 },
