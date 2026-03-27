@@ -3,17 +3,17 @@ import { WebMidi } from 'webmidi';
 import Dexie from 'dexie';
 import { 
   Plus, Music, Play, Trash2, ChevronLeft, FileUp, ChevronUp, ChevronDown, 
-  Type, ListMusic, CheckCircle2, X, RefreshCw, Piano, Info, Activity, Zap, Monitor, Menu, ChevronRight, Download, Save, ClipboardPaste, Loader2, Database, Settings
+  Type, ListMusic, CheckCircle2, X, RefreshCw, Piano, Info, Activity, Zap, Monitor, Menu, ChevronRight, Download, Save, ClipboardPaste, Loader2, Database, Settings, Share2, ArrowUp, ArrowDown
 } from 'lucide-react';
 
-// --- DATABASE ---
+// --- 1. BANCO DE DADOS ---
 const db = new Dexie('ShowPadProWeb');
 db.version(11).stores({ 
     songs: '++id, title, artist', 
     setlists: '++id, title, location, time, members, notes' 
 });
 
-// --- MOTOR MUSICAL ---
+// --- 2. MOTOR MUSICAL GLOBAL ---
 const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
@@ -53,6 +53,7 @@ const formatChordsVisual = (text) => {
     });
 };
 
+// --- COMPONENTE PRINCIPAL ---
 export default function App() {
   const [songs, setSongs] = useState([]);
   const [setlists, setSetlists] = useState([]);
@@ -71,13 +72,13 @@ export default function App() {
   const [garimpoQueue, setGarimpoQueue] = useState([]);
   const [isScraping, setIsScraping] = useState(false);
   const [scrapingStatus, setScrapingStatus] = useState("");
-  
+  const [showWizard, setShowWizard] = useState(!localStorage.getItem('wizardDone'));
+
   const midiLearningRef = useRef(null);
   const showScrollRef = useRef(null);
 
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
   useEffect(() => { refreshData(); initMidi(); }, []);
-
   useEffect(() => {
     const check = () => fetch('http://localhost:3001/ping').then(r => setIsServerOnline(r.ok)).catch(() => setIsServerOnline(false));
     check(); const int = setInterval(check, 5000); return () => clearInterval(int);
@@ -173,8 +174,8 @@ export default function App() {
             {(view === 'library' ? songs : (view === 'setlists' ? setlists : [])).map(item => (
               <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}>
                 <div style={{flex:1, overflow:'hidden'}} onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
-                    <strong>{item.title}</strong>
-                    <small style={{display:'block', opacity:0.5}}>{item.artist || item.location || "---"}</small>
+                    <strong style={{color:'#fff'}}>{item.title}</strong>
+                    <small style={{display:'block', opacity:0.5, color:'#aaa'}}>{item.artist || item.location || "---"}</small>
                 </div>
                 <div style={{display:'flex', gap:'6px'}}>
                     <button style={styles.listActionBtnShow} onClick={() => { setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={16}/></button>
@@ -212,11 +213,48 @@ export default function App() {
                   } catch (e) {}
                 }
                 setIsScraping(false); setScrapingStatus("Concluído!"); setGarimpoQueue([]); refreshData();
-              }} disabled={isScraping || garimpoQueue.length===0 || !isServerOnline}>Processar Tudo</button>
+              }} disabled={isScraping || garimpoQueue.length===0 || !isServerOnline}>Salvar na Biblioteca</button>
               <div style={styles.statusText}>{scrapingStatus}</div>
             </div>
           ) : selectedItem ? (
-            <ItemEditor key={selectedItem.data.id} item={selectedItem} songs={songs} triggerDL={triggerDL} onClose={()=>setSelectedItem(null)} onShow={()=>setShowMode(true)} refresh={refreshData} />
+            <div style={styles.editorContent}>
+                <div style={styles.editorHeader}>
+                    <div style={{flex:1}}>
+                        <input style={styles.hInput} value={selectedItem.data.title} onChange={async (e)=>{
+                            const val = e.target.value;
+                            if(selectedItem.type==='song') await db.songs.update(selectedItem.data.id, {title:val});
+                            else await db.setlists.update(selectedItem.data.id, {title:val});
+                            setSelectedItem({...selectedItem, data: {...selectedItem.data, title:val}});
+                            refreshData();
+                        }}/>
+                        <input style={styles.artistInput} value={selectedItem.type==='song'?selectedItem.data.artist:selectedItem.data.location} onChange={async (e)=>{
+                            const val = e.target.value;
+                            if(selectedItem.type==='song') await db.songs.update(selectedItem.data.id, {artist:val});
+                            else await db.setlists.update(selectedItem.data.id, {location:val});
+                            setSelectedItem({...selectedItem, data: {...selectedItem.data, artist:val, location:val}});
+                            refreshData();
+                        }} placeholder={selectedItem.type==='song'?"Artista":"Local"} />
+                    </div>
+                    <div style={styles.btnGroup}>
+                        <button style={styles.exportBtn} onClick={()=>triggerDL(selectedItem.data, "Export.json")}>EXPORTAR</button>
+                        {selectedItem.type==='song' && <><button style={styles.transpBtn} onClick={async ()=>{const n=transposeContent(selectedItem.data.content, 1); await db.songs.update(selectedItem.data.id,{content:n}); setSelectedItem({...selectedItem, data:{...selectedItem.data, content:n}}); }}>+ Tom</button><button style={styles.transpBtn} onClick={async ()=>{const n=transposeContent(selectedItem.data.content, -1); await db.songs.update(selectedItem.data.id,{content:n}); setSelectedItem({...selectedItem, data:{...selectedItem.data, content:n}}); }}>- Tom</button></>}
+                        <button onClick={()=>setSelectedItem(null)} style={styles.saveBtn}>Concluir</button>
+                        <button onClick={()=>setShowMode(true)} style={styles.showBtn}>SHOW</button>
+                    </div>
+                </div>
+                {selectedItem.type === 'song' ? (
+                    <textarea style={styles.mainTextArea} value={selectedItem.data.content} onChange={async (e) => {
+                        const val = e.target.value;
+                        setSelectedItem({...selectedItem, data: {...selectedItem.data, content: val}});
+                        await db.songs.update(selectedItem.data.id, {content: val});
+                    }} />
+                ) : (
+                    <div style={styles.setlistSplit}>
+                        <div style={styles.setlistHalf}><h3>Set List</h3>{(selectedItem.data.songs || []).map((s, i) => (<div key={i} style={styles.miniItemReorder}><div style={{flex:1, color:'#fff'}}>{i+1}. {s.title}</div><button onClick={async ()=>{const n=[...selectedItem.data.songs]; n.splice(i,1); await db.setlists.update(selectedItem.data.id,{songs:n}); setSelectedItem({...selectedItem, data:{...selectedItem.data, songs:n}}); refreshData();}}><Trash2 size={14}/></button></div>))}</div>
+                        <div style={{...styles.setlistHalf, background:'#222'}}><h3>Biblioteca (clique no +)</h3>{songs.map(s=>(<div key={s.id} style={styles.miniItem} onClick={async ()=>{const n=[...(selectedItem.data.songs||[]), s]; await db.setlists.update(selectedItem.data.id,{songs:n}); setSelectedItem({...selectedItem, data:{...selectedItem.data, songs:n}}); refreshData();}}>{s.title} +</div>))}</div>
+                    </div>
+                )}
+            </div>
           ) : <div style={styles.empty}><Music size={80} color="#222" /><h2>ShowPad Pro</h2></div>}
         </div>
       </div>
@@ -226,7 +264,7 @@ export default function App() {
             <div style={styles.showToolbar}>
                 <button onClick={() => setShowMode(false)} style={styles.backBtn}><ChevronLeft/> Sair</button>
                 <div style={{flex:1, textAlign:'center'}}><strong style={{color:'#fff'}}>{selectedItem && selectedItem.data.title}</strong>{lastSignalUI && <div style={styles.midiProbeFloating}>MIDI: {lastSignalUI}</div>}</div>
-                <div style={styles.showControls}><button onClick={() => setFontSize(f => {const n=f-5; localStorage.setItem('fontSize', n); return n;})}><Type size={14}/>-</button><button onClick={() => setFontSize(f => {const n=f+5; localStorage.setItem('fontSize', n); return n;})}><Type size={14}/>+</button><button onClick={() => scrollPage(-1)}><ChevronUp size={20}/></button><button onClick={() => scrollPage(1)}><ChevronDown size={20}/></button></div>
+                <div style={styles.showControls}><button onClick={() => setFontSize(f => {const n=f-5; localStorage.setItem('fontSize', n); return n;})}><Type size={14}/>-</button><button onClick={() => setFontSize(f => {const n=f+5; localStorage.setItem('fontSize', n); return n;})}><Type size={14}/>+</button><button onClick={() => scrollPage(-1)}><ChevronUp size={20}/></button><button onClick={() => scrollPage(1)}><ChevronDown size={20}/></button><button onClick={() => setShowSettings(true)}><Piano size={20}/></button></div>
             </div>
             <div ref={showScrollRef} style={{...styles.showContent, fontSize: fontSize + 'px', fontFamily: 'monospace', color:'#fff'}}>
                 {selectedItem.type === 'song' ? formatChordsVisual(selectedItem.data.content) : (selectedItem.data.songs || []).map((s, idx) => (
@@ -244,9 +282,9 @@ export default function App() {
             <div style={styles.settingsCard}>
                 <div style={{display:'flex', justifyContent:'space-between'}}><h2 style={{margin:0}}>Configurações</h2><X onClick={()=>setShowSettings(false)} style={{cursor:'pointer'}}/></div>
                 <div style={styles.settingsSection}>
-                    <h4>MIDI</h4>
-                    <div>{allInputs.length>0 ? "Hardware: " + allInputs.join(", ") : "Sem hardware"}</div>
-                    <div style={{display:'flex', gap:'10px', marginTop:'10px'}}><button onClick={()=>setMidiLearning('up')} style={midiLearning==='up'?styles.learnBtnActive:styles.learnBtn}>{midiLearning==='up'?"...":"Mapear VOLTAR"}</button><button onClick={()=>setMidiLearning('down')} style={midiLearning==='down'?styles.learnBtnActive:styles.learnBtn}>{midiLearning==='down'?"...":"Mapear AVANÇAR"}</button></div>
+                    <h4>MIDI Hardware</h4>
+                    <div>{allInputs.length>0 ? "Hardware: " + allInputs.join(", ") : "Sem hardware detectado"}</div>
+                    <div style={{display:'flex', gap:'10px', marginTop:'10px'}}><button onClick={()=>setMidiLearning('up')} style={midiLearning==='up'?styles.learnBtnActive:styles.learnBtn}>{midiLearning==='up'?"Gravando...":"Mapear VOLTAR"}</button><button onClick={()=>setMidiLearning('down')} style={midiLearning==='down'?styles.learnBtnActive:styles.learnBtn}>{midiLearning==='down'?"Gravando...":"Mapear AVANÇAR"}</button></div>
                 </div>
                 <button style={styles.primaryButton} onClick={()=>setShowSettings(false)}>Fechar</button>
             </div>
@@ -255,33 +293,6 @@ export default function App() {
     </div>
   );
 }
-
-const ItemEditor = ({ item, songs, triggerDL, onClose, onShow, refresh }) => {
-  const [lC, setLC] = useState(item.data.content), [lT, setLT] = useState(item.data.title), [lA, setLA] = useState(item.data.artist || ""), [lLoc, setLLoc] = useState(item.data.location || "");
-  const save = async () => {
-    if (item.type === 'song') await db.songs.update(item.data.id, { content: lC, title: lT, artist: lA });
-    else await db.setlists.update(item.data.id, { title: lT, location: lLoc });
-    refresh();
-  };
-  return (
-    <div style={styles.editorContent}>
-      <div style={styles.editorHeader}>
-        <div style={{flex:1}}><input style={styles.hInput} value={lT} onChange={e=>setLT(e.target.value)} onBlur={save}/><input style={styles.artistInput} value={item.type==='song'?lA:lLoc} onChange={e=>item.type==='song'?setLA(e.target.value):setLLoc(e.target.value)} onBlur={save} placeholder={item.type==='song'?"Artista":"Local"}/></div>
-        <div style={styles.btnGroup}>
-          <button style={styles.exportBtn} onClick={()=>triggerDL(item.type==='song'?{songs:[{...item.data, content:lC}]}:{songs:item.data.songs, setlists:[{...item.data}]}, "Export.json")}>EXPORTAR</button>
-          {item.type==='song' && <><button style={styles.transpBtn} onClick={()=>{const n=transposeContent(lC, 1); setLC(n); save();}}>+ Tom</button><button style={styles.transpBtn} onClick={()=>{const n=transposeContent(lC, -1); setLC(n); save();}}>- Tom</button></>}
-          <button onClick={()=>{save(); onClose();}} style={styles.saveBtn}>Concluir</button><button onClick={()=>{save(); onShow();}} style={styles.showBtn}>SHOW</button>
-        </div>
-      </div>
-      {item.type === 'setlist' ? (
-        <div style={styles.setlistSplit}>
-          <div style={styles.setlistHalf}><h3>Set List</h3>{(item.data.songs || []).map((s, i) => (<div key={i} style={styles.miniItemReorder}><div style={{flex:1, color:'#fff'}}>{i+1}. {s.title}</div><button onClick={async ()=>{const n=[...item.data.songs]; n.splice(i,1); await db.setlists.update(item.data.id,{songs:n}); refresh();}}><Trash2 size={14}/></button></div>))}</div>
-          <div style={{...styles.setlistHalf, background:'#222'}}><h3>Biblioteca</h3>{songs.map(s=>(<div key={s.id} style={styles.miniItem} onClick={async ()=>{const n=[...(item.data.songs||[]), s]; await db.setlists.update(item.data.id,{songs:n}); refresh();}}>{s.title} +</div>))}</div>
-        </div>
-      ) : <textarea style={styles.mainTextArea} value={lC} onChange={e=>setLC(e.target.value)} onBlur={save} />}
-    </div>
-  );
-};
 
 const styles = {
     appContainer: { display: 'flex', flexDirection:'column', height: '100vh', backgroundColor: '#1c1c1e', color: '#fff', overflow:'hidden', fontFamily: 'sans-serif' },
@@ -297,8 +308,8 @@ const styles = {
     tab: { flex: 1, padding: '12px', border: 'none', background: 'none', color: '#888', cursor:'pointer', fontSize:'11px' },
     activeTab: { flex: 1, padding: '12px', border: 'none', background: '#3a3a3c', color: '#fff', borderBottom: '2px solid #007aff' },
     listArea: { flex: 1, overflowY: 'auto' },
-    listItem: { padding: '10px 15px', borderBottom: '1px solid #333', cursor: 'pointer', display:'flex', alignItems:'center', gap:'10px', color: '#fff' },
-    selectedItem: { padding: '10px 15px', borderBottom: '1px solid #333', cursor: 'pointer', backgroundColor: '#007aff22', borderLeft: '4px solid #007aff', display:'flex', alignItems:'center', gap:'10px', color: '#fff' },
+    listItem: { padding: '10px 15px', borderBottom: '1px solid #333', cursor: 'pointer', display:'flex', alignItems:'center', gap:'10px' },
+    selectedItem: { padding: '10px 15px', borderBottom: '1px solid #333', cursor: 'pointer', backgroundColor: '#007aff22', borderLeft: '4px solid #007aff', display:'flex', alignItems:'center', gap:'10px' },
     listActionBtnShow: { background:'none', border:'none', color:'#007aff', cursor:'pointer', padding:'5px' },
     listActionBtnDelete: { background:'none', border:'none', color:'#ff3b30', cursor:'pointer', padding:'5px' },
     sidebarFooter: { padding: '15px', display: 'flex', gap: '8px', borderTop: '1px solid #333', flexWrap: 'wrap' },
