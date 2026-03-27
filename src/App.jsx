@@ -4,7 +4,7 @@ import Dexie from 'dexie';
 import { 
   Plus, Music, Play, Trash2, ChevronLeft, 
   FileUp, ChevronUp, ChevronDown, 
-  Type, ListMusic, CheckCircle2, X, RefreshCw, Piano, Info, Activity, Zap, Monitor, Menu, ChevronRight, Download, Share2, ArrowUp, ArrowDown, Globe, ClipboardPaste, Loader2, Database, Save
+  Type, ListMusic, CheckCircle2, X, RefreshCw, Piano, Info, Activity, Zap, Monitor, Menu, ChevronRight, Download, Save, ClipboardPaste, Loader2, Database, Cloud
 } from 'lucide-react';
 
 // --- 1. BANCO DE DADOS ---
@@ -14,7 +14,7 @@ db.version(11).stores({
     setlists: '++id, title, location, time, members, notes' 
 });
 
-// --- 2. MOTOR MUSICAL GLOBAL ---
+// --- 2. MOTOR MUSICAL ---
 const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
@@ -47,12 +47,9 @@ const formatChordsVisual = (text) => {
         const isChordLine = (matches?.length || 0) > 0 && (matches?.length || 0) >= line.trim().split(/\s+/).length * 0.4;
         return (
             <div key={i} style={{ 
-                color: isChordLine ? '#FFD700' : '#FFFFFF', // AMARELO PARA CIFRA, BRANCO PARA LETRA
+                color: isChordLine ? '#FFD700' : '#FFFFFF', 
                 fontWeight: isChordLine ? 'bold' : 'normal', 
-                minHeight: '1.2em', 
-                whiteSpace: 'pre-wrap', 
-                textAlign: 'left', 
-                lineHeight: '1.8' 
+                minHeight: '1.2em', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8' 
             }}>
                 {line || ' '}
             </div>
@@ -68,35 +65,25 @@ export default function App() {
   const [showInfo, setShowInfo] = useState(false);
   const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30);
   const [view, setView] = useState('library');
-  const [isServerOnline, setIsServerOnline] = useState(false);
+  
+  // MIDI / SERVER
   const [isMidiEnabled, setIsMidiEnabled] = useState(false);
-  const [midiFlash, setMidiFlash] = useState(false);
+  const [midiFlash, setMidiFlash] = useState(false); 
   const [lastSignalUI, setLastSignalUI] = useState("");
   const [allInputs, setAllInputs] = useState([]);
   const [midiLearning, setMidiLearning] = useState(null);
+  const midiLearningRef = useRef(null);
+  const showScrollRef = useRef(null);
+
+  // GARIMPO CLOUD
   const [garimpoInput, setGarimpoInput] = useState("");
   const [garimpoQueue, setGarimpoQueue] = useState([]);
   const [isScraping, setIsScraping] = useState(false);
   const [scrapingStatus, setScrapingStatus] = useState("");
-  const [showWizard, setShowWizard] = useState(!localStorage.getItem('wizardDone'));
-  
-  const midiLearningRef = useRef(null);
-  const showScrollRef = useRef(null);
+  const [isCloudOnline, setIsCloudOnline] = useState(true);
 
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
   useEffect(() => { refreshData(); initMidi(); }, []);
-
-  useEffect(() => {
-    const checkServer = async () => {
-        try {
-            const res = await fetch('http://localhost:3001/ping', { signal: AbortSignal.timeout(1000) });
-            setIsServerOnline(res.ok);
-        } catch (e) { setIsServerOnline(false); }
-    };
-    checkServer();
-    const interval = setInterval(checkServer, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   const refreshData = async () => {
     setSongs(await db.songs.toArray());
@@ -137,13 +124,6 @@ export default function App() {
     }
   };
 
-  const triggerDownload = (data, filename) => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url; link.download = filename; link.click();
-  };
-
   const handleImport = (e, label) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -151,7 +131,6 @@ export default function App() {
     reader.onload = async (ev) => {
         try {
             const data = JSON.parse(ev.target.result);
-            let importedSongsMap = {};
             if (data.songs) {
                 for (let s of data.songs) {
                     if (!(await db.songs.where({title: s.title, artist: s.artist}).first())) {
@@ -164,13 +143,53 @@ export default function App() {
                     await db.setlists.add({ ...sl, id: undefined });
                 }
             }
-            refreshData(); alert(`Importação de ${label} concluída!`);
-        } catch (err) { alert("Arquivo JSON inválido."); }
+            refreshData(); alert(`Importado!`);
+        } catch (err) { alert("Arquivo inválido."); }
     };
     reader.readAsText(file);
   };
 
-  if (showWizard) return <Wizard onDone={() => { localStorage.setItem('wizardDone', 'true'); setShowWizard(false); }} />;
+  const triggerDownload = (data, filename) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = filename; link.click();
+  };
+
+  const handleGarimpo = async () => {
+      if (garimpoQueue.length === 0) return;
+      setIsScraping(true);
+      setScrapingStatus("O assistente na nuvem está trabalhando...");
+
+      for (const url of garimpoQueue) {
+          try {
+              const nameSimple = url.split('/').filter(Boolean).pop();
+              setScrapingStatus(`Garimpando: ${nameSimple}...`);
+              
+              // TENTA A API NA NUVEM (VERCEL)
+              const response = await fetch('/api/scrape', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ url })
+              });
+              
+              if (!response.ok) throw new Error("Erro na nuvem");
+              const song = await response.json();
+              
+              const exists = await db.songs.where({title: song.title, artist: song.artist}).first();
+              if (!exists) {
+                  await db.songs.add({ ...song, notes: "" });
+              }
+          } catch (err) {
+              alert("O assistente na nuvem falhou. Tente novamente em alguns instantes.");
+              break;
+          }
+      }
+      setIsScraping(false); 
+      setScrapingStatus("✅ Músicas adicionadas com sucesso!");
+      setGarimpoQueue([]); 
+      refreshData();
+  };
 
   return (
     <div style={styles.appContainer}>
@@ -200,7 +219,7 @@ export default function App() {
                 {(view === 'library' ? songs : setlists).map(item => (
                     <div key={item.id} style={selectedItem?.data?.id === item.id ? styles.selectedItem : styles.listItem}>
                         <div style={{flex:1, overflow:'hidden'}} onClick={() => setSelectedItem({type: view === 'library' ? 'song' : 'setlist', data: item})}>
-                            <strong>{item.title}</strong>
+                            <strong style={{color:'#fff'}}>{item.title}</strong>
                             <small style={{display:'block', opacity:0.5}}>{item.artist || item.location || "---"}</small>
                         </div>
                         <div style={{display:'flex', gap:'6px'}}>
@@ -215,7 +234,7 @@ export default function App() {
                     <><button onClick={async () => { const id = await db.songs.add({title:"Nova Música", artist:"Artista", content:""}); refreshData(); setSelectedItem({type:'song', data: await db.songs.get(id)}); }} style={styles.addBtn}>+ MÚSICA</button><label style={styles.importBtnLabel}>IMPORTAR CIFRA<input type="file" hidden onChange={(e)=>handleImport(e, "Cifra")} /></label></>
                 ) : view === 'setlists' ? (
                     <><button onClick={async () => { const id = await db.setlists.add({title:"Novo Show", songs:[], location:"", time:"", members:"", notes:""}); refreshData(); setSelectedItem({type:'setlist', data: await db.setlists.get(id)}); }} style={styles.addBtn}>+ NOVO SHOW</button><label style={styles.importBtnLabel}>IMPORTAR SHOW<input type="file" hidden onChange={(e)=>handleImport(e, "Setlist")} /></label></>
-                ) : <div style={{color:'#666', fontSize:'11px', textAlign:'center', width:'100%'}}>Modo Garimpo via Mac</div>}
+                ) : <div style={{color:'#007aff', fontSize:'11px', textAlign:'center', width:'100%', fontWeight:'bold'}}>ASSISTENTE EM NUVEM ATIVO</div>}
             </div>
         </div>
 
@@ -223,40 +242,25 @@ export default function App() {
             {view === 'garimpo' ? (
                 <div style={styles.garimpoPanel}>
                     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                        <h2 style={{color: '#fff', margin: 0}}>Garimpar Cifras</h2>
-                        <div style={isServerOnline ? styles.serverLedOn : styles.serverLedOff}>
+                        <h2 style={{color: '#fff', margin: 0}}>Garimpar Músicas (Nuvem)</h2>
+                        <div style={styles.serverLedOn}>
                             <div style={styles.ledDot}></div>
-                            {isServerOnline ? "ASSISTENTE: ONLINE" : "ASSISTENTE: OFFLINE"}
+                            MODO INDEPENDENTE: ON
                         </div>
                     </div>
-                    <p style={{fontSize:'14px', color:'#aaa', margin:'10px 0 25px 0'}}>{isServerOnline ? "Pronto para extrair." : "Rode o 'node server.js' no Terminal do Mac."}</p>
+                    <p style={{fontSize:'14px', color:'#aaa', margin:'10px 0 25px 0'}}>Não é necessário ligar o Mac. O assistente funciona direto no iPad.</p>
                     <div style={styles.inputRow}>
-                        <input style={styles.inputField} placeholder="Link do CifraClub..." value={garimpoInput} onChange={e=>setGarimpoInput(e.target.value)} onKeyDown={e=>e.key==='Enter' && (()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}})()}/>
+                        <input style={styles.inputField} placeholder="Cole o link do CifraClub..." value={garimpoInput} onChange={e=>setGarimpoInput(e.target.value)} onKeyDown={e=>e.key==='Enter' && (()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}})()}/>
                         <button style={styles.secondaryBtn} onClick={async ()=>{ try {const t = await navigator.clipboard.readText(); setGarimpoInput(t);} catch(e){alert("Cole manualmente")}}}>
                             <ClipboardPaste size={18}/>
                         </button>
                         <button style={styles.addBtn} onClick={()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}}}>OK</button>
                     </div>
                     <div style={styles.scrollList}>
-                        {garimpoQueue.map((url,i)=>(
-                            <div key={i} style={styles.miniItemGarimpo}>
-                                <span>{url.replace(/\/$/, "").split('/').pop()}</span>
-                                <X size={14} onClick={()=>setGarimpoQueue(garimpoQueue.filter((_,idx)=>idx!==i))} style={{cursor:'pointer'}}/>
-                            </div>
-                        ))}
+                        {garimpoQueue.map((url,i)=>(<div key={i} style={styles.miniItemGarimpo}><span>{url.replace(/\/$/, "").split('/').pop()}</span><X size={14} onClick={()=>setGarimpoQueue(garimpoQueue.filter((_,idx)=>idx!==i))} style={{cursor:'pointer'}}/></div>))}
                     </div>
-                    <button style={styles.processBtn} onClick={async () => {
-                        setIsScraping(true); setScrapingStatus("Garimpando...");
-                        for (const url of garimpoQueue) {
-                            try {
-                                const response = await fetch('http://localhost:3001/scrape', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url}) });
-                                const song = await response.json();
-                                if(song.title && !(await db.songs.where({title:song.title, artist:song.artist}).first())) await db.songs.add({...song, notes:""});
-                            } catch (err) { console.error(err); }
-                        }
-                        setIsScraping(false); setScrapingStatus("✅ Biblioteca Atualizada!"); setGarimpoQueue([]); refreshData();
-                    }} disabled={isScraping || garimpoQueue.length===0 || !isServerOnline}>
-                        {isScraping ? <Loader2 className="spin" size={20}/> : "Processar e Salvar"}
+                    <button style={styles.processBtn} onClick={handleGarimpo} disabled={isScraping || garimpoQueue.length===0}>
+                        {isScraping ? <Loader2 className="spin" size={20}/> : "Garimpar e Salvar"}
                     </button>
                     <div style={styles.statusText}>{scrapingStatus}</div>
                 </div>
@@ -277,7 +281,6 @@ export default function App() {
                 <div style={{display:'flex', gap:'15px', alignItems:'center'}}><button onClick={() => setShowMode(false)} style={styles.backBtn}><ChevronLeft/> Sair</button></div>
                 <div style={{textAlign: 'center', flex:1}}>
                     <strong style={{color:'#fff'}}>{selectedItem.data.title}</strong>
-                    {lastSignalUI && <div style={styles.midiProbeFloating}>MIDI: {lastSignalUI}</div>}
                 </div>
                 <div style={styles.showControls}>
                     <button onClick={() => setFontSize(f => {const n=f-5; localStorage.setItem('fontSize', n); return n;})}><Type size={14}/>-</button>
@@ -328,8 +331,6 @@ const SongEditor = ({ item, triggerDownload, onClose, onShow, update }) => {
 };
 
 const SetlistEditor = ({ setlist, onClose, onShow, update, triggerDownload }) => {
-    const [lLoc, setLLoc] = useState(setlist.location || ""), [lTime, setLTime] = useState(setlist.time || ""), [lMem, setLMem] = useState(setlist.members || ""), [lNote, setLNote] = useState(setlist.notes || "");
-    const persist = () => update({ location: lLoc, time: lTime, members: lMem, notes: lNote });
     const moveSong = (index, dir) => { const n = [...setlist.songs]; const t = index+dir; if(t>=0 && t<n.length) { [n[index], n[t]] = [n[t], n[index]]; update({songs:n}); } };
     return (
         <div style={styles.editorContent}>
@@ -342,12 +343,12 @@ const SetlistEditor = ({ setlist, onClose, onShow, update, triggerDownload }) =>
                 </div>
             </div>
             <div style={styles.showMetaData}>
-                <div style={styles.metaRow}><input placeholder="Local" value={lLoc} onChange={e => setLLoc(e.target.value)} onBlur={persist} style={styles.metaInput}/><input placeholder="Hora" value={lTime} onChange={e => setLTime(e.target.value)} onBlur={persist} style={styles.metaInputSmall}/></div>
-                <input placeholder="Integrantes" value={lMem} onChange={e => setLMem(e.target.value)} onBlur={persist} style={styles.metaInputWide}/>
-                <textarea placeholder="Obs Gerais..." value={lNote} onChange={e => setLNote(e.target.value)} onBlur={persist} style={styles.metaTextArea}></textarea>
+                <div style={styles.metaRow}><input placeholder="Local" value={setlist.location} onChange={e => update({location: e.target.value})} style={styles.metaInput}/><input placeholder="Hora" value={setlist.time} onChange={e => update({time: e.target.value})} style={styles.metaInputSmall}/></div>
+                <input placeholder="Integrantes" value={setlist.members} onChange={e => update({members: e.target.value})} style={styles.metaInputWide}/>
+                <textarea placeholder="Obs Gerais..." value={setlist.notes} onChange={e => update({notes: e.target.value})} style={styles.metaTextArea}></textarea>
             </div>
             <div style={styles.setlistSplit}>
-                <div style={styles.setlistHalf}><h3>Set List do Show</h3>{(setlist.songs || []).map((s, i) => (<div key={i} style={styles.miniItemReorder}><div style={{flex:1}}><b>{i+1}.</b> {s.title}</div><div style={styles.reorderControls}><button onClick={()=>moveSong(i,-1)} disabled={i===0}><ArrowUp size={14}/></button><button onClick={()=>moveSong(i,1)} disabled={i===setlist.songs.length-1}><ArrowDown size={14}/></button><button onClick={()=>{const n=[...setlist.songs]; n.splice(i,1); update({songs:n});}} style={{color:'#ff3b30'}}><Trash2 size={14}/></button></div></div>))}</div>
+                <div style={styles.setlistHalf}><h3>Set List do Show</h3>{(setlist.songs || []).map((s, i) => (<div key={i} style={styles.miniItemReorder}><div style={{flex:1, color:'#fff'}}><b>{i+1}.</b> {s.title}</div><div style={styles.reorderControls}><button onClick={()=>moveSong(i,-1)} disabled={i===0}><ArrowUp size={14}/></button><button onClick={()=>moveSong(i,1)} disabled={i===setlist.songs.length-1}><ArrowDown size={14}/></button><button onClick={()=>{const n=[...setlist.songs]; n.splice(i,1); update({songs:n});}} style={{color:'#ff3b30'}}><Trash2 size={14}/></button></div></div>))}</div>
                 <div style={{...styles.setlistHalf, backgroundColor:'#2c2c2e'}}><h3>Clique na Biblioteca Lateral para adicionar músicas</h3></div>
             </div>
         </div>
@@ -355,7 +356,18 @@ const SetlistEditor = ({ setlist, onClose, onShow, update, triggerDownload }) =>
 };
 
 const InfoView = ({ onClose, inputs }) => (
-    <div style={styles.wizard}><div style={styles.wizardCard}><h2>Painel ShowPad Pro v10.7</h2><div style={{textAlign:'left', fontSize:'12px', color:'#333'}}><p><b>Autor:</b> Edu Posada</p><hr/><p><b>Hardware MIDI:</b> {inputs.join(", ") || "Nenhum"}</p><hr/><p><b>Estabilidade Visual:</b> Cores e espaçamentos blindados para Mac e iPad.</p></div><button style={styles.primaryButton} onClick={onClose}>Fechar</button></div></div>
+    <div style={styles.wizard}>
+        <div style={styles.wizardCard}>
+            <h2 style={{color:'#007aff', margin:0}}>Painel ShowPad Pro v13.0</h2>
+            <div style={{textAlign:'left', fontSize:'12px', color:'#333', marginTop:'15px'}}>
+                <p><b>Autor:</b> Edu Posada | <b>IA:</b> Gemini 1.5 Flash</p>
+                <hr/>
+                <p><b>MODO NUVEM:</b> O garimpo agora funciona direto no iPad via Vercel API. Não precisa ligar o Mac!</p>
+                <p><b>MIDI:</b> {inputs.join(", ") || "Nenhum"}</p>
+            </div>
+            <button style={styles.primaryButton} onClick={onClose}>Fechar</button>
+        </div>
+    </div>
 );
 
 const Wizard = ({ onDone }) => (
@@ -382,7 +394,7 @@ const styles = {
     listActionBtnDelete: { background:'none', border:'none', color:'#ff3b30', cursor:'pointer', padding:'5px' },
     sidebarFooter: { padding: '15px', display: 'flex', gap: '8px', borderTop: '1px solid #333', flexWrap: 'wrap' },
     addBtn: { flex: 1, padding: '10px', backgroundColor: '#007aff', border: 'none', borderRadius: '8px', color: '#fff', fontWeight:'bold', cursor:'pointer', fontSize: '11px' },
-    importBtnLabel: { flex: 1.5, padding: '10px', backgroundColor: '#34c759', border: 'none', borderRadius: '8px', color: '#fff', fontWeight:'bold', cursor:'pointer', textAlign:'center', fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center' },
+    importBtnLabel: { flex: 1, padding: '10px', backgroundColor: '#34c759', border: 'none', borderRadius: '8px', color: '#fff', fontWeight:'bold', cursor:'pointer', textAlign:'center', fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center' },
     mainEditor: { flex: 1, display: 'flex', flexDirection: 'column', backgroundColor:'#1c1c1e' },
     editorContent: { display: 'flex', flexDirection: 'column', height: '100%' },
     editorHeader: { padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#2c2c2e' },
@@ -394,7 +406,7 @@ const styles = {
     transpBtn: { padding: '6px 10px', border: '1px solid #555', borderRadius: '5px', background: 'none', color: '#fff', cursor: 'pointer', fontSize:'11px' },
     exportBtn: { padding: '6px 10px', backgroundColor: '#444', border: 'none', borderRadius: '5px', color: '#fff', cursor: 'pointer', fontSize:'11px' },
     mainTextArea: { flex: 1, background: '#1c1c1e', color: '#fff', border: 'none', padding: '20px', fontSize: '17px', fontFamily: 'monospace', outline: 'none', resize: 'none' },
-    showOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIindex: 2000, display: 'flex', flexDirection: 'column' },
+    showOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 2000, display: 'flex', flexDirection: 'column' },
     showToolbar: { padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1c1c1e', borderBottom:'1px solid #333', height: '60px' },
     showControls: { display: 'flex', gap: '15px', alignItems:'center' },
     showContent: { flex: 1, overflowY: 'auto', padding: '30px', textAlign: 'left', backgroundColor: '#000' },
