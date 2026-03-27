@@ -14,7 +14,7 @@ db.version(11).stores({
     setlists: '++id, title, location, time, members, notes' 
 });
 
-// --- 2. MOTOR MUSICAL (GLOBAL) ---
+// --- 2. MOTOR MUSICAL GLOBAL ---
 const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
@@ -49,7 +49,11 @@ const formatChordsVisual = (text) => {
             <div key={i} style={{ 
                 color: isChordLine ? '#FFD700' : '#FFFFFF', 
                 fontWeight: isChordLine ? 'bold' : 'normal', 
-                minHeight: '1.2em', whiteSpace: 'pre', textAlign: 'left' 
+                minHeight: '1.2em', 
+                whiteSpace: 'pre-wrap', // MÁGICA: Quebra a linha se for maior que a tela
+                wordBreak: 'break-word', // Evita que palavras longas "furem" a tela
+                textAlign: 'left',
+                paddingRight: '10px'
             }}>
                 {line || ' '}
             </div>
@@ -67,7 +71,6 @@ export default function App() {
   const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30);
   const [view, setView] = useState('library');
   
-  // MIDI
   const [isMidiEnabled, setIsMidiEnabled] = useState(false);
   const [midiFlash, setMidiFlash] = useState(false); 
   const [lastSignalUI, setLastSignalUI] = useState("");
@@ -76,7 +79,6 @@ export default function App() {
   const midiLearningRef = useRef(null);
   const showScrollRef = useRef(null);
 
-  // GARIMPO
   const [garimpoInput, setGarimpoInput] = useState("");
   const [garimpoQueue, setGarimpoQueue] = useState([]);
   const [isScraping, setIsScraping] = useState(false);
@@ -128,12 +130,14 @@ export default function App() {
       };
       updateInputs();
       WebMidi.addListener("connected", updateInputs);
+      WebMidi.addListener("disconnected", updateInputs);
     }).catch(() => {});
   };
 
   const scrollPage = (dir) => {
     if (showScrollRef.current) {
-        showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * dir, behavior: 'smooth' });
+        const amount = window.innerHeight * 0.45;
+        showScrollRef.current.scrollBy({ top: amount * dir, behavior: 'smooth' });
     }
   };
 
@@ -161,7 +165,7 @@ export default function App() {
                     await db.setlists.add({ ...sl, id: undefined, songs: newS });
                 }
             }
-            refreshData(); alert(`Importado: ${type}`);
+            refreshData(); alert(`Importado com sucesso!`);
         } catch (err) { alert("Arquivo JSON inválido."); }
     };
     reader.readAsText(file);
@@ -189,7 +193,7 @@ export default function App() {
         </div>
         <div style={{display:'flex', gap:'10px'}}>
             <label style={styles.headerBtn}><FileUp size={14}/> RESTAURAR BACKUP<input type="file" hidden onChange={(e) => handleGenericImport(e, "Backup")} /></label>
-            <button style={styles.headerBtn} onClick={() => triggerDownload({songs, setlists}, `ShowPad_Backup_${new Date().toISOString().slice(0,10)}.json`)}><Download size={14}/> GERAR BACKUP</button>
+            <button style={styles.headerBtn} onClick={() => triggerDownload({songs, setlists}, `ShowPad_Full_Backup_${new Date().toISOString().slice(0,10)}.json`)}><Download size={14}/> GERAR BACKUP</button>
             <button onClick={() => setShowInfo(true)} style={styles.infoBtn}><Info size={22}/></button>
         </div>
       </header>
@@ -205,11 +209,12 @@ export default function App() {
                 {(view === 'library' ? songs : setlists).map(item => (
                     <div key={item.id} style={selectedItem?.data?.id === item.id ? styles.selectedItem : styles.listItem}>
                         <div style={{flex:1, overflow:'hidden'}} onClick={() => setSelectedItem({type: view === 'library' ? 'song' : 'setlist', data: item})}>
-                            <strong>{item.title}</strong><small style={{display:'block', opacity:0.5}}>{item.artist || item.location || "---"}</small>
+                            <strong>{item.title}</strong>
+                            <small style={{display:'block', opacity:0.5}}>{item.artist || item.location || "---"}</small>
                         </div>
                         <div style={{display:'flex', gap:'6px'}}>
                             <button style={styles.listActionBtnShow} onClick={() => { setSelectedItem({type: view === 'library' ? 'song' : 'setlist', data: item}); setShowMode(true); }}><Monitor size={16}/></button>
-                            <button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
+                            <button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Excluir item?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
                         </div>
                     </div>
                 ))}
@@ -227,11 +232,11 @@ export default function App() {
             {view === 'garimpo' ? (
                 <div style={styles.garimpoPanel}>
                     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><h2 style={{color: '#fff', margin: 0}}>Garimpar Cifras</h2><div style={isServerOnline ? styles.serverLedOn : styles.serverLedOff}><div style={styles.ledDot}></div>{isServerOnline ? "ASSISTENTE MAC: ONLINE" : "ASSISTENTE MAC: OFFLINE"}</div></div>
-                    <p style={{fontSize:'14px', color:'#aaa', margin:'10px 0 25px 0'}}>{isServerOnline ? "Pronto! Cole os links do CifraClub." : "Servidor no Mac não detectado (rode: node server.js)."}</p>
-                    <div style={styles.inputRow}><input style={styles.inputField} placeholder="Link aqui..." value={garimpoInput} onChange={e=>setGarimpoInput(e.target.value)} onKeyDown={e=>e.key==='Enter' && (()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}})()}/><button style={styles.addBtn} onClick={()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}}}>OK</button></div>
+                    <p style={{fontSize:'14px', color:'#aaa', margin:'10px 0 25px 0'}}>{isServerOnline ? "Tudo pronto! Cole os links do CifraClub." : "Servidor no Mac não detectado (rode: node server.js)."}</p>
+                    <div style={styles.inputRow}><input style={styles.inputField} placeholder="Link do CifraClub..." value={garimpoInput} onChange={e=>setGarimpoInput(e.target.value)} onKeyDown={e=>e.key==='Enter' && (()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}})()}/><button style={styles.addBtn} onClick={()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}}}>OK</button></div>
                     <div style={styles.scrollList}>{garimpoQueue.map((url,i)=>(<div key={i} style={styles.miniItemGarimpo}><span>{url.split('/').pop()}</span><X size={14} onClick={()=>setGarimpoQueue(garimpoQueue.filter((_,idx)=>idx!==i))}/></div>))}</div>
                     <button style={styles.processBtn} onClick={async () => {
-                        setIsScraping(true); setScrapingStatus("Extraindo...");
+                        setIsScraping(true); setScrapingStatus("Processando...");
                         for (const url of garimpoQueue) {
                             try {
                                 const response = await fetch('http://localhost:3001/scrape', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ url }) });
@@ -240,7 +245,7 @@ export default function App() {
                             } catch (err) { console.error(err); }
                         }
                         setIsScraping(false); setScrapingStatus("✅ Biblioteca Atualizada!"); setGarimpoQueue([]); refreshData();
-                    }} disabled={isScraping || garimpoQueue.length===0 || !isServerOnline}>{isScraping ? <Loader2 className="spin" size={20}/> : "Processar e Salvar"}</button>
+                    }} disabled={isScraping || garimpoQueue.length===0 || !isServerOnline}>{isScraping ? <Loader2 className="spin" size={20}/> : "Garimpar e Salvar"}</button>
                     <div style={styles.statusText}>{scrapingStatus}</div>
                 </div>
             ) : selectedItem?.type === 'song' ? (
@@ -258,7 +263,7 @@ export default function App() {
         </div>
       </div>
 
-      {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} setMidiLearning={setMidiLearning} midiLearning={midiLearning} onClose={() => setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} />}
+      {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} setMidiLearning={setMidiLearning} midiLearning={midiLearning} formatChordsVisual={formatChordsVisual} onClose={() => setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} />}
       {showInfo && <InfoView onClose={() => setShowInfo(false)} inputs={allInputs} />}
     </div>
   );
@@ -274,7 +279,7 @@ const SongEditor = ({ song, onClose, onShow, onTranspose, triggerDownload }) => 
             <div style={styles.editorHeader}>
                 <div style={{flex:1}}><input style={styles.hInput} value={lT} onChange={e => setLT(e.target.value)} onBlur={persist} /><input style={styles.artistInput} value={lA} onChange={e => setLA(e.target.value)} onBlur={persist} /></div>
                 <div style={styles.btnGroup}>
-                    <button style={styles.exportBtn} onClick={() => triggerDownload({songs:[{...song, content:lC, title:lT, artist:lA}]}, `ShowPad_Música_${lT.replace(/\s/g, '_')}.json`)}>EXPORTAR</button>
+                    <button style={styles.exportBtn} onClick={() => triggerDownload({songs:[{...song, content:lC, title:lT, artist:lA}]}, `ShowPad_Cifra_${lT.replace(/\s/g, '_')}.json`)}>EXPORTAR</button>
                     <button style={styles.transpBtn} onClick={() => { onTranspose(1); setLC(transposeContent(lC, 1)); }}>+ Tom</button>
                     <button style={styles.transpBtn} onClick={() => { onTranspose(-1); setLC(transposeContent(lC, -1)); }}>- Tom</button>
                     <button onClick={() => { persist(); onClose(); }} style={styles.saveBtn}>Concluir</button>
@@ -313,7 +318,7 @@ const SetlistEditor = ({ setlist, allSongs, onClose, onShow, update, triggerDown
     );
 };
 
-const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, setMidiLearning, midiLearning, onClose, showScrollRef, lastSignal }) => {
+const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, setMidiLearning, midiLearning, formatChordsVisual, onClose, showScrollRef, lastSignal }) => {
     const [songIdx, setSongIdx] = useState(0), [drawerOpen, setDrawerOpen] = useState(false);
     const currentSong = item.type === 'setlist' ? (item.data.songs[songIdx] || null) : item.data;
     return (
@@ -322,16 +327,31 @@ const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, setMidiLearning
             <div style={styles.showToolbar}>
                 <div style={{display:'flex', gap:'15px', alignItems:'center'}}><button onClick={()=>setDrawerOpen(true)} style={styles.backBtn}><Menu/></button><button onClick={onClose} style={styles.backBtn}><ChevronLeft/> Sair</button></div>
                 <div style={{textAlign: 'center', flex:1}}><strong>{currentSong?.title}</strong>{lastSignal && <div style={styles.midiProbeFloating}>MIDI: {lastSignal}</div>}</div>
-                <div style={styles.showControls}><button onClick={() => setFontSize(f => f-5)}><Type size={14}/>-</button><button onClick={() => setFontSize(f => f+5)}><Type size={14}/>+</button><button onClick={() => scrollPage(-1)}><ChevronUp size={20}/></button><button onClick={() => scrollPage(1)}><ChevronDown size={20}/></button><button onClick={() => setMidiLearning('up')} style={{color: midiLearning ? '#ff3b30' : '#fff'}}><Piano size={20}/></button></div>
+                <div style={styles.showControls}>
+                    <button onClick={() => setFontSize(f => {const n=f-5; localStorage.setItem('fontSize', n); return n;})}><Type size={14}/>-</button>
+                    <button onClick={() => setFontSize(f => {const n=f+5; localStorage.setItem('fontSize', n); return n;})}><Type size={14}/>+</button>
+                    <button onClick={() => scrollPage(-1)}><ChevronUp size={20}/></button>
+                    <button onClick={() => scrollPage(1)}><ChevronDown size={20}/></button>
+                    <button onClick={() => setMidiLearning('up')} style={{color: midiLearning ? '#ff3b30' : '#fff'}}><Piano size={20}/></button>
+                </div>
             </div>
-            {midiLearning && <div style={styles.learnBanner}><Activity className="spin" size={16}/> MIDI LEARN: {midiLearning.toUpperCase()}... <button onClick={()=>setMidiLearning(null)} style={{background:'white', border:'none', padding:'2px 5px', borderRadius:'3px', fontSize:'10px', marginLeft:'10px'}}>CANCELAR</button></div>}
             <div ref={showScrollRef} style={{...styles.showContent, fontSize: fontSize + 'px', fontFamily: 'monospace'}}>{currentSong ? formatChordsVisual(currentSong.content) : "Fim do Show"}<div style={styles.pageActions}>{item.type === 'setlist' && songIdx > 0 && <button style={styles.pageBtn} onClick={()=>{ setSongIdx(songIdx-1); showScrollRef.current.scrollTop = 0; }}><ChevronLeft/> ANTERIOR</button>}{item.type === 'setlist' && songIdx < item.data.songs.length - 1 && <button style={styles.pageBtnNext} onClick={()=>{ setSongIdx(songIdx+1); showScrollRef.current.scrollTop = 0; }}>PRÓXIMA <ChevronRight/></button>}</div></div>
         </div>
     );
 };
 
 const InfoView = ({ onClose, inputs }) => (
-    <div style={styles.wizard}><div style={styles.wizardCard}><h2>Painel ShowPad Pro v10.3</h2><div style={{textAlign:'left', fontSize:'12px', color:'#333'}}><p><b>Autor:</b> Edu Posada</p><hr/><p><b>MIDI Ativos:</b> {inputs.join(", ") || "Nenhum"}</p><hr/><p><b>Frequência de Backup:</b> Use sempre o botão superior para salvar seu trabalho.</p></div><button style={styles.primaryButton} onClick={onClose}>Fechar</button></div></div>
+    <div style={styles.wizard}>
+        <div style={styles.wizardCard}>
+            <h2 style={{color:'#007aff', margin:0}}>ShowPad Pro v10.4</h2>
+            <div style={{textAlign:'left', fontSize:'12px', color:'#333', marginTop:'15px'}}>
+                <p><b>Autor:</b> Edu Posada</p>
+                <hr/>
+                <p><b>Layout Responsivo:</b> Agora as cifras quebram a linha automaticamente para não sair da tela do iPad quando o zoom está alto.</p>
+            </div>
+            <button style={styles.primaryButton} onClick={onClose}>Fechar</button>
+        </div>
+    </div>
 );
 
 const Wizard = ({ onDone }) => (
