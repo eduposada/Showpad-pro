@@ -7,6 +7,11 @@ const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
+// ROTA DE SAÚDE (PING) - Nova!
+app.get('/ping', (req, res) => {
+    res.json({ status: "online", message: "Assistente ShowPad está ativo!" });
+});
+
 app.post('/scrape', async (req, res) => {
     const { url } = req.body;
     try {
@@ -25,7 +30,6 @@ app.post('/scrape', async (req, res) => {
         }
         let content = $('pre').text();
         content = content.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'");
-        console.log(`   ✅ Sucesso: ${title}`);
         res.json({ title, artist: artist || "Artista Desconhecido", content });
     } catch (error) {
         res.status(500).json({ error: "Falha na conexão" });
