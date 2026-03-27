@@ -4,7 +4,7 @@ import Dexie from 'dexie';
 import { 
   Plus, Music, Play, Trash2, ChevronLeft, 
   FileUp, ChevronUp, ChevronDown, 
-  Type, ListMusic, CheckCircle2, X, RefreshCw, Piano, Info, Activity, Zap, Monitor, Menu, ChevronRight, Download, Share2, ArrowUp, ArrowDown, Globe, ClipboardPaste, Loader2, Database
+  Type, ListMusic, CheckCircle2, X, RefreshCw, Piano, Info, Activity, Zap, Monitor, Menu, ChevronRight, Download, Share2, ArrowUp, ArrowDown, Globe, ClipboardPaste, Loader2, Database, Save
 } from 'lucide-react';
 
 // --- 1. BANCO DE DADOS ---
@@ -40,6 +40,23 @@ const transposeContent = (content, steps) => {
   }).join('\n');
 };
 
+const formatChordsVisual = (text) => {
+    if (!text) return null;
+    return text.split('\n').map((line, i) => {
+        const matches = line.match(chordRegex);
+        const isChordLine = (matches?.length || 0) > 0 && (matches?.length || 0) >= line.trim().split(/\s+/).length * 0.4;
+        return (
+            <div key={i} style={{ 
+                color: isChordLine ? '#FFD700' : '#FFFFFF', 
+                fontWeight: isChordLine ? 'bold' : 'normal', 
+                minHeight: '1.2em', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8'
+            }}>
+                {line || ' '}
+            </div>
+        );
+    });
+};
+
 export default function App() {
   const [songs, setSongs] = useState([]);
   const [setlists, setSetlists] = useState([]);
@@ -67,10 +84,11 @@ export default function App() {
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
   useEffect(() => { refreshData(); initMidi(); }, []);
 
+  // Monitor de Saúde do Servidor (Apenas no Mac via localhost)
   useEffect(() => {
     const checkServer = async () => {
         try {
-            const res = await fetch('http://localhost:3001/ping', { signal: AbortSignal.timeout(1500) });
+            const res = await fetch('http://localhost:3001/ping', { signal: AbortSignal.timeout(1000) });
             setIsServerOnline(res.ok);
         } catch (e) { setIsServerOnline(false); }
     };
@@ -80,10 +98,8 @@ export default function App() {
   }, []);
 
   const refreshData = async () => {
-    const s = await db.songs.toArray();
-    const sl = await db.setlists.toArray();
-    setSongs(s);
-    setSetlists(sl);
+    setSongs(await db.songs.toArray());
+    setSetlists(await db.setlists.toArray());
   };
 
   const initMidi = () => {
@@ -116,12 +132,18 @@ export default function App() {
 
   const scrollPage = (dir) => {
     if (showScrollRef.current) {
-        const amount = window.innerHeight * 0.45;
-        showScrollRef.current.scrollBy({ top: amount * dir, behavior: 'smooth' });
+        showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * dir, behavior: 'smooth' });
     }
   };
 
-  const handleGenericImport = (e, type) => {
+  const triggerDownload = (data, filename) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = filename; link.click();
+  };
+
+  const handleImport = (e, label) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -145,60 +167,36 @@ export default function App() {
                     await db.setlists.add({ ...sl, id: undefined, songs: newS });
                 }
             }
-            refreshData(); alert(`Importação concluída!`);
-        } catch (err) { alert("Arquivo JSON inválido."); }
+            refreshData(); alert(`Importado: ${label}`);
+        } catch (err) { alert("Erro no arquivo JSON."); }
     };
     reader.readAsText(file);
-    e.target.value = null;
   };
 
-  const triggerDownload = (data, filename) => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url; link.download = filename; link.click();
-  };
-
-  const formatChordsVisual = (text) => {
-    if (!text) return null;
-    return text.split('\n').map((line, i) => {
-        const matches = line.match(chordRegex);
-        const isChordLine = (matches?.length || 0) > 0 && (matches?.length || 0) >= line.trim().split(/\s+/).length * 0.4;
-        return (
-            <div key={i} style={{ 
-                color: isChordLine ? '#FFD700' : '#FFFFFF', 
-                fontWeight: isChordLine ? 'bold' : 'normal', 
-                minHeight: '1.2em', 
-                whiteSpace: 'pre-wrap', 
-                wordBreak: 'break-word',
-                textAlign: 'left',
-                paddingRight: '10px',
-                lineHeight: '1.8' // CORREÇÃO DE ESPAÇAMENTO (BUG 1)
-            }}>
-                {line || ' '}
-            </div>
-        );
-    });
-  };
+  if (showWizard) return <Wizard onDone={() => { localStorage.setItem('wizardDone', 'true'); setShowWizard(false); }} />;
 
   return (
     <div style={styles.appContainer}>
+      
+      {/* CABEÇALHO - NOME DO APP E BACKUP */}
       <header style={styles.mainHeader}>
         <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
             <Music color="#007aff" />
-            <h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
+            <h1 style={{fontSize:'18px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
             <div style={midiFlash ? styles.midiBadgeActive : (isMidiEnabled && allInputs.length > 0 ? styles.midiBadgeOn : styles.midiBadgeOff)}>
-                <Zap size={10}/> {midiFlash ? "SINAL MIDI!" : "MIDI READY"}
+                <Zap size={10}/> {midiFlash ? "SINAL!" : "MIDI READY"}
             </div>
         </div>
-        <div style={{display:'flex', gap:'10px'}}>
-            <label style={styles.headerBtn}><FileUp size={14}/> RESTAURAR BACKUP<input type="file" hidden onChange={(e) => handleGenericImport(e, "Backup")} /></label>
-            <button style={styles.headerBtn} onClick={() => triggerDownload({songs, setlists}, `ShowPad_Backup_${new Date().toISOString().slice(0,10)}.json`)}><Download size={14}/> GERAR BACKUP</button>
+        
+        <div style={{display:'flex', gap:'12px'}}>
+            <label style={styles.headerBtn}><FileUp size={14}/> RESTAURAR BACKUP<input type="file" hidden onChange={(e)=>handleImport(e, "Backup Total")} /></label>
+            <button style={styles.headerBtn} onClick={() => triggerDownload({songs, setlists}, `ShowPad_Backup_${new Date().toISOString().slice(0,10)}.json`)}><Save size={14}/> GERAR BACKUP</button>
             <button onClick={() => setShowInfo(true)} style={styles.infoBtn}><Info size={22}/></button>
         </div>
       </header>
 
       <div style={{display:'flex', flex: 1, overflow:'hidden'}}>
+        {/* BARRA LATERAL */}
         <div style={styles.sidebar}>
             <div style={styles.navTabs}>
                 <button onClick={() => setView('library')} style={view === 'library' ? styles.activeTab : styles.tab}>Biblioteca</button>
@@ -221,48 +219,48 @@ export default function App() {
             </div>
             <div style={styles.sidebarFooter}>
                 {view === 'library' ? (
-                    <><button onClick={async () => { const id = await db.songs.add({title:"Nova Música", artist:"Artista", content:""}); refreshData(); setSelectedItem({type:'song', data: await db.songs.get(id)}); }} style={styles.addBtn}>+ MÚSICA</button><label style={styles.importBtnLabel}>IMPORTAR CIFRA<input type="file" hidden onChange={(e) => handleGenericImport(e, "Cifra")} /></label></>
+                    <><button onClick={async () => { const id = await db.songs.add({title:"Nova Música", artist:"Artista", content:""}); refreshData(); setSelectedItem({type:'song', data: await db.songs.get(id)}); }} style={styles.addBtn}>+ NOVA MÚSICA</button><label style={styles.importBtnLabel}><FileUp size={16}/> IMPORTAR CIFRA<input type="file" hidden onChange={(e)=>handleImport(e, "Cifra")} /></label></>
                 ) : view === 'setlists' ? (
-                    <><button onClick={async () => { const id = await db.setlists.add({title:"Novo Show", songs:[], location:"", time:"", members:"", notes:""}); refreshData(); setSelectedItem({type:'setlist', data: await db.setlists.get(id)}); }} style={styles.addBtn}>+ NOVO SHOW</button><label style={styles.importBtnLabel}>IMPORTAR SHOW<input type="file" hidden onChange={(e) => handleGenericImport(e, "Setlist")} /></label></>
-                ) : <div style={{color:'#666', fontSize:'11px', textAlign:'center', width:'100%'}}>Garimpo via Mac</div>}
+                    <><button onClick={async () => { const id = await db.setlists.add({title:"Novo Show", songs:[], location:"", time:"", members:"", notes:""}); refreshData(); setSelectedItem({type:'setlist', data: await db.setlists.get(id)}); }} style={styles.addBtn}>+ NOVO SHOW</button><label style={styles.importBtnLabel}><ListMusic size={16}/> IMPORTAR SHOW<input type="file" hidden onChange={(e)=>handleImport(e, "Setlist")} /></label></>
+                ) : <div style={{color:'#666', fontSize:'11px', textAlign:'center', width:'100%'}}>Ferramenta de Coleta do Mac</div>}
             </div>
         </div>
 
+        {/* ÁREA CENTRAL */}
         <div style={styles.mainEditor}>
             {view === 'garimpo' ? (
                 <div style={styles.garimpoPanel}>
-                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><h2 style={{color: '#fff', margin: 0}}>Garimpar Cifras</h2><div style={isServerOnline ? styles.serverLedOn : styles.serverLedOff}><div style={styles.ledDot}></div>{isServerOnline ? "ASSISTENTE MAC: ONLINE" : "ASSISTENTE MAC: OFFLINE"}</div></div>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                        <h2 style={{color: '#fff', margin: 0}}>Garimpar Cifras</h2>
+                        <div style={isServerOnline ? styles.serverLedOn : styles.serverLedOff}>
+                            <div style={styles.ledDot}></div>
+                            {isServerOnline ? "ASSISTENTE NO MAC: ONLINE" : "ASSISTENTE NO MAC: OFFLINE"}
+                        </div>
+                    </div>
+                    <p style={{fontSize:'14px', color:'#aaa', margin:'10px 0 25px 0'}}>
+                        {isServerOnline ? "Tudo pronto! Cole os links do CifraClub." : "Certifique-se que o Mac está com 'node server.js' rodando no Terminal."}
+                    </p>
                     <div style={styles.inputRow}>
-                        <input style={styles.inputField} placeholder="Cole o link do CifraClub..." value={garimpoInput} onChange={e=>setGarimpoInput(e.target.value)} onKeyDown={e=>e.key==='Enter' && (()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}})()}/>
+                        <input style={styles.inputField} placeholder="Cole o link aqui..." value={garimpoInput} onChange={e=>setGarimpoInput(e.target.value)} onKeyDown={e=>e.key==='Enter' && (()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}})()}/>
                         <button style={styles.secondaryBtn} onClick={async ()=>{ try {const t = await navigator.clipboard.readText(); setGarimpoInput(t);} catch(e){alert("Cole manualmente")}}}>
                             <ClipboardPaste size={18}/>
                         </button>
                         <button style={styles.addBtn} onClick={()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}}}>OK</button>
                     </div>
                     <div style={styles.scrollList}>
-                        {garimpoQueue.map((url,i)=>(
-                            <div key={i} style={styles.miniItemGarimpo}>
-                                <span>{url.replace(/\/$/, "").split('/').pop()}</span> {/* CORREÇÃO DE NOME (BUG 2.1) */}
-                                <X size={14} onClick={()=>setGarimpoQueue(garimpoQueue.filter((_,idx)=>idx!==i))} style={{cursor:'pointer'}}/>
-                            </div>
-                        ))}
+                        {garimpoQueue.map((url,i)=>(<div key={i} style={styles.miniItemGarimpo}><span>{url.split('/').pop()}</span><X size={14} onClick={()=>setGarimpoQueue(garimpoQueue.filter((_,idx)=>idx!==i))} style={{cursor:'pointer'}}/></div>))}
                     </div>
                     <button style={styles.processBtn} onClick={async () => {
                         setIsScraping(true); setScrapingStatus("Extraindo...");
                         for (const url of garimpoQueue) {
                             try {
                                 const response = await fetch('http://localhost:3001/scrape', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ url }) });
-                                if(!response.ok) throw new Error();
                                 const song = await response.json();
-                                if(song.title && !(await db.songs.where({title:song.title, artist:song.artist}).first())) {
-                                    await db.songs.add({...song, notes:""});
-                                }
-                            } catch (err) { console.error("Falha no link", url); }
+                                if(song.title && !(await db.songs.where({title:song.title, artist:song.artist}).first())) await db.songs.add({...song, notes:""});
+                            } catch (err) { console.error(err); }
                         }
                         setIsScraping(false); setScrapingStatus("✅ Biblioteca Atualizada!"); setGarimpoQueue([]); refreshData();
-                    }} disabled={isScraping || garimpoQueue.length===0 || !isServerOnline}>
-                        {isScraping ? <Loader2 className="spin" size={20}/> : "Garimpar e Salvar na Biblioteca"}
-                    </button>
+                    }} disabled={isScraping || garimpoQueue.length===0 || !isServerOnline}>{isScraping ? <Loader2 className="spin" size={20}/> : "Processar e Salvar"}</button>
                     <div style={styles.statusText}>{scrapingStatus}</div>
                 </div>
             ) : selectedItem?.type === 'song' ? (
@@ -276,7 +274,9 @@ export default function App() {
                     setSelectedItem({...selectedItem, data: {...selectedItem.data, ...changes}});
                     refreshData();
                 }} />
-            ) : <div style={styles.empty}><Music size={80} color="#222" /><h2>ShowPad Pro</h2></div>}
+            ) : (
+                <div style={styles.empty}><Music size={80} color="#222" /><h2>ShowPad Pro</h2><p style={{color:'#444'}}>Selecione um item ou restaure seu backup.</p></div>
+            )}
         </div>
       </div>
 
@@ -286,8 +286,7 @@ export default function App() {
   );
 }
 
-// --- SUB-COMPONENTES ---
-
+// --- EDITOR DE MÚSICA ---
 const SongEditor = ({ song, onClose, onShow, onTranspose, triggerDownload }) => {
     const [lC, setLC] = useState(song.content), [lT, setLT] = useState(song.title), [lA, setLA] = useState(song.artist);
     const persist = async () => await db.songs.update(song.id, { content: lC, title: lT, artist: lA });
@@ -308,6 +307,7 @@ const SongEditor = ({ song, onClose, onShow, onTranspose, triggerDownload }) => 
     );
 };
 
+// --- EDITOR DE SHOW ---
 const SetlistEditor = ({ setlist, allSongs, onClose, onShow, update, triggerDownload }) => {
     const [lLoc, setLLoc] = useState(setlist.location || ""), [lTime, setLTime] = useState(setlist.time || ""), [lMem, setLMem] = useState(setlist.members || ""), [lNote, setLNote] = useState(setlist.notes || "");
     const persist = () => update({ location: lLoc, time: lTime, members: lMem, notes: lNote });
@@ -358,7 +358,18 @@ const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, setMidiLearning
 };
 
 const InfoView = ({ onClose, inputs }) => (
-    <div style={styles.wizard}><div style={styles.wizardCard}><h2>Painel ShowPad Pro v10.5</h2><div style={{textAlign:'left', fontSize:'12px', color:'#333'}}><p><b>Autor:</b> Edu Posada</p><hr/><p><b>MIDI:</b> {inputs.join(", ") || "Nenhum"}</p><hr/><p><b>Espaçamento:</b> Corrigido para evitar sobreposição de linhas em zooms altos.</p></div><button style={styles.primaryButton} onClick={onClose}>Fechar</button></div></div>
+    <div style={styles.wizard}>
+        <div style={styles.wizardCard}>
+            <h2 style={{color:'#007aff', margin:0}}>Painel ShowPad Pro v12.0</h2>
+            <div style={{textAlign:'left', fontSize:'12px', color:'#333', marginTop:'15px'}}>
+                <p><b>Autor:</b> Edu Posada (Ex-TK85 Developer)</p>
+                <p><b>Hardware:</b> {inputs.join(", ") || "Nenhum MIDI ativo"}</p>
+                <hr/>
+                <p><b>Instruções:</b> Use 'Garimpar' apenas no Mac (localhost). Use 'Importar' nos iPads. Backups totais estão no topo da tela.</p>
+            </div>
+            <button style={styles.primaryButton} onClick={onClose}>Fechar</button>
+        </div>
+    </div>
 );
 
 const Wizard = ({ onDone }) => (
@@ -409,8 +420,12 @@ const styles = {
     pageBtn: { padding:'20px', backgroundColor:'#222', border:'1px solid #444', color:'#888', borderRadius:'10px', fontSize:'16px', display:'flex', alignItems:'center', gap:'10px', cursor:'pointer' },
     pageBtnNext: { padding:'25px', backgroundColor:'#007aff22', border:'1px solid #007aff', color:'#fff', borderRadius:'10px', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', fontWeight:'bold', cursor:'pointer' },
     showMetaData: { padding: '15px 20px', backgroundColor: '#2c2c2e', display: 'flex', flexDirection: 'column', gap: '8px' },
-    miniItem: { padding: '10px', borderBottom: '1px solid #333', cursor: 'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'13px' },
-    miniItemGarimpo: { padding: '10px', borderBottom: '1px solid #333', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'12px', color:'#fff' }, // FORÇADO TEXTO BRANCO (BUG 2.1)
+    metaRow: { display: 'flex', gap: '10px' },
+    metaInput: { flex: 1, background: '#1c1c1e', border: '1px solid #444', color: '#fff', padding: '8px', borderRadius: '5px', fontSize: '13px' },
+    metaInputSmall: { width: '80px', background: '#1c1c1e', border: '1px solid #444', color: '#fff', padding: '8px', borderRadius: '5px', fontSize: '13px' },
+    metaInputWide: { background: '#1c1c1e', border: '1px solid #444', color: '#fff', padding: '8px', borderRadius: '5px', fontSize: '13px' },
+    metaTextArea: { background: '#1c1c1e', border: '1px solid #444', color: '#fff', padding: '8px', borderRadius: '5px', fontSize: '13px', resize: 'none', height: '60px' },
+    miniItemGarimpo: { padding: '10px', borderBottom: '1px solid #333', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'12px', color:'#fff' },
     miniItemReorder: { padding: '10px', borderBottom: '1px solid #333', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'13px' },
     reorderControls: { display:'flex', gap:'10px', alignItems:'center' },
     setlistSplit: { display: 'flex', flex: 1 },
