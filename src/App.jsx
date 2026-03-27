@@ -51,6 +51,7 @@ const formatChordsVisual = (text) => {
     });
 };
 
+// --- APP PRINCIPAL ---
 export default function App() {
   const [songs, setSongs] = useState([]), [setlists, setSetlists] = useState([]), [selectedItem, setSelectedItem] = useState(null);
   const [showMode, setShowMode] = useState(false), [showSettings, setShowSettings] = useState(false), [view, setView] = useState('library');
@@ -71,9 +72,9 @@ export default function App() {
     const s = await db.songs.toArray(); 
     const sl = await db.setlists.toArray();
     setSongs(s); setSetlists(sl); 
-    if (selectedItem && selectedItem.type === 'setlist') {
-        const updatedSl = sl.find(x => x.id === selectedItem.data.id);
-        if (updatedSl) setSelectedItem({type: 'setlist', data: updatedSl});
+    if (selectedItem) {
+        const updated = (selectedItem.type === 'song') ? s.find(x => x.id === selectedItem.data.id) : sl.find(x => x.id === selectedItem.data.id);
+        if (updated) setSelectedItem({type: selectedItem.type, data: updated});
     }
   };
 
@@ -103,35 +104,56 @@ export default function App() {
   const scrollPage = (d) => { if (showScrollRef.current) showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * d, behavior: 'smooth' }); };
   const triggerDL = (d, f) => { const u = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' })); const l = document.createElement('a'); l.href = u; l.download = f; l.click(); };
 
+  // --- IMPORTAÇÃO COM CONTROLE DE DUPLICIDADE ---
   const handleImport = (e) => {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       try {
         const d = JSON.parse(ev.target.result);
+        let importedSongsMap = {};
+
         if (d.songs) {
           for (let i=0; i<d.songs.length; i++) {
             let s = d.songs[i];
-            let ex = await db.songs.where({title: s.title, artist: s.artist}).first();
-            if (!ex) await db.songs.add({ ...s, id: undefined });
+            let titleToSave = s.title;
+            const ex = await db.songs.where({title: s.title, artist: s.artist}).first();
+            
+            if (ex) {
+                titleToSave = s.title + " (Importada)";
+                alert(`Nota: A música "${s.title}" já existe e foi renomeada para evitar conflito.`);
+            }
+
+            const newId = await db.songs.add({ 
+                title: titleToSave, 
+                artist: s.artist, 
+                content: s.content, 
+                notes: s.notes || "" 
+            });
+            const savedSong = await db.songs.get(newId);
+            // Mapeia para reconstruir o setlist apontando para a música certa
+            importedSongsMap[s.title + s.artist] = savedSong;
           }
         }
+
         if (d.setlists) {
           for (let j=0; j<d.setlists.length; j++) {
             let sl = d.setlists[j];
-            await db.setlists.add({ ...sl, id: undefined });
+            const songsForSetlist = (sl.songs || []).map(s => importedSongsMap[s.title + s.artist] || s);
+            await db.setlists.add({ ...sl, id: undefined, songs: songsForSetlist });
           }
         }
-        refreshData(); alert("Importado!");
-      } catch (err) { alert("Erro JSON"); }
+        refreshData(); alert("Importação Concluída!");
+      } catch (err) { alert("Erro no arquivo JSON."); }
     };
     reader.readAsText(e.target.files[0]);
+    e.target.value = null;
   };
 
   return (
     <div style={styles.appContainer}>
       <header style={styles.mainHeader}>
         <div style={{display:'flex', alignItems:'center', gap:'12px'}}><Music color="#007aff" /><h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1><div style={midiFlash ? styles.midiBadgeActive : (isMidiEnabled && allInputs.length > 0 ? styles.midiBadgeOn : styles.midiBadgeOff)}><Zap size={10}/> {midiFlash ? "SINAL!" : "MIDI READY"}</div></div>
-        <div style={{display:'flex', gap:'10px'}}><label style={styles.headerBtn}><FileUp size={14}/> RESTAURAR<input type="file" hidden onChange={(e)=>handleImport(e)} /></label><button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup.json")}><Save size={14}/> BACKUP</button><button onClick={() => setShowSettings(true)} style={styles.infoBtn}><Settings size={22}/></button></div>
+        <div style={{display:'flex', gap:'10px'}}><label style={styles.headerBtn}><FileUp size={14}/> RESTAURAR BACKUP<input type="file" hidden onChange={(e)=>handleImport(e)} /></label><button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "ShowPad_Full_Backup.json")}><Save size={14}/> BACKUP</button><button onClick={() => setShowSettings(true)} style={styles.infoBtn}><Settings size={22}/></button></div>
       </header>
 
       <div style={{display:'flex', flex: 1, overflow:'hidden'}}>
@@ -174,7 +196,7 @@ export default function App() {
                     const s = await r.json(); if(s.title && !(await db.songs.where({title:s.title, artist:s.artist}).first())) await db.songs.add({...s, notes:""});
                   } catch (e) {}
                 }
-                setIsScraping(false); setScrapingStatus("Concluído!"); setGarimpoQueue([]); refreshData();
+                setIsScraping(false); setScrapingStatus("✅ Concluído!"); setGarimpoQueue([]); refreshData();
               }} disabled={isScraping || garimpoQueue.length===0 || !isServerOnline}>Salvar na Biblioteca</button>
               <div style={styles.statusText}>{scrapingStatus}</div>
             </div>
@@ -184,13 +206,13 @@ export default function App() {
         </div>
       </div>
 
-      {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} setMidiLearning={setMidiLearning} midiLearning={midiLearning} onClose={()=>setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} />}
+      {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} onClose={()=>setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} />}
       {showSettings && <SettingsView onClose={()=>setShowSettings(false)} inputs={allInputs} setMidiLearning={setMidiLearning} midiLearning={midiLearning} handleImport={handleImport} />}
     </div>
   );
 }
 
-// --- EDITOR UNIFICADO (FIXED) ---
+// --- EDITOR COM REORDENAÇÃO E EXPORTAÇÃO COMPLETA ---
 const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh }) => {
   const [lC, setLC] = useState(item.data.content), [lT, setLT] = useState(item.data.title), [lA, setLA] = useState(item.data.artist || ""), [lLoc, setLLoc] = useState(item.data.location || ""), [lTim, setLTim] = useState(item.data.time || ""), [lMem, setLMem] = useState(item.data.members || ""), [lNot, setLNot] = useState(item.data.notes || "");
   
@@ -210,25 +232,12 @@ const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh }) => {
     }
   };
 
-  const removeSong = async (index) => {
-    const newSongs = [...item.data.songs];
-    newSongs.splice(index, 1);
-    await db.setlists.update(item.data.id, { songs: newSongs });
-    refresh();
-  };
-
-  const addSongToSetlist = async (song) => {
-    const newSongs = [...(item.data.songs || []), song];
-    await db.setlists.update(item.data.id, { songs: newSongs });
-    refresh();
-  };
-
   return (
     <div style={styles.editorContent}>
       <div style={styles.editorHeader}>
         <div style={{flex:1}}><input style={styles.hInput} value={lT} onChange={e=>setLT(e.target.value)} onBlur={save}/><input style={styles.artistInput} value={item.type==='song'?lA:lLoc} onChange={e=>item.type==='song'?setLA(e.target.value):setLLoc(e.target.value)} onBlur={save} placeholder={item.type==='song'?"Artista":"Local"}/></div>
         <div style={styles.btnGroup}>
-          <button style={styles.exportBtn} onClick={()=>triggerDL(item.type==='song'?{songs:[{...item.data, content:lC}]}:{songs:item.data.songs, setlists:[{...item.data}]}, `Export_${lT}.json`)}>EXPORTAR</button>
+          <button style={styles.exportBtn} onClick={()=>triggerDL(item.type==='song'?{songs:[{...item.data, content:lC}]}:{songs:item.data.songs, setlists:[{...item.data}]}, `ShowPad_${item.type==='song'?'Musica':'Show'}_${lT}.json`)}>EXPORTAR</button>
           {item.type==='song' && <><button style={styles.transpBtn} onClick={()=>{const n=transposeContent(lC, 1); setLC(n); save();}}>+ Tom</button><button style={styles.transpBtn} onClick={()=>{const n=transposeContent(lC, -1); setLC(n); save();}}>- Tom</button></>}
           <button onClick={onClose} style={styles.saveBtn}>Concluir</button><button onClick={onShow} style={styles.showBtn}>SHOW</button>
         </div>
@@ -249,7 +258,7 @@ const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh }) => {
                         <div style={styles.reorderControls}>
                             <button onClick={() => moveSong(i, -1)} disabled={i === 0}><ArrowUp size={14}/></button>
                             <button onClick={() => moveSong(i, 1)} disabled={i === item.data.songs.length - 1}><ArrowDown size={14}/></button>
-                            <button onClick={() => removeSong(i)}><Trash2 size={14} color="#ff3b30"/></button>
+                            <button onClick={async ()=>{const n=[...item.data.songs]; n.splice(i,1); await db.setlists.update(item.data.id,{songs:n}); refresh();}}><Trash2 size={14} color="#ff3b30"/></button>
                         </div>
                     </div>
                     ))}
@@ -257,9 +266,8 @@ const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh }) => {
                 <div style={{...styles.setlistHalf, background:'#222'}}>
                     <h3 style={{color:'#888'}}>Biblioteca (Clique no +)</h3>
                     {songs.map(s => (
-                    <div key={s.id} style={styles.miniItem} onClick={() => addSongToSetlist(s)}>
-                        <div style={{flex:1}}>{s.title}</div>
-                        <Plus size={14} color="#34c759"/>
+                    <div key={s.id} style={styles.miniItem} onClick={async ()=>{const n=[...(item.data.songs||[]), s]; await db.setlists.update(item.data.id,{songs:n}); refresh();}}>
+                        <div style={{flex:1}}>{s.title}</div><Plus size={14} color="#34c759"/>
                     </div>
                     ))}
                 </div>
@@ -270,25 +278,22 @@ const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh }) => {
   );
 };
 
+// --- MODO SHOW COM GAVETA LATERAL ---
 const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose, showScrollRef, lastSignal }) => {
   const [idx, setIdx] = useState(0), [dr, setDr] = useState(false);
   const songsArr = item.type === 'setlist' ? item.data.songs : [item.data];
   const song = songsArr[idx];
-  const render = (txt) => txt?.split('\n').map((l, i) => {
-    const m = l.match(chordRegex); const isC = m && m.length > 0 && m.length >= l.trim().split(/\s+/).length * 0.4;
-    return <div key={i} style={{ color: isC ? '#FFD700' : '#FFF', fontWeight: isC ? 'bold' : 'normal', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8' }}>{l || ' '}</div>;
-  });
   return (
     <div style={styles.showOverlay}>
       {dr && <div style={styles.showDrawer}><div style={styles.drawerHeader}>SET LIST <X onClick={()=>setDr(false)} style={{cursor:'pointer'}}/></div>{songsArr.map((s,i)=><div key={i} style={idx===i?styles.drawerItemActive:styles.drawerItem} onClick={()=>{setIdx(i);setDr(false); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}>{i+1}. {s.title}</div>)}</div>}
       <div style={styles.showToolbar}><button onClick={()=>setDr(true)} style={styles.backBtn}><Menu/></button><button onClick={onClose} style={styles.backBtn}><ChevronLeft/> Sair</button><div style={{flex:1, textAlign:'center'}}><strong style={{color:'#fff'}}>{song?.title}</strong>{lastSignal && <div style={styles.midiProbeFloating}>{lastSignal}</div>}</div><div style={styles.showControls}><button onClick={()=>setFontSize(f=>f-5)}><Type size={14}/>-</button><button onClick={()=>setFontSize(f=>f+5)}><Type size={14}/>+</button><button onClick={()=>scrollPage(-1)}><ChevronUp size={20}/></button><button onClick={()=>scrollPage(1)}><ChevronDown size={20}/></button></div></div>
-      <div ref={showScrollRef} style={{...styles.showContent, fontSize:fontSize+'px', fontFamily:'monospace', color:'#fff'}}>{song ? render(song.content) : "Fim"}{item.type==='setlist' && <div style={styles.pageActions}>{idx>0 && <button style={styles.pageBtn} onClick={()=>{setIdx(idx-1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}><ChevronLeft/> ANTERIOR</button>}{idx<songsArr.length-1 && <button style={styles.pageBtnNext} onClick={()=>{setIdx(idx+1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}>PRÓXIMA <ChevronRight/></button>}</div>}</div>
+      <div ref={showScrollRef} style={{...styles.showContent, fontSize:fontSize+'px', fontFamily:'monospace', color:'#fff'}}>{song ? formatChordsVisual(song.content) : "Fim"}{item.type==='setlist' && <div style={styles.pageActions}>{idx>0 && <button style={styles.pageBtn} onClick={()=>{setIdx(idx-1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}><ChevronLeft/> ANTERIOR</button>}{idx<songsArr.length-1 && <button style={styles.pageBtnNext} onClick={()=>{setIdx(idx+1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}>PRÓXIMA <ChevronRight/></button>}</div>}</div>
     </div>
   );
 };
 
 const SettingsView = ({ onClose, inputs, setMidiLearning, midiLearning, handleImport }) => (
-  <div style={styles.wizard}><div style={styles.settingsCard}><h2>Configurações</h2><div style={styles.settingsSection}><h4>MIDI Hardware</h4><div>{inputs.length>0 ? "Hardware: " + inputs.join(", ") : "Sem hardware"}</div><div style={{display:'flex', gap:'10px', marginTop:'10px'}}><button onClick={()=>setMidiLearning('up')} style={midiLearning==='up'?styles.learnBtnActive:styles.learnBtn}>{midiLearning==='up'?"...":"Mapear VOLTAR"}</button><button onClick={()=>setMidiLearning('down')} style={midiLearning==='down'?styles.learnBtnActive:styles.learnBtn}>{midiLearning==='down'?"...":"Mapear AVANÇAR"}</button></div></div><div style={styles.settingsSection}><h4>Sistema</h4><label style={styles.importFullBtn}>RESTAURAR BACKUP (JSON)<input type="file" hidden onChange={(e)=>handleImport(e, "Backup")} /></label></div><button style={styles.primaryButton} onClick={onClose}>Fechar</button></div></div>
+  <div style={styles.wizard}><div style={styles.settingsCard}><h2>Configurações</h2><div style={styles.settingsSection}><h4>MIDI</h4><div>{inputs.length>0 ? "Hardware: " + inputs.join(", ") : "Sem hardware"}</div><div style={{display:'flex', gap:'10px', marginTop:'15px'}}><button onClick={()=>setMidiLearning('up')} style={midiLearning==='up'?styles.learnBtnActive:styles.learnBtn}>{midiLearning==='up'?"...":"Mapear VOLTAR"}</button><button onClick={()=>setMidiLearning('down')} style={midiLearning==='down'?styles.learnBtnActive:styles.learnBtn}>{midiLearning==='down'?"...":"Mapear AVANÇAR"}</button></div></div><div style={styles.settingsSection}><h4>Backup</h4><label style={styles.importFullBtn}>RESTAURAR BACKUP (JSON)<input type="file" hidden onChange={(e)=>handleImport(e, "Backup")} /></label></div><button style={styles.primaryButton} onClick={onClose}>Fechar</button></div></div>
 );
 
 const styles = {
@@ -305,8 +310,8 @@ const styles = {
     tab: { flex: 1, padding: '12px', border: 'none', background: 'none', color: '#888', cursor:'pointer', fontSize:'11px' },
     activeTab: { flex: 1, padding: '12px', border: 'none', background: '#3a3a3c', color: '#fff', borderBottom: '2px solid #007aff' },
     listArea: { flex: 1, overflowY: 'auto' },
-    listItem: { padding: '10px 15px', borderBottom: '1px solid #333', cursor: 'pointer', display:'flex', alignItems:'center', gap:'10px' },
-    selectedItem: { padding: '10px 15px', borderBottom: '1px solid #333', cursor: 'pointer', backgroundColor: '#007aff22', borderLeft: '4px solid #007aff', display:'flex', alignItems:'center', gap:'10px' },
+    listItem: { padding: '10px 15px', borderBottom: '1px solid #333', cursor: 'pointer', display:'flex', alignItems:'center', gap:'10px', color: '#fff' },
+    selectedItem: { padding: '10px 15px', borderBottom: '1px solid #333', cursor: 'pointer', backgroundColor: '#007aff22', borderLeft: '4px solid #007aff', display:'flex', alignItems:'center', gap:'10px', color: '#fff' },
     listActionBtnShow: { background:'none', border:'none', color:'#007aff', cursor:'pointer', padding:'5px' },
     listActionBtnDelete: { background:'none', border:'none', color:'#ff3b30', cursor:'pointer', padding:'5px' },
     sidebarFooter: { padding: '15px', display: 'flex', gap: '8px', borderTop: '1px solid #333', flexWrap: 'wrap' },
@@ -323,7 +328,7 @@ const styles = {
     transpBtn: { padding: '6px 10px', border: '1px solid #555', borderRadius: '5px', background: 'none', color: '#fff', cursor: 'pointer', fontSize:'11px' },
     exportBtn: { padding: '6px 10px', backgroundColor: '#444', border: 'none', borderRadius: '5px', color: '#fff', cursor: 'pointer', fontSize:'11px' },
     mainTextArea: { flex: 1, background: '#1c1c1e', color: '#fff', border: 'none', padding: '20px', fontSize: '17px', fontFamily: 'monospace', outline: 'none', resize: 'none' },
-    showOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIindex: 2000, display: 'flex', flexDirection: 'column' },
+    showOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 2000, display: 'flex', flexDirection: 'column' },
     showToolbar: { padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1c1c1e', borderBottom:'1px solid #333', height: '60px' },
     showControls: { display: 'flex', gap: '15px', alignItems:'center' },
     showContent: { flex: 1, overflowY: 'auto', padding: '30px', textAlign: 'left', backgroundColor: '#000', color:'#fff' },
@@ -346,7 +351,6 @@ const styles = {
     miniItemGarimpo: { padding: '10px', borderBottom: '1px solid #333', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'12px', color:'#fff' },
     processBtn: { padding: '15px', backgroundColor: '#34c759', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '10px' },
     statusText: { marginTop: '10px', color: '#007aff', textAlign: 'center', fontSize: '13px', fontWeight: 'bold' },
-    secondaryBtn: { padding: '10px', backgroundColor: '#444', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' },
     miniItemReorder: { padding: '10px', borderBottom: '1px solid #333', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'13px', color: '#fff' },
     reorderControls: { display:'flex', gap:'10px', alignItems:'center' },
     miniItem: { padding: '10px', borderBottom: '1px solid #333', cursor: 'pointer', color:'#fff', display:'flex', justifyContent:'space-between', alignItems:'center' },
