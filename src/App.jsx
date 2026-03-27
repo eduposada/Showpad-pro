@@ -4,7 +4,7 @@ import Dexie from 'dexie';
 import { 
   Plus, Music, Play, Trash2, ChevronLeft, 
   FileUp, ChevronUp, ChevronDown, 
-  Type, ListMusic, CheckCircle2, X, RefreshCw, Piano, Info, Activity, Zap, Monitor, Menu, ChevronRight, Download, Share2, ArrowUp, ArrowDown, Globe, ClipboardPaste, Loader2
+  Type, ListMusic, CheckCircle2, X, RefreshCw, Piano, Info, Activity, Zap, Monitor, Menu, ChevronRight, Download, Share2, ArrowUp, ArrowDown, Globe, ClipboardPaste, Loader2, Database, Save
 } from 'lucide-react';
 
 // --- 1. BANCO DE DADOS ---
@@ -49,7 +49,6 @@ export default function App() {
   const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30);
   const [view, setView] = useState('library');
   
-  // MIDI
   const [isMidiEnabled, setIsMidiEnabled] = useState(false);
   const [midiFlash, setMidiFlash] = useState(false); 
   const [lastSignalUI, setLastSignalUI] = useState("");
@@ -58,7 +57,6 @@ export default function App() {
   const midiLearningRef = useRef(null);
   const showScrollRef = useRef(null);
 
-  // GARIMPO
   const [garimpoInput, setGarimpoInput] = useState("");
   const [garimpoQueue, setGarimpoQueue] = useState([]);
   const [isScraping, setIsScraping] = useState(false);
@@ -68,10 +66,8 @@ export default function App() {
   useEffect(() => { refreshData(); initMidi(); }, []);
 
   const refreshData = async () => {
-    const s = await db.songs.toArray();
-    const sl = await db.setlists.toArray();
-    setSongs(s);
-    setSetlists(sl);
+    setSongs(await db.songs.toArray());
+    setSetlists(await db.setlists.toArray());
   };
 
   const initMidi = () => {
@@ -103,7 +99,8 @@ export default function App() {
 
   const scrollPage = (dir) => {
     if (showScrollRef.current) {
-        showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * dir, behavior: 'smooth' });
+        const amount = window.innerHeight * 0.45;
+        showScrollRef.current.scrollBy({ top: amount * dir, behavior: 'smooth' });
     }
   };
 
@@ -114,104 +111,108 @@ export default function App() {
     link.href = url; link.download = filename; link.click();
   };
 
-  const handleGarimpo = async () => {
-      if (garimpoQueue.length === 0) return;
-      setIsScraping(true);
-      setScrapingStatus("Conectando ao servidor no Mac...");
-
-      for (const url of garimpoQueue) {
-          try {
-              const nameSimple = url.split('/').filter(Boolean).pop();
-              setScrapingStatus(`Extraindo: ${nameSimple}...`);
-              
-              const response = await fetch('http://localhost:3001/scrape', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ url })
-              });
-              
-              if (!response.ok) throw new Error("Servidor Offline");
-              const song = await response.json();
-              
-              const exists = await db.songs.where({title: song.title, artist: song.artist}).first();
-              if (!exists) {
-                  await db.songs.add({ 
-                      title: song.title || "Sem Título", 
-                      artist: song.artist || "Sem Artista", 
-                      content: song.content || "", 
-                      notes: "" 
-                  });
-              }
-          } catch (err) {
-              alert("Erro: O servidor 'node server.js' não está rodando no terminal do Mac!");
-              break;
-          }
-      }
-      setIsScraping(false); 
-      setScrapingStatus("✅ Processamento concluído!");
-      setGarimpoQueue([]); 
-      refreshData();
+  const handleGenericImport = (e, type) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+        try {
+            const data = JSON.parse(ev.target.result);
+            let importedSongsMap = {};
+            if (data.songs) {
+                for (let s of data.songs) {
+                    let existing = await db.songs.where({title: s.title, artist: s.artist}).first();
+                    if (!existing) {
+                        const newId = await db.songs.add({ title: s.title, artist: s.artist, content: s.content, notes: s.notes || "" });
+                        existing = await db.songs.get(newId);
+                    }
+                    importedSongsMap[s.title + s.artist] = existing;
+                }
+            }
+            if (data.setlists) {
+                for (let sl of data.setlists) {
+                    const newSongs = (sl.songs || []).map(s => importedSongsMap[s.title + s.artist] || s);
+                    await db.setlists.add({ ...sl, id: undefined, songs: newSongs });
+                }
+            }
+            refreshData(); alert(`Importação de ${type} concluída!`);
+        } catch (err) { alert("Arquivo JSON inválido."); }
+    };
+    reader.readAsText(file);
+    e.target.value = null;
   };
 
   if (showWizard) return <Wizard onDone={() => { localStorage.setItem('wizardDone', 'true'); setShowWizard(false); }} />;
 
   return (
     <div style={styles.appContainer}>
+      
+      {/* CABEÇALHO COM COMANDOS DE BACKUP (RESTAURAR E GERAR) */}
       <header style={styles.mainHeader}>
-        <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+        <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
             <Music color="#007aff" />
             <h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
             <div style={midiFlash ? styles.midiBadgeActive : (isMidiEnabled && allInputs.length > 0 ? styles.midiBadgeOn : styles.midiBadgeOff)}>
-                <Zap size={10}/> {midiFlash ? "SINAL!" : "MIDI"}
+                <Zap size={10}/> {midiFlash ? "SINAL MIDI!" : "MIDI READY"}
             </div>
         </div>
-        <button onClick={() => setShowInfo(true)} style={styles.infoBtn}><Info size={20}/></button>
+        
+        <div style={{display:'flex', gap:'10px'}}>
+            <label style={styles.headerBtn}>
+                <FileUp size={14}/> RESTAURAR
+                <input type="file" hidden onChange={(e) => handleGenericImport(e, "Backup Total")} />
+            </label>
+            <button style={styles.headerBtn} onClick={() => triggerDownload({songs, setlists}, `ShowPad_Full_Backup_${new Date().toISOString().slice(0,10)}.json`)}>
+                <Download size={14}/> GERAR BACKUP
+            </button>
+            <button onClick={() => setShowInfo(true)} style={styles.infoBtn}><Info size={22}/></button>
+        </div>
       </header>
 
       <div style={{display:'flex', flex: 1, overflow:'hidden'}}>
-        {/* SIDEBAR */}
+        {/* BARRA LATERAL */}
         <div style={styles.sidebar}>
             <div style={styles.navTabs}>
                 <button onClick={() => setView('library')} style={view === 'library' ? styles.activeTab : styles.tab}>Biblioteca</button>
                 <button onClick={() => setView('setlists')} style={view === 'setlists' ? styles.activeTab : styles.tab}>Shows</button>
                 <button onClick={() => setView('garimpo')} style={view === 'garimpo' ? styles.activeTab : styles.tab}>Garimpar</button>
             </div>
+            
             <div style={styles.listArea}>
-                {view === 'library' ? (
-                    songs.map(s => (
-                        <div key={s.id} style={selectedItem?.data?.id === s.id ? styles.selectedItem : styles.listItem}>
-                            <div style={{flex:1, overflow:'hidden'}} onClick={() => setSelectedItem({type:'song', data:s})}>
-                                <strong>{s.title}</strong><small style={{display:'block', opacity:0.5}}>{s.artist}</small>
-                            </div>
-                            <button style={styles.listActionBtnShow} onClick={() => { setSelectedItem({type:'song', data:s}); setShowMode(true); }}><Monitor size={16}/></button>
-                            <button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Apagar música da biblioteca?")) { await db.songs.delete(s.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
+                {(view === 'library' ? songs : setlists).map(item => (
+                    <div key={item.id} style={selectedItem?.data?.id === item.id ? styles.selectedItem : styles.listItem}>
+                        <div style={{flex:1, overflow:'hidden'}} onClick={() => setSelectedItem({type: view === 'library' ? 'song' : 'setlist', data: item})}>
+                            <strong>{item.title}</strong>
+                            <small style={{display:'block', opacity:0.5}}>{item.artist || item.location || "---"}</small>
                         </div>
-                    ))
-                ) : view === 'setlists' ? (
-                    setlists.map(sl => (
-                        <div key={sl.id} style={selectedItem?.data?.id === sl.id ? styles.selectedItem : styles.listItem}>
-                            <div style={{flex:1, overflow:'hidden'}} onClick={() => setSelectedItem({type:'setlist', data:sl})}>
-                                <strong>{sl.title}</strong><small style={{display:'block', opacity:0.5}}>{sl.location || "Local não definido"}</small>
-                            </div>
-                            <button style={styles.listActionBtnShow} onClick={() => { setSelectedItem({type:'setlist', data:sl}); setShowMode(true); }}><Monitor size={16}/></button>
-                            <button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Apagar este Show?")) { await db.setlists.delete(sl.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
+                        <div style={{display:'flex', gap:'6px'}}>
+                            <button style={styles.listActionBtnShow} onClick={() => { setSelectedItem({type: view === 'library' ? 'song' : 'setlist', data: item}); setShowMode(true); }}><Monitor size={16}/></button>
+                            <button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Excluir definitivamente?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
                         </div>
-                    ))
-                ) : (
-                    <div style={{padding:'20px', color:'#888', fontSize:'13px', lineHeight:'1.4'}}>
-                        <b>Modo Garimpo Ativo</b><br/>
-                        Use o painel à direita para colar links e baixar músicas direto para o iPad.
                     </div>
-                )}
+                ))}
             </div>
+
             <div style={styles.sidebarFooter}>
-                <button onClick={async () => {
-                    const obj = view==='setlists' ? {title:"Novo Show", songs:[], location:"", time:"", members:"", notes:""} : {title:"Nova Música", artist:"Artista", content:""};
-                    const id = await (view==='setlists' ? db.setlists.add(obj) : db.songs.add(obj));
-                    refreshData();
-                    setSelectedItem({type: view==='setlists'?'setlist':'song', data: await (view==='setlists'?db.setlists.get(id):db.songs.get(id))});
-                }} style={styles.addBtn}>+ NOVO</button>
-                <button onClick={() => triggerDownload({songs, setlists}, "ShowPad_Full_Backup.json")} style={styles.iconBtn} title="Exportar Tudo"><Download size={18}/></button>
+                {view === 'library' ? (
+                    <>
+                        <button onClick={async () => {
+                            const id = await db.songs.add({title:"Nova Música", artist:"Artista", content:""});
+                            refreshData(); setSelectedItem({type:'song', data: await db.songs.get(id)});
+                        }} style={styles.addBtn}>+ MÚSICA</button>
+                        <label style={styles.importBtnLabel}><FileUp size={16}/> IMPORTAR CIFRA<input type="file" hidden onChange={(e) => handleGenericImport(e, "Cifra Individual")} /></label>
+                    </>
+                ) : view === 'setlists' ? (
+                    <>
+                        <button onClick={async () => {
+                            const id = await db.setlists.add({title:"Novo Show", songs:[], location:"", time:"", members:"", notes:""});
+                            refreshData(); setSelectedItem({type:'setlist', data: await db.setlists.get(id)});
+                        }} style={styles.addBtn}>+ NOVO SHOW</button>
+                        <label style={styles.importBtnLabel}><ListMusic size={16}/> IMPORTAR SHOW<input type="file" hidden onChange={(e) => handleGenericImport(e, "Setlist")} /></label>
+                    </>
+                ) : (
+                    <div style={{color:'#666', fontSize:'11px', textAlign:'center', width:'100%'}}>Modo Garimpo via Mac ativo</div>
+                )}
             </div>
         </div>
 
@@ -219,39 +220,25 @@ export default function App() {
         <div style={styles.mainEditor}>
             {view === 'garimpo' ? (
                 <div style={styles.garimpoPanel}>
-                    <h2 style={{color: '#fff', margin: '0 0 10px 0'}}>Garimpar Cifras</h2>
-                    <p style={{fontSize:'14px', color:'#aaa', marginBottom:'25px'}}>Insira os links do CifraClub abaixo para salvá-los na biblioteca.</p>
-                    
+                    <h2 style={{color: '#fff', margin: '0 0 10px 0'}}>Garimpar do Mac</h2>
                     <div style={styles.inputRow}>
-                        <input 
-                            style={styles.inputField} 
-                            placeholder="Cole o link aqui..." 
-                            value={garimpoInput} 
-                            onChange={e=>setGarimpoInput(e.target.value)} 
-                            onKeyDown={e=>e.key==='Enter' && (()=>{ if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]); setGarimpoInput("");}})()} 
-                        />
-                        <button style={styles.secondaryBtn} onClick={async ()=>{ try {const t = await navigator.clipboard.readText(); setGarimpoInput(t);} catch(e){alert("Cole manualmente")}}}>
-                            <ClipboardPaste size={18}/>
-                        </button>
-                        <button style={styles.addBtn} onClick={()=>{ if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]); setGarimpoInput("");} }}>OK</button>
+                        <input style={styles.inputField} placeholder="Link do CifraClub..." value={garimpoInput} onChange={e=>setGarimpoInput(e.target.value)} onKeyDown={e=>e.key==='Enter' && (()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}})()}/>
+                        <button style={styles.addBtn} onClick={()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}}}>OK</button>
                     </div>
-
                     <div style={styles.scrollList}>
-                        {garimpoQueue.length === 0 ? (
-                            <div style={{color:'#444', textAlign:'center', marginTop:'50px'}}>Fila de links vazia</div>
-                        ) : (
-                            garimpoQueue.map((url,i)=>(
-                                <div key={i} style={styles.miniItemGarimpo}>
-                                    <span style={{flex:1, overflow:'hidden', textOverflow:'ellipsis'}}>{url.split('com.br/').pop()}</span>
-                                    <X size={16} color="#ff3b30" style={{cursor:'pointer'}} onClick={()=>setGarimpoQueue(garimpoQueue.filter((_,idx)=>idx!==i))}/>
-                                </div>
-                            ))
-                        )}
+                        {garimpoQueue.map((url,i)=>(<div key={i} style={styles.miniItemGarimpo}><span>{url.split('/').pop()}</span><X size={14} onClick={()=>setGarimpoQueue(garimpoQueue.filter((_,idx)=>idx!==i))}/></div>))}
                     </div>
-
-                    <button style={styles.processBtn} onClick={handleGarimpo} disabled={isScraping || garimpoQueue.length===0}>
-                        {isScraping ? <><Loader2 className="spin" size={20}/> Processando...</> : "Garimpar e Salvar na Biblioteca"}
-                    </button>
+                    <button style={styles.processBtn} onClick={async () => {
+                        setIsScraping(true); setScrapingStatus("Garimpando...");
+                        for (const url of garimpoQueue) {
+                            try {
+                                const response = await fetch('http://localhost:3001/scrape', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url}) });
+                                const song = await response.json();
+                                if(song.title && !(await db.songs.where({title:song.title, artist:song.artist}).first())) await db.songs.add({...song, notes:""});
+                            } catch (err) { console.error(err); }
+                        }
+                        setIsScraping(false); setScrapingStatus("✅ Biblioteca Atualizada!"); setGarimpoQueue([]); refreshData();
+                    }} disabled={isScraping || garimpoQueue.length===0}>{isScraping ? <Loader2 className="spin" size={20}/> : "Processar e Salvar"}</button>
                     <div style={styles.statusText}>{scrapingStatus}</div>
                 </div>
             ) : selectedItem?.type === 'song' ? (
@@ -271,14 +258,13 @@ export default function App() {
         </div>
       </div>
 
-      {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} setMidiLearning={setMidiLearning} midiLearning={midiLearning} onClose={() => setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} />}
+      {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} setMidiLearning={setMidiLearning} midiLearning={midiLearning} formatChords={formatChords} onClose={() => setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} />}
       {showInfo && <InfoView onClose={() => setShowInfo(false)} inputs={allInputs} />}
     </div>
   );
 }
 
-// --- SUB-COMPONENTES ---
-
+// --- EDITOR DE MÚSICA ---
 const SongEditor = ({ song, onClose, onShow, onTranspose, triggerDownload }) => {
     const [localContent, setLocalContent] = useState(song.content);
     const [localTitle, setLocalTitle] = useState(song.title);
@@ -289,7 +275,7 @@ const SongEditor = ({ song, onClose, onShow, onTranspose, triggerDownload }) => 
             <div style={styles.editorHeader}>
                 <div style={{flex:1}}><input style={styles.hInput} value={localTitle} onChange={e => setLocalTitle(e.target.value)} onBlur={persist} /><input style={styles.artistInput} value={localArtist} onChange={e => setLocalArtist(e.target.value)} onBlur={persist} /></div>
                 <div style={styles.btnGroup}>
-                    <button style={styles.exportBtn} onClick={() => triggerDownload({songs:[{...song, content:localContent, title:localTitle, artist:localArtist}]}, `ShowPad_Música_${localTitle.replace(/\s/g, '_')}.json`)}><Share2 size={14}/> Exportar</button>
+                    <button style={styles.exportBtn} onClick={() => triggerDownload({songs:[{...song, content:localContent, title:localTitle, artist:localArtist}]}, `ShowPad_Cifra_${localTitle.replace(/\s/g, '_')}.json`)}>EXPORTAR</button>
                     <button style={styles.transpBtn} onClick={() => { onTranspose(1); setLocalContent(transposeContent(localContent, 1)); }}>+ Tom</button>
                     <button style={styles.transpBtn} onClick={() => { onTranspose(-1); setLocalContent(transposeContent(localContent, -1)); }}>- Tom</button>
                     <button onClick={() => { persist(); onClose(); }} style={styles.saveBtn}>Concluir</button>
@@ -301,6 +287,7 @@ const SongEditor = ({ song, onClose, onShow, onTranspose, triggerDownload }) => 
     );
 };
 
+// --- EDITOR DE SHOW ---
 const SetlistEditor = ({ setlist, allSongs, onClose, onShow, update, triggerDownload }) => {
     const [lLoc, setLLoc] = useState(setlist.location || ""), [lTime, setLTime] = useState(setlist.time || ""), [lMem, setLMem] = useState(setlist.members || ""), [lNote, setLNote] = useState(setlist.notes || "");
     const persist = () => update({ location: lLoc, time: lTime, members: lMem, notes: lNote });
@@ -310,7 +297,7 @@ const SetlistEditor = ({ setlist, allSongs, onClose, onShow, update, triggerDown
             <div style={styles.editorHeader}>
                 <input style={styles.hInput} value={setlist.title} onChange={e => update({title: e.target.value})} />
                 <div style={styles.btnGroup}>
-                    <button style={styles.exportBtn} onClick={() => triggerDownload({songs: setlist.songs, setlists: [setlist]}, `ShowPad_Show_${setlist.title.replace(/\s/g, '_')}.json`)}><Download size={14}/> Exportar Show</button>
+                    <button style={styles.exportBtn} onClick={() => triggerDownload({songs: setlist.songs, setlists: [setlist]}, `ShowPad_Show_${setlist.title.replace(/\s/g, '_')}.json`)}>EXPORTAR SHOW</button>
                     <button onClick={onShow} style={styles.showBtn}>START SHOW</button>
                     <button onClick={onClose} style={styles.saveBtn}>Concluir</button>
                 </div>
@@ -328,17 +315,9 @@ const SetlistEditor = ({ setlist, allSongs, onClose, onShow, update, triggerDown
     );
 };
 
-const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, setMidiLearning, midiLearning, onClose, showScrollRef, lastSignal }) => {
+const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, setMidiLearning, midiLearning, formatChords, onClose, showScrollRef, lastSignal }) => {
     const [songIdx, setSongIdx] = useState(0), [drawerOpen, setDrawerOpen] = useState(false);
     const currentSong = item.type === 'setlist' ? (item.data.songs[songIdx] || null) : item.data;
-    const formatChords = (text) => {
-        if (!text) return null;
-        return text.split('\n').map((line, i) => {
-            const matches = line.match(chordRegex);
-            const isChordLine = (matches?.length || 0) > 0 && (matches?.length || 0) >= line.trim().split(/\s+/).length * 0.4;
-            return <div key={i} style={{ color: isChordLine ? '#FFD700' : '#FFF', fontWeight: isChordLine ? 'bold' : 'normal', minHeight: '1.2em', whiteSpace: 'pre', textAlign: 'left' }}>{line || ' '}</div>;
-        });
-    };
     return (
         <div style={styles.showOverlay}>
             {drawerOpen && <div style={styles.showDrawer}><div style={styles.drawerHeader}>SET LIST <X onClick={()=>setDrawerOpen(false)} style={{cursor:'pointer'}}/></div><div style={{overflowY:'auto', flex:1}}>{item.type === 'setlist' && item.data.songs.map((s, i) => (<div key={i} style={songIdx === i ? styles.drawerItemActive : styles.drawerItem} onClick={() => { setSongIdx(i); setDrawerOpen(false); if(showScrollRef.current) showScrollRef.current.scrollTop = 0; }}>{i+1}. {s.title}</div>))}</div></div>}
@@ -353,7 +332,7 @@ const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, setMidiLearning
 };
 
 const InfoView = ({ onClose, inputs }) => (
-    <div style={styles.wizard}><div style={styles.wizardCard}><h2>Painel ShowPad Pro v9.1</h2><div style={{textAlign:'left', fontSize:'12px', color:'#333'}}><p><b>MIDI:</b> {inputs.join(", ") || "Nenhum"}</p><hr/><p><b>Aba Garimpar:</b> Músicas extraídas via servidor local no Mac entram direto na biblioteca.</p></div><button style={styles.primaryButton} onClick={onClose}>Fechar</button></div></div>
+    <div style={styles.wizard}><div style={styles.wizardCard}><h2>Painel ShowPad Pro v10.1</h2><div style={{textAlign:'left', fontSize:'12px', color:'#333'}}><p><b>Autor:</b> Edu Posada</p><p><b>Desenvolvimento:</b> Gemini 1.5 Flash (Google AI)</p><hr/><p><b>MIDI:</b> {inputs.join(", ") || "Nenhum teclado detectado."}</p><hr/><p><b>Instruções:</b> Use os botões de BACKUP (Topo) para salvar ou restaurar toda a sua biblioteca. Use IMPORTAR (Lateral) para arquivos individuais.</p></div><button style={styles.primaryButton} onClick={onClose}>Fechar</button></div></div>
 );
 
 const Wizard = ({ onDone }) => (
@@ -362,7 +341,8 @@ const Wizard = ({ onDone }) => (
 
 const styles = {
     appContainer: { display: 'flex', flexDirection:'column', height: '100vh', backgroundColor: '#1c1c1e', color: '#fff', overflow:'hidden', fontFamily: 'sans-serif' },
-    mainHeader: { height: '50px', backgroundColor:'#000', display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0 20px', borderBottom:'1px solid #333' },
+    mainHeader: { height: '60px', backgroundColor:'#000', display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0 20px', borderBottom:'1px solid #333' },
+    headerBtn: { backgroundColor: '#2c2c2e', color: '#fff', padding: '8px 12px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', border:'none' },
     midiBadgeOn: { fontSize:'9px', color:'#34c759', border:'1px solid #34c759', padding:'2px 6px', borderRadius:'4px' },
     midiBadgeActive: { fontSize:'9px', color:'#000', backgroundColor:'yellow', padding:'2px 6px', borderRadius:'4px' },
     midiBadgeOff: { fontSize:'9px', color:'#666', border:'1px solid #333', padding:'2px 6px', borderRadius:'4px' },
@@ -378,9 +358,8 @@ const styles = {
     listActionBtnShow: { background:'none', border:'none', color:'#007aff', cursor:'pointer', padding:'5px' },
     listActionBtnDelete: { background:'none', border:'none', color:'#ff3b30', cursor:'pointer', padding:'5px' },
     sidebarFooter: { padding: '15px', display: 'flex', gap: '8px', borderTop: '1px solid #333', flexWrap: 'wrap' },
-    addBtn: { flex: 1, padding: '8px', backgroundColor: '#007aff', border: 'none', borderRadius: '6px', color: '#fff', fontWeight:'bold', cursor:'pointer' },
-    importBtnLabel: { flex: 1.5, padding: '8px', backgroundColor: '#34c759', border: 'none', borderRadius: '6px', color: '#fff', fontWeight:'bold', cursor:'pointer', textAlign:'center', fontSize:'11px' },
-    iconBtn: { padding: '8px', backgroundColor: '#3a3a3c', border: 'none', borderRadius: '6px', color: '#fff', cursor:'pointer' },
+    addBtn: { flex: 1, padding: '10px', backgroundColor: '#007aff', border: 'none', borderRadius: '8px', color: '#fff', fontWeight:'bold', cursor:'pointer', fontSize: '11px' },
+    importBtnLabel: { flex: 1.5, padding: '10px', backgroundColor: '#34c759', border: 'none', borderRadius: '8px', color: '#fff', fontWeight:'bold', cursor:'pointer', textAlign:'center', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center', gap:'4px' },
     mainEditor: { flex: 1, display: 'flex', flexDirection: 'column', backgroundColor:'#1c1c1e' },
     editorContent: { display: 'flex', flexDirection: 'column', height: '100%' },
     editorHeader: { padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#2c2c2e' },
