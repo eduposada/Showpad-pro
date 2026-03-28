@@ -6,9 +6,14 @@ import {
   Type, ListMusic, CheckCircle2, X, RefreshCw, Piano, Info, Activity, Zap, Monitor, Menu, ChevronRight, Download, Save, ClipboardPaste, Loader2, Database, Settings, Share2, ArrowUp, ArrowDown, XCircle
 } from 'lucide-react';
 
+// --- 1. CONFIGURAÇÃO DO BANCO DE DADOS ---
 const db = new Dexie('ShowPadProWeb');
-db.version(11).stores({ songs: '++id, title, artist', setlists: '++id, title, location, time, members, notes' });
+db.version(11).stores({ 
+    songs: '++id, title, artist', 
+    setlists: '++id, title, location, time, members, notes' 
+});
 
+// --- 2. CONSTANTES E MOTOR MUSICAL ---
 const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
@@ -26,7 +31,7 @@ const transposeContent = (c, s) => {
   return c.split('\n').map(l => {
     if (l.toLowerCase().indexOf("tom") !== -1) return l.replace(/([A-G][#b]?)/g, (m) => shiftNote(m, s));
     const m = l.match(chordRegex);
-    if (m && m.length >= l.trim().split(/\s+/).length * 0.4) return l.replace(chordRegex, (match) => shiftNote(match, s));
+    if (m && m.length > 0 && m.length >= l.trim().split(/\s+/).length * 0.4) return l.replace(chordRegex, (match) => shiftNote(match, s));
     return l;
   }).join('\n');
 };
@@ -37,34 +42,37 @@ const formatChordsVisual = (text) => {
         const m = line.match(chordRegex);
         const isC = m && m.length > 0 && m.length >= line.trim().split(/\s+/).length * 0.4;
         return (
-            <div key={i} style={{ color: isC ? '#FFD700' : '#FFFFFF', fontWeight: isC ? 'bold' : 'normal', minHeight: '1.2em', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8' }}>{line || ' '}</div>
+            <div key={i} style={{ 
+                color: isC ? '#FFD700' : '#FFFFFF', 
+                fontWeight: isC ? 'bold' : 'normal', 
+                minHeight: '1.2em', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8' 
+            }}>{line || ' '}</div>
         );
     });
 };
 
+// --- COMPONENTE PRINCIPAL (APP) ---
 export default function App() {
   const [songs, setSongs] = useState([]), [setlists, setSetlists] = useState([]), [selectedItem, setSelectedItem] = useState(null);
   const [showMode, setShowMode] = useState(false), [showSettings, setShowSettings] = useState(false), [view, setView] = useState('library');
-  const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30);
-  
-  const [midiStatus, setMidiStatus] = useState("disconnected"); // disconnected, ready, blocked, nodevice
+  const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30), [isMidiEnabled, setIsMidiEnabled] = useState(false);
   const [midiFlash, setMidiFlash] = useState(false), [lastSignalUI, setLastSignalUI] = useState(""), [allInputs, setAllInputs] = useState([]);
-  const [midiLearning, setMidiLearning] = useState(null);
-  const [isServerOnline, setIsServerOnline] = useState(false);
+  const [midiLearning, setMidiLearning] = useState(null), [garimpoInput, setGarimpoInput] = useState(""), [garimpoQueue, setGarimpoQueue] = useState([]);
+  const [isScraping, setIsScraping] = useState(false), [scrapingStatus, setScrapingStatus] = useState(""), [isServerOnline, setIsServerOnline] = useState(false);
   const [showWizard, setShowWizard] = useState(!localStorage.getItem('wizardDone'));
 
   const midiLearningRef = useRef(null), showScrollRef = useRef(null);
 
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
   useEffect(() => { refreshData(); initMidi(); }, []);
-  
   useEffect(() => {
     const check = () => fetch('http://localhost:3001/ping').then(r => setIsServerOnline(r.ok)).catch(() => setIsServerOnline(false));
     check(); setInterval(check, 5000);
   }, []);
 
   const refreshData = async () => { 
-    const s = await db.songs.toArray(); const sl = await db.setlists.toArray();
+    const s = await db.songs.toArray(); 
+    const sl = await db.setlists.toArray();
     setSongs(s); setSetlists(sl); 
     if (selectedItem) {
         const updated = (selectedItem.type === 'song') ? s.find(x => x.id === selectedItem.data.id) : sl.find(x => x.id === selectedItem.data.id);
@@ -72,30 +80,19 @@ export default function App() {
     }
   };
 
-  // --- INICIALIZAÇÃO MIDI REFORÇADA PARA IPAD ---
   const initMidi = () => {
-    setMidiStatus("initializing");
-    
-    // Fallback: Se não houver navigator.requestMIDIAccess (Safari comum)
-    if (!navigator.requestMIDIAccess) {
-        setMidiStatus("blocked");
-        return;
-    }
-
-    WebMidi.enable().then(() => {
+    WebMidi.enable({ sysex: true }).then(() => {
+      setIsMidiEnabled(true);
       const upd = () => {
-        const inputs = WebMidi.inputs;
-        setAllInputs(inputs.map(i => i.name));
-        setMidiStatus(inputs.length > 0 ? "ready" : "nodevice");
-
-        inputs.forEach(input => {
+        setAllInputs(WebMidi.inputs.map(i => i.name));
+        WebMidi.inputs.forEach(input => {
           input.removeListener();
           input.addListener("midimessage", e => {
             const st = e.data[0], d1 = e.data[1], d2 = e.data[2];
             if ((st >= 144 && st <= 159 && d2 > 0) || (st >= 176 && st <= 191)) {
               const sig = (st >= 144 && st <= 159 ? "note" : "cc") + "-" + d1;
               setMidiFlash(true); setLastSignalUI(sig); setTimeout(() => { setMidiFlash(false); setLastSignalUI(""); }, 1500);
-              if (midiLearningRef.current) { localStorage.setItem("midi-" + midiLearningRef.current, sig); setMidiLearning(null); return; }
+              if (midiLearningRef.current) { localStorage.setItem("midi-" + midiLearningRef.current, sig); setMidiLearning(null); alert("Mapeado!"); return; }
               if (sig === localStorage.getItem('midi-up')) scrollPage(-1);
               if (sig === localStorage.getItem('midi-down')) scrollPage(1);
             }
@@ -103,14 +100,7 @@ export default function App() {
         });
       };
       upd(); WebMidi.addListener("connected", upd); WebMidi.addListener("disconnected", upd);
-    }).catch(err => {
-      setMidiStatus("blocked");
-    });
-
-    // Segurança: Se após 4 segundos nada acontecer, define como erro
-    setTimeout(() => {
-        setMidiStatus(current => current === "initializing" ? "blocked" : current);
-    }, 4000);
+    }).catch(() => setIsMidiEnabled(false));
   };
 
   const scrollPage = (d) => { if (showScrollRef.current) showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * d, behavior: 'smooth' }); };
@@ -122,16 +112,25 @@ export default function App() {
       try {
         const d = JSON.parse(ev.target.result);
         let map = {};
-        if (d.songs) { for (let s of d.songs) { 
+        if (d.songs) {
+          for (let i=0; i<d.songs.length; i++) {
+            let s = d.songs[i];
             let titleToSave = s.title;
             const ex = await db.songs.where({title: s.title, artist: s.artist}).first();
-            if (ex) titleToSave = s.title + " (Importada)";
+            if (ex) { titleToSave = s.title + " (Importada)"; }
             const id = await db.songs.add({ ...s, title: titleToSave, id: undefined }); 
             map[s.title+s.artist] = await db.songs.get(id); 
-        } }
-        if (d.setlists) { for (let sl of d.setlists) { const ns = (sl.songs || []).map(s => map[s.title+s.artist] || s); await db.setlists.add({ ...sl, id: undefined, songs: ns }); } }
-        refreshData(); alert("Importado!");
-      } catch (err) { alert("Erro JSON"); }
+          }
+        }
+        if (d.setlists) {
+          for (let j=0; j<d.setlists.length; j++) {
+            let sl = d.setlists[j];
+            const ns = (sl.songs || []).map(s => map[s.title+s.artist] || s);
+            await db.setlists.add({ ...sl, id: undefined, songs: ns });
+          }
+        }
+        refreshData(); alert("Importação Concluída!");
+      } catch (err) { alert("Erro no arquivo."); }
     };
     reader.readAsText(e.target.files[0]);
     e.target.value = null;
@@ -143,12 +142,15 @@ export default function App() {
     <div style={styles.appContainer}>
       <header style={styles.mainHeader}>
         <div style={{display:'flex', alignItems:'center', gap:'12px'}}><Music color="#007aff" /><h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
-            <div onClick={initMidi} style={midiFlash ? styles.midiBadgeActive : (midiStatus === 'ready' ? styles.midiBadgeOn : styles.midiBadgeOff)}>
-                <Zap size={10}/> 
-                {midiStatus === 'initializing' ? "MIDI..." : (midiStatus === 'ready' ? "MIDI OK" : (midiStatus === 'nodevice' ? "SEM CABO" : "MIDI OFF"))}
-            </div>
+          <div style={midiFlash ? styles.midiBadgeActive : (isMidiEnabled && allInputs.length > 0 ? styles.midiBadgeOn : styles.midiBadgeOff)}>
+            <Zap size={10}/> {midiFlash ? "SINAL!" : "MIDI READY"}
+          </div>
         </div>
-        <div style={{display:'flex', gap:'10px'}}><label style={styles.headerBtn}><FileUp size={14}/> RESTAURAR<input type="file" hidden onChange={(e)=>handleImport(e)} /></label><button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup.json")}><Save size={14}/> BACKUP</button><button onClick={() => setShowSettings(true)} style={styles.infoBtn}><Settings size={22}/></button></div>
+        <div style={{display:'flex', gap:'10px'}}>
+          <label style={styles.headerBtn}><FileUp size={14}/> RESTAURAR BACKUP<input type="file" hidden onChange={(e)=>handleImport(e)} /></label>
+          <button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup_ShowPad.json")}><Save size={14}/> GERAR BACKUP</button>
+          <button onClick={() => setShowSettings(true)} style={styles.infoBtn}><Settings size={22}/></button>
+        </div>
       </header>
 
       <div style={{display:'flex', flex: 1, overflow:'hidden'}}>
@@ -173,7 +175,13 @@ export default function App() {
             ))}
           </div>
           <div style={styles.sidebarFooter}>
-            {view !== 'garimpo' && <button onClick={async () => { const obj = view==='library'?{title:"Nova Música", artist:"Artista", content:""}:{title:"Novo Show", songs:[], location:"", time:"", members:"", notes:""}; const id = await (view==='library'?db.songs.add(obj):db.setlists.add(obj)); refreshData(); const ni = await (view==='library'?db.songs.get(id):db.setlists.get(id)); setSelectedItem({type:view==='library'?'song':'setlist', data: ni}); }} style={styles.addBtn}>+ NOVO</button>}
+            {view !== 'garimpo' && <button onClick={async () => { 
+                const obj = view==='library'?{title:"Nova Música", artist:"Artista", content:""}:{title:"Novo Show", songs:[], location:"", time:"", members:"", notes:""}; 
+                const id = await (view==='library'?db.songs.add(obj):db.setlists.add(obj)); 
+                refreshData(); 
+                const ni = await (view==='library'?db.songs.get(id):db.setlists.get(id));
+                setSelectedItem({type:view==='library'?'song':'setlist', data: ni}); 
+            }} style={styles.addBtn}>+ NOVO</button>}
           </div>
         </div>
 
@@ -202,22 +210,25 @@ export default function App() {
       </div>
 
       {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} onClose={()=>setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} />}
-      {showSettings && <SettingsView onClose={()=>setShowSettings(false)} inputs={allInputs} setMidiLearning={setMidiLearning} midiLearning={midiLearning} midiStatus={midiStatus} handleImport={handleImport} />}
+      {showSettings && <SettingsView onClose={()=>setShowSettings(false)} inputs={allInputs} setMidiLearning={setMidiLearning} midiLearning={midiLearning} isMidiEnabled={isMidiEnabled} handleImport={handleImport} />}
     </div>
   );
 }
 
 const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh }) => {
   const [lC, setLC] = useState(item.data.content), [lT, setLT] = useState(item.data.title), [lA, setLA] = useState(item.data.artist || ""), [lLoc, setLLoc] = useState(item.data.location || ""), [lTim, setLTim] = useState(item.data.time || ""), [lMem, setLMem] = useState(item.data.members || ""), [lNot, setLNot] = useState(item.data.notes || "");
+  
   const save = async () => {
     if (item.type === 'song') await db.songs.update(item.data.id, { content: lC, title: lT, artist: lA });
     else await db.setlists.update(item.data.id, { title: lT, location: lLoc, time: lTim, members: lMem, notes: lNot });
     refresh();
   };
+
   const moveSong = async (index, dir) => {
     const newSongs = [...item.data.songs]; const target = index + dir;
     if (target >= 0 && target < newSongs.length) { [newSongs[index], newSongs[target]] = [newSongs[target], newSongs[index]]; await db.setlists.update(item.data.id, { songs: newSongs }); refresh(); }
   };
+
   return (
     <div style={styles.editorContent}>
       <div style={styles.editorHeader}>
@@ -263,53 +274,34 @@ const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose, showSc
   const [idx, setIdx] = useState(0), [dr, setDr] = useState(false);
   const songsArr = item.type === 'setlist' ? item.data.songs : [item.data];
   const song = songsArr[idx];
-  const render = (txt) => txt?.split('\n').map((l, i) => {
-    const m = l.match(chordRegex); const isC = m && m.length > 0 && m.length >= l.trim().split(/\s+/).length * 0.4;
-    return <div key={i} style={{ color: isC ? '#FFD700' : '#FFF', fontWeight: isC ? 'bold' : 'normal', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8' }}>{l || ' '}</div>;
-  });
   return (
     <div style={styles.showOverlay}>
       {dr && <div style={styles.showDrawer}><div style={styles.drawerHeader}>SET LIST <X onClick={()=>setDr(false)} style={{cursor:'pointer'}}/></div>{songsArr.map((s,i)=><div key={i} style={idx===i?styles.drawerItemActive:styles.drawerItem} onClick={()=>{setIdx(i);setDr(false); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}>{i+1}. {s.title}</div>)}</div>}
       <div style={styles.showToolbar}><button onClick={()=>setDr(true)} style={styles.backBtn}><Menu/></button><button onClick={onClose} style={styles.backBtn}><ChevronLeft/> Sair</button><div style={{flex:1, textAlign:'center'}}><strong style={{color:'#fff'}}>{song?.title}</strong>{lastSignal && <div style={styles.midiProbeFloating}>MIDI: {lastSignal}</div>}</div><div style={styles.showControls}><button onClick={()=>setFontSize(f=>f-5)}><Type size={14}/>-</button><button onClick={()=>setFontSize(f=>f+5)}><Type size={14}/>+</button><button onClick={()=>scrollPage(-1)}><ChevronUp size={20}/></button><button onClick={()=>scrollPage(1)}><ChevronDown size={20}/></button></div></div>
-      <div ref={showScrollRef} style={{...styles.showContent, fontSize:fontSize+'px', fontFamily:'monospace', color:'#fff'}}>{song ? render(song.content) : "Fim"}{item.type==='setlist' && <div style={styles.pageActions}>{idx>0 && <button style={styles.pageBtn} onClick={()=>{setIdx(idx-1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}><ChevronLeft/> ANTERIOR</button>}{idx<songsArr.length-1 && <button style={styles.pageBtnNext} onClick={()=>{setIdx(idx+1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}>PRÓXIMA <ChevronRight/></button>}</div>}</div>
+      <div ref={showScrollRef} style={{...styles.showContent, fontSize:fontSize+'px', fontFamily:'monospace', color:'#fff'}}>{song ? formatChordsVisual(song.content) : "Fim"}{item.type==='setlist' && <div style={styles.pageActions}>{idx>0 && <button style={styles.pageBtn} onClick={()=>{setIdx(idx-1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}><ChevronLeft/> ANTERIOR</button>}{idx<songsArr.length-1 && <button style={styles.pageBtnNext} onClick={()=>{setIdx(idx+1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}>PRÓXIMA <ChevronRight/></button>}</div>}</div>
     </div>
   );
 };
 
-const SettingsView = ({ onClose, inputs, setMidiLearning, midiLearning, midiStatus, handleImport }) => (
-  <div style={styles.wizard}>
-    <div style={styles.settingsCard}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><h2>Ajustes</h2><X onClick={onClose} style={{cursor:'pointer'}}/></div>
-        <div style={styles.settingsSection}>
-            <h4>MIDI - {midiStatus === 'ready' ? 'CONECTADO' : 'AGUARDANDO...'}</h4>
-            <div style={{fontSize:'12px', color: midiStatus === 'ready' ? '#34c759' : '#ff3b30'}}>
-                {inputs.length>0 ? `Hardware: ${inputs.join(", ")}` : "Abra o link via 'Web MIDI Browser'."}
-            </div>
-            {midiLearning ? (
-                <div style={{marginTop:'15px', padding:'10px', background:'#ff3b3022', borderRadius:'10px', border:'1px solid #ff3b30'}}>
-                    <p style={{margin:0, fontWeight:'bold', fontSize:'11px'}}>TOCANDO TECLA PARA {midiLearning.toUpperCase()}...</p>
-                    <button onClick={()=>setMidiLearning(null)} style={{marginTop:'8px', padding:'5px 10px', background:'#ff3b30', color:'#fff', border:'none', borderRadius:'5px', fontSize:'10px'}}>CANCELAR</button>
-                </div>
-            ) : (
-                <div style={{display:'flex', gap:'10px', marginTop:'15px'}}>
-                    <button onClick={()=>setMidiLearning('up')} style={styles.learnBtn}>Mapear VOLTAR</button>
-                    <button onClick={()=>setMidiLearning('down')} style={styles.learnBtn}>Mapear AVANÇAR</button>
-                </div>
-            )}
-        </div>
-        <div style={styles.settingsSection}><h4>Backup</h4><label style={styles.importFullBtn}>RESTAURAR BACKUP (JSON)<input type="file" hidden onChange={(e)=>handleImport(e, "Backup")} /></label></div>
-        <button style={styles.primaryButton} onClick={onClose}>Fechar</button>
+const SettingsView = ({ onClose, inputs, setMidiLearning, midiLearning, isMidiEnabled, handleImport }) => (
+  <div style={styles.wizard}><div style={styles.settingsCard}>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><h2>Ajustes</h2><X onClick={onClose} style={{cursor:'pointer'}}/></div>
+    <div style={styles.settingsSection}><h4>MIDI</h4><div>{isMidiEnabled ? (inputs.length>0 ? "Ativo: " + inputs.join(", ") : "Ready / Sem Teclado") : "Não suportado"}</div>
+    {midiLearning ? <div style={{marginTop:'15px', padding:'10px', background:'#ff3b3022', borderRadius:'10px', border:'1px solid #ff3b30'}}><p style={{margin:0, fontWeight:'bold', fontSize:'11px'}}>TOCANDO TECLA PARA {midiLearning.toUpperCase()}...</p><button onClick={()=>setMidiLearning(null)} style={{marginTop:'8px', padding:'5px 10px', background:'#ff3b30', color:'#fff', border:'none', borderRadius:'5px', fontSize:'10px'}}>CANCELAR</button></div>
+    : <div style={{display:'flex', gap:'10px', marginTop:'15px'}}><button onClick={()=>setMidiLearning('up')} style={styles.learnBtn}>Mapear VOLTAR</button><button onClick={()=>setMidiLearning('down')} style={styles.learnBtn}>Mapear AVANÇAR</button></div>}
     </div>
-  </div>
+    <div style={styles.settingsSection}><h4>Backup</h4><label style={styles.importFullBtn}>RESTAURAR BACKUP (JSON)<input type="file" hidden onChange={(e)=>handleImport(e, "Backup")} /></label></div>
+    <button style={styles.primaryButton} onClick={onClose}>Fechar</button>
+  </div></div>
 );
 
 const styles = {
     appContainer: { display: 'flex', flexDirection:'column', height: '100vh', backgroundColor: '#1c1c1e', color: '#fff', overflow:'hidden', fontFamily: 'sans-serif' },
     mainHeader: { height: '60px', backgroundColor:'#000', display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0 20px', borderBottom:'1px solid #333' },
     headerBtn: { backgroundColor: '#2c2c2e', color: '#fff', padding: '8px 12px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', border:'none' },
-    midiBadgeOn: { fontSize:'9px', color:'#34c759', border:'1px solid #34c759', padding:'2px 6px', borderRadius:'4px', cursor:'pointer' },
+    midiBadgeOn: { fontSize:'9px', color:'#34c759', border:'1px solid #34c759', padding:'2px 6px', borderRadius:'4px' },
     midiBadgeActive: { fontSize:'9px', color:'#000', backgroundColor:'yellow', padding:'2px 6px', borderRadius:'4px' },
-    midiBadgeOff: { fontSize:'9px', color:'#666', border:'1px solid #333', padding:'2px 6px', borderRadius:'4px', cursor:'pointer' },
+    midiBadgeOff: { fontSize:'9px', color:'#666', border:'1px solid #333', padding:'2px 6px', borderRadius:'4px' },
     midiProbeFloating: { position: 'absolute', top: '22px', left: '50%', transform: 'translateX(-50%)', color: 'yellow', fontSize: '9px', fontWeight: 'bold' },
     infoBtn: { background:'none', border:'none', color:'#888', cursor:'pointer' },
     sidebar: { width: '280px', display: 'flex', flexDirection: 'column', borderRight: '1px solid #333', backgroundColor:'#2c2c2e' },
