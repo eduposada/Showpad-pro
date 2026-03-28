@@ -47,16 +47,17 @@ export default function App() {
   const [showMode, setShowMode] = useState(false), [showSettings, setShowSettings] = useState(false), [view, setView] = useState('library');
   const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30);
   
-  // MIDI ESTADOS REFORÇADOS
-  const [midiStatus, setMidiStatus] = useState("initializing"); // initializing, ready, blocked, nodevice
+  const [midiStatus, setMidiStatus] = useState("disconnected"); // disconnected, ready, blocked, nodevice
   const [midiFlash, setMidiFlash] = useState(false), [lastSignalUI, setLastSignalUI] = useState(""), [allInputs, setAllInputs] = useState([]);
-  const [midiLearning, setMidiLearning] = useState(null), [garimpoInput, setGarimpoInput] = useState(""), [garimpoQueue, setGarimpoQueue] = useState([]);
-  const [isScraping, setIsScraping] = useState(false), [scrapingStatus, setScrapingStatus] = useState(""), [isServerOnline, setIsServerOnline] = useState(false);
-  
+  const [midiLearning, setMidiLearning] = useState(null);
+  const [isServerOnline, setIsServerOnline] = useState(false);
+  const [showWizard, setShowWizard] = useState(!localStorage.getItem('wizardDone'));
+
   const midiLearningRef = useRef(null), showScrollRef = useRef(null);
 
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
   useEffect(() => { refreshData(); initMidi(); }, []);
+  
   useEffect(() => {
     const check = () => fetch('http://localhost:3001/ping').then(r => setIsServerOnline(r.ok)).catch(() => setIsServerOnline(false));
     check(); setInterval(check, 5000);
@@ -71,15 +72,21 @@ export default function App() {
     }
   };
 
-  // --- INICIALIZAÇÃO MIDI COMPATÍVEL COM IPAD ANTIGO ---
+  // --- INICIALIZAÇÃO MIDI REFORÇADA PARA IPAD ---
   const initMidi = () => {
-    // Tenta primeiro sem SysEx (mais compatível)
+    setMidiStatus("initializing");
+    
+    // Fallback: Se não houver navigator.requestMIDIAccess (Safari comum)
+    if (!navigator.requestMIDIAccess) {
+        setMidiStatus("blocked");
+        return;
+    }
+
     WebMidi.enable().then(() => {
       const upd = () => {
         const inputs = WebMidi.inputs;
         setAllInputs(inputs.map(i => i.name));
-        if (inputs.length > 0) setMidiStatus("ready");
-        else setMidiStatus("nodevice");
+        setMidiStatus(inputs.length > 0 ? "ready" : "nodevice");
 
         inputs.forEach(input => {
           input.removeListener();
@@ -97,9 +104,13 @@ export default function App() {
       };
       upd(); WebMidi.addListener("connected", upd); WebMidi.addListener("disconnected", upd);
     }).catch(err => {
-      console.error(err);
       setMidiStatus("blocked");
     });
+
+    // Segurança: Se após 4 segundos nada acontecer, define como erro
+    setTimeout(() => {
+        setMidiStatus(current => current === "initializing" ? "blocked" : current);
+    }, 4000);
   };
 
   const scrollPage = (d) => { if (showScrollRef.current) showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * d, behavior: 'smooth' }); };
@@ -122,20 +133,19 @@ export default function App() {
         refreshData(); alert("Importado!");
       } catch (err) { alert("Erro JSON"); }
     };
-    reader.readAsText(e.target.files[0]); e.target.value = null;
+    reader.readAsText(e.target.files[0]);
+    e.target.value = null;
   };
+
+  if (showWizard && !localStorage.getItem('wizardDone')) return <div style={styles.wizard}><div style={styles.wizardCard}><Music size={50} color="#007aff" /><h2>ShowPad Pro</h2><button style={styles.primaryButton} onClick={() => {localStorage.setItem('wizardDone', 'true'); setShowWizard(false)}}>Entrar</button></div></div>;
 
   return (
     <div style={styles.appContainer}>
       <header style={styles.mainHeader}>
         <div style={{display:'flex', alignItems:'center', gap:'12px'}}><Music color="#007aff" /><h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
-            {/* BADGE MIDI COM ESTADOS REAIS */}
             <div onClick={initMidi} style={midiFlash ? styles.midiBadgeActive : (midiStatus === 'ready' ? styles.midiBadgeOn : styles.midiBadgeOff)}>
                 <Zap size={10}/> 
-                {midiStatus === 'initializing' && "MIDI..."}
-                {midiStatus === 'ready' && (midiFlash ? "SINAL!" : "MIDI OK")}
-                {midiStatus === 'nodevice' && "SEM TECLADO"}
-                {midiStatus === 'blocked' && "MIDI BLOQUEADO"}
+                {midiStatus === 'initializing' ? "MIDI..." : (midiStatus === 'ready' ? "MIDI OK" : (midiStatus === 'nodevice' ? "SEM CABO" : "MIDI OFF"))}
             </div>
         </div>
         <div style={{display:'flex', gap:'10px'}}><label style={styles.headerBtn}><FileUp size={14}/> RESTAURAR<input type="file" hidden onChange={(e)=>handleImport(e)} /></label><button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup.json")}><Save size={14}/> BACKUP</button><button onClick={() => setShowSettings(true)} style={styles.infoBtn}><Settings size={22}/></button></div>
@@ -181,7 +191,7 @@ export default function App() {
                     const s = await r.json(); if(s.title && !(await db.songs.where({title:s.title, artist:s.artist}).first())) await db.songs.add({...s, notes:""});
                   } catch (e) {}
                 }
-                setIsScraping(false); setScrapingStatus("Concluído!"); setGarimpoQueue([]); refreshData();
+                setIsScraping(false); setScrapingStatus("✅ Concluído!"); setGarimpoQueue([]); refreshData();
               }} disabled={isScraping || garimpoQueue.length===0 || !isServerOnline}>Salvar na Biblioteca</button>
               <div style={styles.statusText}>{scrapingStatus}</div>
             </div>
@@ -208,13 +218,12 @@ const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh }) => {
     const newSongs = [...item.data.songs]; const target = index + dir;
     if (target >= 0 && target < newSongs.length) { [newSongs[index], newSongs[target]] = [newSongs[target], newSongs[index]]; await db.setlists.update(item.data.id, { songs: newSongs }); refresh(); }
   };
-
   return (
     <div style={styles.editorContent}>
       <div style={styles.editorHeader}>
         <div style={{flex:1}}><input style={styles.hInput} value={lT} onChange={e=>setLT(e.target.value)} onBlur={save}/><input style={styles.artistInput} value={item.type==='song'?lA:lLoc} onChange={e=>item.type==='song'?setLA(e.target.value):setLLoc(e.target.value)} onBlur={save} placeholder={item.type==='song'?"Artista":"Local"}/></div>
         <div style={styles.btnGroup}>
-          <button style={styles.exportBtn} onClick={()=>triggerDL(item.type==='song'?{songs:[{...item.data, content:lC}]}:{songs:item.data.songs, setlists:[{...item.data}]}, `Export_${lT}.json`)}>EXPORTAR</button>
+          <button style={styles.exportBtn} onClick={()=>triggerDL(item.type==='song'?{songs:[{...item.data, content:lC}]}:{songs:item.data.songs, setlists:[{...item.data}]}, `ShowPad_${item.type==='song'?'Musica':'Show'}_${lT}.json`)}>EXPORTAR</button>
           {item.type==='song' && <><button style={styles.transpBtn} onClick={()=>{const n=transposeContent(lC, 1); setLC(n); save();}}>+ Tom</button><button style={styles.transpBtn} onClick={()=>{const n=transposeContent(lC, -1); setLC(n); save();}}>- Tom</button></>}
           <button onClick={onClose} style={styles.saveBtn}>Concluir</button><button onClick={onShow} style={styles.showBtn}>SHOW</button>
         </div>
@@ -261,7 +270,7 @@ const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose, showSc
   return (
     <div style={styles.showOverlay}>
       {dr && <div style={styles.showDrawer}><div style={styles.drawerHeader}>SET LIST <X onClick={()=>setDr(false)} style={{cursor:'pointer'}}/></div>{songsArr.map((s,i)=><div key={i} style={idx===i?styles.drawerItemActive:styles.drawerItem} onClick={()=>{setIdx(i);setDr(false); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}>{i+1}. {s.title}</div>)}</div>}
-      <div style={styles.showToolbar}><button onClick={()=>setDr(true)} style={styles.backBtn}><Menu/></button><button onClick={onClose} style={styles.backBtn}><ChevronLeft/> Sair</button><div style={{flex:1, textAlign:'center'}}><strong style={{color:'#fff'}}>{song?.title}</strong>{lastSignal && <div style={styles.midiProbeFloating}>{lastSignal}</div>}</div><div style={styles.showControls}><button onClick={()=>setFontSize(f=>f-5)}><Type size={14}/>-</button><button onClick={()=>setFontSize(f=>f+5)}><Type size={14}/>+</button><button onClick={()=>scrollPage(-1)}><ChevronUp size={20}/></button><button onClick={()=>scrollPage(1)}><ChevronDown size={20}/></button></div></div>
+      <div style={styles.showToolbar}><button onClick={()=>setDr(true)} style={styles.backBtn}><Menu/></button><button onClick={onClose} style={styles.backBtn}><ChevronLeft/> Sair</button><div style={{flex:1, textAlign:'center'}}><strong style={{color:'#fff'}}>{song?.title}</strong>{lastSignal && <div style={styles.midiProbeFloating}>MIDI: {lastSignal}</div>}</div><div style={styles.showControls}><button onClick={()=>setFontSize(f=>f-5)}><Type size={14}/>-</button><button onClick={()=>setFontSize(f=>f+5)}><Type size={14}/>+</button><button onClick={()=>scrollPage(-1)}><ChevronUp size={20}/></button><button onClick={()=>scrollPage(1)}><ChevronDown size={20}/></button></div></div>
       <div ref={showScrollRef} style={{...styles.showContent, fontSize:fontSize+'px', fontFamily:'monospace', color:'#fff'}}>{song ? render(song.content) : "Fim"}{item.type==='setlist' && <div style={styles.pageActions}>{idx>0 && <button style={styles.pageBtn} onClick={()=>{setIdx(idx-1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}><ChevronLeft/> ANTERIOR</button>}{idx<songsArr.length-1 && <button style={styles.pageBtnNext} onClick={()=>{setIdx(idx+1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}>PRÓXIMA <ChevronRight/></button>}</div>}</div>
     </div>
   );
@@ -272,9 +281,9 @@ const SettingsView = ({ onClose, inputs, setMidiLearning, midiLearning, midiStat
     <div style={styles.settingsCard}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><h2>Ajustes</h2><X onClick={onClose} style={{cursor:'pointer'}}/></div>
         <div style={styles.settingsSection}>
-            <h4>MIDI - {midiStatus.toUpperCase()}</h4>
+            <h4>MIDI - {midiStatus === 'ready' ? 'CONECTADO' : 'AGUARDANDO...'}</h4>
             <div style={{fontSize:'12px', color: midiStatus === 'ready' ? '#34c759' : '#ff3b30'}}>
-                {inputs.length>0 ? `Hardware: ${inputs.join(", ")}` : "Sem teclado detectado."}
+                {inputs.length>0 ? `Hardware: ${inputs.join(", ")}` : "Abra o link via 'Web MIDI Browser'."}
             </div>
             {midiLearning ? (
                 <div style={{marginTop:'15px', padding:'10px', background:'#ff3b3022', borderRadius:'10px', border:'1px solid #ff3b30'}}>
@@ -288,7 +297,7 @@ const SettingsView = ({ onClose, inputs, setMidiLearning, midiLearning, midiStat
                 </div>
             )}
         </div>
-        <div style={styles.settingsSection}><h4>Sistema</h4><label style={styles.importFullBtn}>RESTAURAR BACKUP (JSON)<input type="file" hidden onChange={(e)=>handleImport(e, "Backup")} /></label></div>
+        <div style={styles.settingsSection}><h4>Backup</h4><label style={styles.importFullBtn}>RESTAURAR BACKUP (JSON)<input type="file" hidden onChange={(e)=>handleImport(e, "Backup")} /></label></div>
         <button style={styles.primaryButton} onClick={onClose}>Fechar</button>
     </div>
   </div>
