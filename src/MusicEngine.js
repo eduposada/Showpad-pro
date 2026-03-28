@@ -27,18 +27,3 @@ export const transposeContent = (c, s) => {
         return l;
     }).join('\n');
 };
-
-export const formatChordsVisual = (text) => {
-    if (!text) return null;
-    return text.split('\n').map((line, i) => {
-        const m = line.match(chordRegex);
-        const isC = m && m.length > 0 && m.length >= line.trim().split(/\s+/).length * 0.4;
-        return (
-            <div key={i} style={{ 
-                color: isC ? '#FFD700' : '#FFFFFF', 
-                fontWeight: isC ? 'bold' : 'normal', 
-                minHeight: '1.2em', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8' 
-            }}>{line || ' '}</div>
-        );
-    });
-};
