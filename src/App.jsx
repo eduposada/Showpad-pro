@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { WebMidi } from 'webmidi';
 import { Plus, Music, Trash2, FileUp, Save, Monitor, Settings, Zap, Loader2, X, ClipboardPaste, SortAsc, UserRound, ChevronLeft } from 'lucide-react';
+
 import { db, transposeContent } from './MusicEngine';
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
@@ -36,7 +37,6 @@ export default function App() {
 
   const initMidi = () => {
     WebMidi.enable({ sysex: true }).then(() => {
-      setIsMidiEnabled(true);
       const upd = () => {
         const ins = WebMidi.inputs.filter(i => !i.name.includes("IAC"));
         setAllInputs(ins.map(i => i.name)); setMidiStatus(ins.length > 0 ? "ready" : "nodevice");
@@ -47,7 +47,7 @@ export default function App() {
             if ((st >= 144 && st <= 159 && d2 > 0) || (st >= 176 && st <= 191)) {
               const sig = (st >= 144 && st <= 159 ? "note" : "cc") + "-" + d1;
               setMidiFlash(true); setLastSignalUI(sig); setTimeout(() => { setMidiFlash(false); setLastSignalUI(""); }, 1500);
-              if (midiLearningRef.current) { localStorage.setItem("midi-" + midiLearningRef.current, sig); setMidiLearning(null); alert("Mapeado!"); return; }
+              if (midiLearningRef.current) { localStorage.setItem("midi-" + midiLearningRef.current, sig); setMidiLearning(null); return; }
               if (sig === localStorage.getItem('midi-up')) scrollPage(-1);
               if (sig === localStorage.getItem('midi-down')) scrollPage(1);
             }

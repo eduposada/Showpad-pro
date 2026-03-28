@@ -4,11 +4,10 @@ import { chordRegex } from './MusicEngine';
 
 export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose, showScrollRef, lastSignal, styles }) => {
     const [idx, setIdx] = useState(0), [dr, setDr] = useState(false);
-    const songsArr = item.type === 'setlist' ? item.data.songs : [item.data];
+    const songsArr = (item && item.type === 'setlist') ? item.data.songs : (item ? [item.data] : []);
     const song = songsArr[idx];
 
-    // Função de formatação trazida para cá para resolver o erro
-    const renderContent = (text) => {
+    const formatVisual = (text) => {
         if (!text) return null;
         return text.split('\n').map((line, i) => {
             const m = line.match(chordRegex);
@@ -29,12 +28,17 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
             <div style={styles.showToolbar}>
                 <button onClick={()=>setDr(true)} style={styles.backBtn}><Menu/></button>
                 <button onClick={onClose} style={styles.backBtn}><ChevronLeft/> Sair</button>
-                <div style={{flex:1, textAlign:'center'}}><strong style={{color:'#fff'}}>{song?.title}</strong>{lastSignal && <div style={styles.midiProbeFloating}>{lastSignal}</div>}</div>
+                <div style={{flex:1, textAlign:'center'}}><strong style={{color:'#fff'}}>{song ? song.title : ""}</strong>{lastSignal && <div style={styles.midiProbeFloating}>MIDI: {lastSignal}</div>}</div>
                 <div style={styles.showControls}><button onClick={()=>setFontSize(f=>f-5)}><Type size={14}/>-</button><button onClick={()=>setFontSize(f=>f+5)}><Type size={14}/>+</button><button onClick={()=>scrollPage(-1)}><ChevronUp size={20}/></button><button onClick={()=>scrollPage(1)}><ChevronDown size={20}/></button></div>
             </div>
             <div ref={showScrollRef} style={{...styles.showContent, fontSize:fontSize+'px', fontFamily:'monospace', color:'#fff'}}>
-                {song ? renderContent(song.content) : "Fim"}
-                {item.type==='setlist' && <div style={styles.pageActions}>{idx>0 && <button style={styles.pageBtn} onClick={()=>{setIdx(idx-1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}><ChevronLeft/> ANTERIOR</button>}{idx<songsArr.length-1 && <button style={styles.pageBtnNext} onClick={()=>{setIdx(idx+1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}>PRÓXIMA <ChevronRight/></button>}</div>}
+                {song ? formatVisual(song.content) : "Fim do Show"}
+                {item && item.type==='setlist' && (
+                    <div style={styles.pageActions}>
+                        {idx > 0 && <button style={styles.pageBtn} onClick={()=>{setIdx(idx-1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}><ChevronLeft/> ANTERIOR</button>}
+                        {idx < songsArr.length - 1 && <button style={styles.pageBtnNext} onClick={()=>{setIdx(idx+1); if(showScrollRef.current) showScrollRef.current.scrollTop = 0;}}>PRÓXIMA <ChevronRight/></button>}
+                    </div>
+                )}
             </div>
         </div>
     );
