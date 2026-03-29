@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { WebMidi } from 'webmidi';
-import { Plus, Music, Trash2, FileUp, Save, Monitor, Settings, Zap, LogOut, SortAsc, UserRound } from 'lucide-react';
+import { Plus, Music, Trash2, FileUp, Save, Monitor, Settings, Zap, LogOut, SortAsc, UserRound, ChevronLeft } from 'lucide-react';
 
-// Importação dos módulos (Certifique-se que o nome é ShowPadCore.jsx)
 import { db, transposeContent, supabase } from './ShowPadCore';
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
@@ -36,8 +35,8 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then((res) => setSession(res.data.session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => setSession(sess));
+    supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => subscription.unsubscribe();
   }, []);
 
@@ -48,17 +47,13 @@ export default function App() {
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
 
   const refreshData = async () => { 
-    const s = await db.songs.toArray();
+    let s = await db.songs.toArray();
     const sl = await db.setlists.toArray();
-    s.sort((a,b) => {
-      const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
-      const valB = (sortBy === 'artist' ? b.artist : b.title) || "";
-      return valA.localeCompare(valB);
-    });
+    s.sort((a,b) => (sortBy === 'artist' ? (a.artist||"").localeCompare(b.artist||"") : a.title.localeCompare(b.title)));
     setSongs(s); setSetlists(sl); 
     if (selectedItem) {
-        const up = selectedItem.type === 'song' ? s.find(x => x.id === selectedItem.data.id) : sl.find(x => x.id === selectedItem.data.id);
-        if (up) setSelectedItem({type: selectedItem.type, data: up});
+        const item = selectedItem.type === 'song' ? s.find(x => x.id === selectedItem.data.id) : sl.find(x => x.id === selectedItem.data.id);
+        if (item) setSelectedItem({type: selectedItem.type, data: item});
     }
   };
 
@@ -91,7 +86,8 @@ export default function App() {
   };
 
   const scrollPage = (d) => { if (showScrollRef.current) showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * d, behavior: 'smooth' }); };
-  
+  const triggerDL = (d, f) => { const u = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' })); const l = document.createElement('a'); l.href = u; l.download = f; l.click(); };
+
   const handleImport = (e) => {
     const reader = new FileReader();
     reader.onload = async (ev) => {
@@ -99,8 +95,9 @@ export default function App() {
         const d = JSON.parse(ev.target.result);
         if (d.songs) {
           for (let s of d.songs) {
-            const ex = await db.songs.where({title: s.title, artist: s.artist}).first();
-            if (!ex) await db.songs.add({ ...s, id: undefined, creator_id: session.user.id });
+            if (!(await db.songs.where({title: s.title, artist: s.artist}).first())) {
+              await db.songs.add({ ...s, id: undefined, creator_id: session.user.id });
+            }
           }
         }
         refreshData(); alert("Importado!");
@@ -109,22 +106,13 @@ export default function App() {
     reader.readAsText(e.target.files[0]);
   };
 
-  const triggerDL = (d, f) => { 
-    const u = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' })); 
-    const l = document.createElement('a'); l.href = u; l.download = f; l.click(); 
-  };
-
   if (!session) return <AuthView styles={styles} />;
 
   return (
     <div style={styles.appContainer}>
       <header style={styles.mainHeader}>
-        <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
-          <Music color="#007aff" />
-          <h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
-          <div style={midiFlash ? styles.midiBadgeActive : (midiStatus === 'ready' ? styles.midiBadgeOn : styles.midiBadgeOff)}>
-            <Zap size={10}/> {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}
-          </div>
+        <div style={{display:'flex', alignItems:'center', gap:'12px'}}><Music color="#007aff" /><h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
+          <div style={midiFlash ? styles.midiBadgeActive : (midiStatus === 'ready' ? styles.midiBadgeOn : styles.midiBadgeOff)}><Zap size={10}/> {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}</div>
         </div>
         <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
             <span style={{fontSize:'10px', color:'#666'}}>{session.user.email}</span>
@@ -141,12 +129,6 @@ export default function App() {
             <button onClick={() => setView('setlists')} style={view === 'setlists' ? styles.activeTab : styles.tab}>SHOWS</button>
             <button onClick={() => setView('garimpo')} style={view === 'garimpo' ? styles.activeTab : styles.tab}>GARIMPAR</button>
           </div>
-          {view === 'library' && (
-              <div style={styles.sortBar}>
-                  <button onClick={()=>setSortBy('title')} style={sortBy==='title'?styles.sortBtnActive:styles.sortBtn}><SortAsc size={12}/> Título</button>
-                  <button onClick={()=>setSortBy('artist')} style={sortBy==='artist'?styles.sortBtnActive:styles.sortBtn}><UserRound size={12}/> Banda</button>
-              </div>
-          )}
           <div style={styles.listArea}>
             {(view === 'library' ? songs : (view === 'setlists' ? setlists : [])).map(item => (
               <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}>
@@ -165,7 +147,7 @@ export default function App() {
             {view !== 'garimpo' && <button onClick={async () => { 
                 const obj = view==='library'?{title:"Nova Música", artist:"Artista", content:"", creator_id: session.user.id}:{title:"Novo Show", songs:[], location:"", time:"", members:"", notes:"", creator_id: session.user.id}; 
                 const id = await (view==='library'?db.songs.add(obj):db.setlists.add(obj)); 
-                refreshData(); const ni = await (view==='library'?db.songs.get(id):db.setlists.get(id)); setSelectedItem({type:view==='library'?'song':'setlist', data: ni}); 
+                refreshData(); setSelectedItem({type:view==='library'?'song':'setlist', data: await (view==='library'?db.songs.get(id):db.setlists.get(id))}); 
             }} style={styles.addBtn}>+ NOVO</button>}
           </div>
         </div>
@@ -196,6 +178,6 @@ export default function App() {
 
       {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} onClose={()=>setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} styles={styles} />}
       {showSettings && <SettingsView onClose={()=>setShowSettings(false)} inputs={allInputs} setMidiLearning={setMidiLearning} midiLearning={midiLearning} midiStatus={midiStatus} handleImport={handleImport} styles={styles} />}
-    </div> 
+    </div>
   );
 }

@@ -1,15 +1,14 @@
 import Dexie from 'dexie';
 import { createClient } from '@supabase/supabase-js';
 
-// --- CONEXÃO SUPABASE ---
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Exporta o supabase apenas se as chaves existirem
 export const supabase = (supabaseUrl && supabaseKey) 
-    ? createClient(supabaseUrl, supabaseKey) 
-    : null;
+  ? createClient(supabaseUrl, supabaseKey) 
+  : null;
 
-// --- BANCO DE DADOS LOCAL ---
 export const db = new Dexie('ShowPadProWeb');
 db.version(11).stores({ 
     songs: '++id, title, artist, creator_id, band_id', 
