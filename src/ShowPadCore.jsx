@@ -58,7 +58,7 @@ export const triggerDL = (data, filename) => {
     URL.revokeObjectURL(url);
 };
 
-// --- NUVEM: UPLOAD E DOWNLOAD INTEGRAL ---
+// --- NUVEM: UPLOAD E DOWNLOAD INTEGRAL (CIRURGIA FINAL) ---
 
 export const pushToCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
@@ -70,8 +70,8 @@ export const pushToCloud = async (userId) => {
             title: String(s.title || ""), 
             artist: String(s.artist || ""), 
             content: String(s.content || ""), 
-            creator_id: userId, 
-            notes: String(s.notes || "") 
+            creator_id: userId,
+            band_id: s.band_id || null
         }));
         await supabase.from('songs').upsert(songsPayload, { onConflict: 'title,artist,creator_id' });
     }
@@ -86,17 +86,13 @@ export const pushToCloud = async (userId) => {
             members: String(sl.members || ""),
             notes: String(sl.notes || ""),
             creator_id: userId,
-            // IMPORTANTE: Garantir que songs seja enviado como um objeto/array JSON
-            songs: Array.isArray(sl.songs) ? sl.songs : []
+            songs: Array.isArray(sl.songs) ? sl.songs : [], // Envia o array de músicas para a coluna JSONB
+            band_id: sl.band_id || null
         }));
 
-        const { error: slError } = await supabase
-            .from('setlists')
-            .upsert(setlistsPayload, { onConflict: 'title,creator_id' });
-            
-        if (slError) throw new Error("Erro nos Shows: " + slError.message);
+        const { error } = await supabase.from('setlists').upsert(setlistsPayload, { onConflict: 'title,creator_id' });
+        if (error) throw new Error("Erro nos Shows: " + error.message);
     }
-
     return { success: true };
 };
 
@@ -108,7 +104,12 @@ export const pullFromCloud = async (userId) => {
     if (cSongs) {
         for (let s of cSongs) {
             const ex = await db.songs.where({title: s.title, artist: s.artist}).first();
-            if (!ex) await db.songs.add({ ...s, id: undefined });
+            const { id, ...cleanSong } = s; // Remove o ID do Supabase para não brigar com o Dexie
+            if (!ex) {
+                await db.songs.add(cleanSong);
+            } else {
+                await db.songs.update(ex.id, cleanSong);
+            }
         }
     }
 
@@ -117,13 +118,13 @@ export const pullFromCloud = async (userId) => {
     if (cSetlists) {
         for (let sl of cSetlists) {
             const ex = await db.setlists.where({title: sl.title}).first();
+            const { id, ...cleanSetlist } = sl; // Remove o ID do Supabase
             if (!ex) {
-                // Removemos o ID do banco remoto para o Dexie criar um novo local
-                const { id, ...setlistData } = sl;
-                await db.setlists.add(setlistData);
+                await db.setlists.add(cleanSetlist);
+            } else {
+                await db.setlists.update(ex.id, cleanSetlist);
             }
         }
     }
-
     return { success: true };
 };
