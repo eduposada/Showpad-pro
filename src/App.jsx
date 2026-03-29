@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { WebMidi } from 'webmidi';
-import { Plus, Music, Trash2, FileUp, Save, Monitor, Settings, Zap, LogOut, SortAsc, UserRound, ChevronLeft } from 'lucide-react';
-
-// Importação dos nossos módulos e lógica
-import { db, transposeContent, supabase, triggerDL } from './ShowPadCore';
+import { Music, Settings, Zap, LogOut, Save, FileUp, Monitor, Trash2, SortAsc, UserRound } from 'lucide-react';
+import { db, transposeContent, supabase, triggerDL, formatChordsVisual } from './ShowPadCore';
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
 import { SettingsView } from './SettingsView';
@@ -13,68 +11,41 @@ import { GarimpoView } from './GarimpoView';
 import { styles } from './Styles';
 
 export default function App() {
-  const [session, setSession] = useState(null);
-  const [songs, setSongs] = useState([]);
-  const [setlists, setSetlists] = useState([]);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [showMode, setShowMode] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [view, setView] = useState('library');
-  const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30);
-  const [sortBy, setSortBy] = useState(localStorage.getItem('sortBy') || 'title');
-  const [midiStatus, setMidiStatus] = useState("off");
-  const [midiFlash, setMidiFlash] = useState(false);
-  const [allInputs, setAllInputs] = useState([]);
-  const [lastSignalUI, setLastSignalUI] = useState("");
-  const [midiLearning, setMidiLearning] = useState(null);
+  const [session, setSession] = useState(null), [songs, setSongs] = useState([]), [setlists, setSetlists] = useState([]), [selectedItem, setSelectedItem] = useState(null);
+  const [showMode, setShowMode] = useState(false), [showSettings, setShowSettings] = useState(false), [view, setView] = useState('library');
+  const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30), [sortBy, setSortBy] = useState('title');
+  const [midiStatus, setMidiStatus] = useState("off"), [midiFlash, setMidiFlash] = useState(false), [allInputs, setAllInputs] = useState([]);
+  const [lastSignalUI, setLastSignalUI] = useState(""), [midiLearning, setMidiLearning] = useState(null);
   const [isServerOnline, setIsServerOnline] = useState(false);
+  const midiLearningRef = useRef(null), showScrollRef = useRef(null);
 
-  const midiLearningRef = useRef(null);
-  const showScrollRef = useRef(null);
-
-  // --- MONITOR DE SESSÃO ---
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then((res) => { if (res.data) setSession(res.data.session); });
+    supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => subscription.unsubscribe();
   }, []);
 
-  // --- SINCRONIZAÇÃO E CARREGAMENTO ---
-  useEffect(() => { 
-    if (session) { refreshData(); initMidi(); checkServer(); }
-  }, [session, sortBy]);
-
+  useEffect(() => { if (session) { refreshData(); initMidi(); checkServer(); } }, [session, sortBy]);
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
 
   const refreshData = async () => { 
-    try {
-        const s = await db.songs.toArray();
-        const sl = await db.setlists.toArray();
-        s.sort((a,b) => {
-            const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
-            const valB = (sortBy === 'artist' ? b.artist : b.title) || "";
-            return valA.toLowerCase().localeCompare(valB.toLowerCase());
-        });
-        setSongs(s); 
-        setSetlists(sl); 
-        if (selectedItem) {
-            const found = selectedItem.type === 'song' ? s.find(x => x.id === selectedItem.data.id) : sl.find(x => x.id === selectedItem.data.id);
-            if (found) setSelectedItem({type: selectedItem.type, data: found});
-        }
-    } catch (e) { console.error(e); }
+    let s = await db.songs.toArray(); const sl = await db.setlists.toArray();
+    s.sort((a,b) => (sortBy === 'artist' ? (a.artist||"").localeCompare(b.artist||"") : a.title.localeCompare(b.title)));
+    setSongs(s); setSetlists(sl); 
+    if (selectedItem) {
+        const upd = (selectedItem.type === 'song') ? s.find(x => x.id === selectedItem.data.id) : sl.find(x => x.id === selectedItem.data.id);
+        if (upd) setSelectedItem({type: selectedItem.type, data: upd});
+    }
   };
 
-  const checkServer = () => {
-    fetch('http://localhost:3001/ping').then(r => setIsServerOnline(r.ok)).catch(() => setIsServerOnline(false));
-  };
+  const checkServer = () => fetch('http://localhost:3001/ping').then(r => setIsServerOnline(r.ok)).catch(() => setIsServerOnline(false));
 
   const initMidi = () => {
     WebMidi.enable({ sysex: true }).then(() => {
       const upd = () => {
-        const ins = WebMidi.inputs.filter(i => i.name.indexOf("IAC") === -1);
-        setAllInputs(ins.map(i => i.name));
-        setMidiStatus(ins.length > 0 ? "ready" : "nodevice");
+        const ins = WebMidi.inputs.filter(i => !i.name.includes("IAC"));
+        setAllInputs(ins.map(i => i.name)); setMidiStatus(ins.length > 0 ? "ready" : "nodevice");
         ins.forEach(input => {
           input.removeListener();
           input.addListener("midimessage", e => {
@@ -100,16 +71,12 @@ export default function App() {
     reader.onload = async (ev) => {
       try {
         const d = JSON.parse(ev.target.result);
-        if (d.songs) {
-          for (let s of d.songs) {
+        if (d.songs) { for (let s of d.songs) { 
             let t = s.title; if (await db.songs.where({title: s.title, artist: s.artist}).first()) t += " (Importada)";
-            await db.songs.add({ ...s, title: t, id: undefined, creator_id: session.user.id });
-          }
-        }
-        if (d.setlists) {
-          for (let sl of d.setlists) await db.setlists.add({ ...sl, id: undefined, creator_id: session.user.id });
-        }
-        refreshData(); alert("Importado!");
+            await db.songs.add({ ...s, title: t, id: undefined, creator_id: session.user.id }); 
+        } }
+        if (d.setlists) { for (let sl of d.setlists) await db.setlists.add({...sl, id:undefined, creator_id: session.user.id}); }
+        refreshData(); alert("Sucesso!");
       } catch (err) { alert("Erro JSON"); }
     };
     reader.readAsText(e.target.files[0]);
@@ -120,12 +87,8 @@ export default function App() {
   return (
     <div style={styles.appContainer}>
       <header style={styles.mainHeader}>
-        <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
-          <Music color="#007aff" />
-          <h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
-          <div style={midiFlash ? styles.midiBadgeActive : (midiStatus === 'ready' ? styles.midiBadgeOn : styles.midiBadgeOff)}>
-            <Zap size={10}/> {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}
-          </div>
+        <div style={{display:'flex', alignItems:'center', gap:'12px'}}><Music color="#007aff" /><h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
+          <div style={midiFlash ? styles.midiBadgeActive : (midiStatus === 'ready' ? styles.midiBadgeOn : styles.midiBadgeOff)}><Zap size={10}/> {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}</div>
         </div>
         <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
             <button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup.json")}><Save size={14}/> BACKUP</button>
@@ -142,32 +105,20 @@ export default function App() {
             <button onClick={() => setView('garimpo')} style={view === 'garimpo' ? styles.activeTab : styles.tab}>GARIMPAR</button>
             <button onClick={() => setView('bands')} style={view === 'bands' ? styles.activeTab : styles.tab}>BANDAS</button>
           </div>
-          {view === 'library' && (
-              <div style={styles.sortBar}>
-                  <button onClick={()=>{setSortBy('title'); localStorage.setItem('sortBy', 'title')}} style={sortBy==='title'?styles.sortBtnActive:styles.sortBtn}><SortAsc size={12}/> Título</button>
-                  <button onClick={()=>{setSortBy('artist'); localStorage.setItem('sortBy', 'artist')}} style={sortBy==='artist'?styles.sortBtnActive:styles.sortBtn}><UserRound size={12}/> Banda</button>
-              </div>
-          )}
+          {view === 'library' && <div style={styles.sortBar}><button onClick={()=>setSortBy('title')} style={sortBy==='title'?styles.sortBtnActive:styles.sortBtn}><SortAsc size={12}/> Título</button><button onClick={()=>setSortBy('artist')} style={sortBy==='artist'?styles.sortBtnActive:styles.sortBtn}><UserRound size={12}/> Banda</button></div>}
           <div style={styles.listArea}>
-            {(view==='library' || view==='setlists') ? (view==='library'?songs:setlists).map(item => (
+            {['library', 'setlists'].includes(view) ? (view === 'library' ? songs : setlists).map(item => (
               <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}>
                 <div style={{flex:1, overflow:'hidden'}} onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
-                    <strong style={{color:'#fff'}}>{item.title}</strong>
-                    <small style={{display:'block', opacity:0.5, color:'#aaa'}}>{item.artist || item.location || "---"}</small>
+                    <strong>{item.title}</strong><small style={{display:'block', opacity:0.5, color:'#aaa'}}>{item.artist || item.location || "---"}</small>
                 </div>
-                <div style={{display:'flex', gap:'6px'}}>
-                    <button style={styles.listActionBtnShow} onClick={() => { setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={16}/></button>
-                    <button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
-                </div>
+                <div style={{display:'flex', gap:'6px'}}><button style={styles.listActionBtnShow} onClick={() => { setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={16}/></button><button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button></div>
               </div>
-            )) : <div style={{padding:'20px', color:'#888', fontSize:'12px'}}>Aba ativa. Painel central disponível.</div>}
+            )) : <div style={{padding:'20px', color:'#888', fontSize:'11px'}}>Menu Ativo.</div>}
           </div>
           <div style={styles.sidebarFooter}>
-            {(view==='library'||view==='setlists') && <button onClick={async () => { 
-                const obj = view==='library'?{title:"Nova Música", artist:"Artista", content:"", creator_id: session.user.id}:{title:"Novo Show", songs:[], location:"", time:"", members:"", notes:"", creator_id: session.user.id}; 
-                const id = await (view==='library'?db.songs.add(obj):db.setlists.add(obj)); 
-                refreshData(); setSelectedItem({type:view==='library'?'song':'setlist', data: await (view==='library'?db.songs.get(id):db.setlists.get(id))}); 
-            }} style={styles.addBtn}>+ NOVO</button>}
+            {['library', 'setlists'].includes(view) && <button onClick={async () => { const obj = view==='library'?{title:"Nova Música", artist:"Artista", content:""}:{title:"Novo Show", songs:[], location:"", time:"", members:"", notes:""}; const id = await (view==='library'?db.songs.add(obj):db.setlists.add(obj)); refreshData(); const ni = await (view==='library'?db.songs.get(id):db.setlists.get(id)); setSelectedItem({type:view==='library'?'song':'setlist', data: ni}); }} style={styles.addBtn}>+ NOVO</button>}
+            <label style={styles.importBtnLabel}>IMPORTAR {view==='setlists'?'SHOW':'CIFRA'}<input type="file" hidden onChange={(e)=>handleImport(e)} /></label>
           </div>
         </div>
 
@@ -178,7 +129,6 @@ export default function App() {
           : <div style={styles.empty}><Music size={80} color="#222" /><h2>ShowPad Pro</h2></div>}
         </div>
       </div>
-
       {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} onClose={()=>setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} styles={styles} />}
       {showSettings && <SettingsView onClose={()=>setShowSettings(false)} inputs={allInputs} setMidiLearning={setMidiLearning} midiLearning={midiLearning} midiStatus={midiStatus} handleImport={handleImport} styles={styles} />}
     </div>

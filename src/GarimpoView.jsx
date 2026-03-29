@@ -36,39 +36,24 @@ export const GarimpoView = ({ isServerOnline, styles, refresh, session }) => {
                     <div style={styles.ledDot}></div> {isServerOnline ? "ASSISTENTE MAC: ONLINE" : "ASSISTENTE MAC: OFFLINE"}
                 </div>
             </div>
-            
             <div style={styles.inputRow}>
-                <input 
-                    style={styles.inputField} 
-                    placeholder="Cole o link do CifraClub aqui..." 
-                    value={garimpoInput} 
-                    onChange={e=>setGarimpoInput(e.target.value)}
-                />
+                <input style={styles.inputField} placeholder="Link CifraClub..." value={garimpoInput} onChange={e=>setGarimpoInput(e.target.value)} />
                 <button style={styles.secondaryBtn} onClick={async ()=>{ try {const t = await navigator.clipboard.readText(); setGarimpoInput(t);} catch(e){alert("Permita o clipboard")}}}>
                     <ClipboardPaste size={18}/>
                 </button>
                 <button style={styles.addBtn} onClick={()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}}}>OK</button>
             </div>
-
             <div style={styles.scrollList}>
-                {garimpoQueue.length === 0 ? (
-                    <div style={{color:'#444', textAlign:'center', marginTop:'50px'}}>Fila de links vazia</div>
-                ) : (
-                    garimpoQueue.map((url, i) => (
-                        <div key={i} style={styles.miniItemGarimpo}>
-                            <span style={{color: '#FFFFFF'}}>{url.split('/').filter(x => x).pop()}</span>
-                            <X size={16} color="#ff3b30" style={{cursor:'pointer'}} onClick={()=>setGarimpoQueue(garimpoQueue.filter((_,idx)=>idx!==i))}/>
-                        </div>
-                    ))
-                )}
+                {garimpoQueue.length === 0 ? <div style={{color:'#444', textAlign:'center', marginTop:'50px'}}>Fila vazia</div> : 
+                garimpoQueue.map((url, i) => (
+                    <div key={i} style={styles.miniItemGarimpo}>
+                        <span>{url.split('/').filter(x => x).pop()}</span>
+                        <X size={16} color="#ff3b30" style={{cursor:'pointer'}} onClick={()=>setGarimpoQueue(garimpoQueue.filter((_,idx)=>idx!==i))}/>
+                    </div>
+                ))}
             </div>
-
-            <button 
-                style={{...styles.processBtn, opacity: (garimpoQueue.length > 0 && !isScraping) ? 1 : 0.5}} 
-                onClick={handleGarimpo} 
-                disabled={isScraping || garimpoQueue.length === 0 || !isServerOnline}
-            >
-                {isScraping ? <><Loader2 className="spin" size={20}/> Garimpando...</> : "Garimpar e Salvar na Biblioteca"}
+            <button style={styles.processBtn} onClick={handleGarimpo} disabled={isScraping || garimpoQueue.length === 0 || !isServerOnline}>
+                {isScraping ? <Loader2 className="spin" size={20}/> : "Processar e Salvar"}
             </button>
             <div style={styles.statusText}>{status}</div>
         </div>

@@ -1,21 +1,16 @@
 import Dexie from 'dexie';
 import { createClient } from '@supabase/supabase-js';
-
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-
 export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
-
 export const db = new Dexie('ShowPadProWeb');
 db.version(11).stores({ 
     songs: '++id, title, artist, creator_id, band_id', 
     setlists: '++id, title, location, time, members, notes, creator_id, band_id',
     my_bands: 'id, name, invite_code, role'
 });
-
 export const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 export const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
-
 export const shiftNote = (n, s) => {
     const f = { "Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#" };
     const rM = n.match(/^[A-G][#b]?/); if (!rM) return n;
@@ -24,7 +19,6 @@ export const shiftNote = (n, s) => {
     let newIdx = (idx + s) % 12; if (newIdx < 0) newIdx += 12;
     return scale[newIdx] + suf;
 };
-
 export const transposeContent = (c, s) => {
     if (!c) return "";
     return c.split('\n').map(l => {
@@ -33,9 +27,4 @@ export const transposeContent = (c, s) => {
         if (m && m.length > 0 && m.length >= l.trim().split(/\s+/).length * 0.4) return l.replace(chordRegex, (match) => shiftNote(match, s));
         return l;
     }).join('\n');
-};
-
-export const triggerDL = (d, f) => {
-    const u = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }));
-    const l = document.createElement('a'); l.href = u; l.download = f; l.click();
 };
