@@ -58,38 +58,43 @@ export const triggerDL = (data, filename) => {
     URL.revokeObjectURL(url);
 };
 
-// --- NUVEM: UPLOAD E DOWNLOAD DE TUDO ---
+// --- NUVEM: UPLOAD E DOWNLOAD INTEGRAL ---
 
 export const pushToCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
     
-    // 1. Músicas
+    // 1. MÚSICAS
     const localSongs = await db.songs.toArray();
     if (localSongs.length > 0) {
-        await supabase.from('songs').upsert(
-            localSongs.map(s => ({ 
-                title: s.title, artist: s.artist, content: s.content, 
-                creator_id: userId, band_id: s.band_id || null, notes: s.notes || ""
-            })), { onConflict: 'title,artist,creator_id' }
-        );
+        const songsPayload = localSongs.map(s => ({ 
+            title: String(s.title || ""), 
+            artist: String(s.artist || ""), 
+            content: String(s.content || ""), 
+            creator_id: userId, 
+            notes: String(s.notes || "") 
+        }));
+        await supabase.from('songs').upsert(songsPayload, { onConflict: 'title,artist,creator_id' });
     }
 
-    // 2. Setlists (Shows) - Aqui estava o erro
+    // 2. SHOWS (SETLISTS)
     const localSetlists = await db.setlists.toArray();
     if (localSetlists.length > 0) {
-        const { error } = await supabase.from('setlists').upsert(
-            localSetlists.map(sl => ({
-                title: sl.title, 
-                location: sl.location || "", 
-                time: sl.time || "",
-                members: sl.members || "", 
-                notes: sl.notes || "", 
-                creator_id: userId,
-                songs: sl.songs || [], // Garante que a lista de músicas vá como array
-                band_id: sl.band_id || null
-            })), { onConflict: 'title,creator_id' }
-        );
-        if (error) console.error("Erro ao subir Shows:", error.message);
+        const setlistsPayload = localSetlists.map(sl => ({
+            title: String(sl.title || "Sem Nome"),
+            location: String(sl.location || ""),
+            time: String(sl.time || ""),
+            members: String(sl.members || ""),
+            notes: String(sl.notes || ""),
+            creator_id: userId,
+            // IMPORTANTE: Garantir que songs seja enviado como um objeto/array JSON
+            songs: Array.isArray(sl.songs) ? sl.songs : []
+        }));
+
+        const { error: slError } = await supabase
+            .from('setlists')
+            .upsert(setlistsPayload, { onConflict: 'title,creator_id' });
+            
+        if (slError) throw new Error("Erro nos Shows: " + slError.message);
     }
 
     return { success: true };
@@ -98,7 +103,7 @@ export const pushToCloud = async (userId) => {
 export const pullFromCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
 
-    // 1. Baixar Músicas
+    // Baixar Músicas
     const { data: cSongs } = await supabase.from('songs').select('*').eq('creator_id', userId);
     if (cSongs) {
         for (let s of cSongs) {
@@ -107,12 +112,16 @@ export const pullFromCloud = async (userId) => {
         }
     }
 
-    // 2. Baixar Setlists (Shows)
+    // Baixar Shows
     const { data: cSetlists } = await supabase.from('setlists').select('*').eq('creator_id', userId);
     if (cSetlists) {
         for (let sl of cSetlists) {
             const ex = await db.setlists.where({title: sl.title}).first();
-            if (!ex) await db.setlists.add({ ...sl, id: undefined });
+            if (!ex) {
+                // Removemos o ID do banco remoto para o Dexie criar um novo local
+                const { id, ...setlistData } = sl;
+                await db.setlists.add(setlistData);
+            }
         }
     }
 
