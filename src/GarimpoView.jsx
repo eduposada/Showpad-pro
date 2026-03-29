@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ClipboardPaste, Loader2, CheckCircle2 } from 'lucide-react';
+import { X, ClipboardPaste, Loader2 } from 'lucide-react';
 import { db } from './ShowPadCore';
 
 export const GarimpoView = ({ isServerOnline, styles, refresh, session }) => {
@@ -12,6 +12,7 @@ export const GarimpoView = ({ isServerOnline, styles, refresh, session }) => {
         setIsScraping(true); setStatus("Iniciando...");
         for (const url of garimpoQueue) {
             try {
+                setStatus(`Extraindo: ${url.split('/').filter(x => x).pop()}...`);
                 const response = await fetch('http://localhost:3001/scrape', { 
                     method:'POST', 
                     headers:{'Content-Type':'application/json'}, 
@@ -19,11 +20,12 @@ export const GarimpoView = ({ isServerOnline, styles, refresh, session }) => {
                 });
                 const song = await response.json();
                 if (song.title) {
+                    // Adiciona na biblioteca local e vincula ao seu ID da nuvem
                     await db.songs.add({ ...song, notes: "", creator_id: session.user.id });
                 }
-            } catch (err) { console.error("Falha no link", url); }
+            } catch (err) { console.error("Erro no servidor local:", err); }
         }
-        setIsScraping(false); setStatus("✅ Biblioteca Atualizada!"); setGarimpoQueue([]); refresh();
+        setIsScraping(false); setStatus("✅ Garimpo Concluído!"); setGarimpoQueue([]); refresh();
     };
 
     return (
@@ -35,7 +37,7 @@ export const GarimpoView = ({ isServerOnline, styles, refresh, session }) => {
                 </div>
             </div>
             
-            <div style={styles.inputRow}>
+            <div style={{...styles.inputRow, marginTop: '20px'}}>
                 <input 
                     style={styles.inputField} 
                     placeholder="Cole o link do CifraClub aqui..." 
