@@ -24,8 +24,6 @@ export default function App() {
   const [allInputs, setAllInputs] = useState([]);
   const [lastSignalUI, setLastSignalUI] = useState("");
   const [midiLearning, setMidiLearning] = useState(null);
-  
-  // GARIMPO RESTAURADO
   const [garimpoInput, setGarimpoInput] = useState("");
   const [garimpoQueue, setGarimpoQueue] = useState([]);
   const [isScraping, setIsScraping] = useState(false);
@@ -167,7 +165,7 @@ export default function App() {
                   <button style={styles.addBtn} onClick={()=>{if(garimpoInput){setGarimpoQueue([...garimpoQueue, garimpoInput]);setGarimpoInput("");}}}>OK</button>
               </div>
               <div style={styles.scrollList}>
-                  {garimpoQueue.map((u,i)=>(<div key={i} style={styles.miniItemGarimpo}><span>{u.split('/').pop()}</span><X size={14} onClick={()=>setGarimpoQueue(garimpoQueue.filter((_,idx)=>idx!==i))} style={{cursor:'pointer', color:'#ff3b30'}}/></div>))}
+                  {garimpoQueue.map((u,i)=>(<div key={i} style={styles.miniItemGarimpo}><span>{u.split('/').filter(x=>x).pop()}</span><X size={14} onClick={()=>setGarimpoQueue(garimpoQueue.filter((_,idx)=>idx!==i))} style={{cursor:'pointer', color:'#ff3b30'}}/></div>))}
               </div>
               <button style={styles.processBtn} onClick={async () => {
                 setIsScraping(true); setScrapingStatus("Extraindo...");
