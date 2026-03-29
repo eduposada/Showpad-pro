@@ -10,22 +10,22 @@ export const GarimpoView = ({ isServerOnline, styles, refresh, session }) => {
 
     const handleGarimpo = async () => {
         setIsScraping(true); setStatus("Iniciando...");
-        for (const url of garimpoQueue) {
+        for (let k = 0; k < garimpoQueue.length; k++) {
+            const url = garimpoQueue[k];
             try {
-                setStatus(`Extraindo: ${url.split('/').filter(x => x).pop()}...`);
+                setStatus("Extraindo: " + url.split('/').filter(x => x).pop() + "...");
                 const response = await fetch('http://localhost:3001/scrape', { 
                     method:'POST', 
                     headers:{'Content-Type':'application/json'}, 
-                    body:JSON.stringify({ url }) 
+                    body:JSON.stringify({ url: url }) 
                 });
                 const song = await response.json();
                 if (song.title) {
-                    // Adiciona na biblioteca local e vincula ao seu ID da nuvem
                     await db.songs.add({ ...song, notes: "", creator_id: session.user.id });
                 }
             } catch (err) { console.error("Erro no servidor local:", err); }
         }
-        setIsScraping(false); setStatus("✅ Garimpo Concluído!"); setGarimpoQueue([]); refresh();
+        setIsScraping(false); setStatus("✅ Concluído!"); setGarimpoQueue([]); refresh();
     };
 
     return (
@@ -37,7 +37,7 @@ export const GarimpoView = ({ isServerOnline, styles, refresh, session }) => {
                 </div>
             </div>
             
-            <div style={{...styles.inputRow, marginTop: '20px'}}>
+            <div style={styles.inputRow}>
                 <input 
                     style={styles.inputField} 
                     placeholder="Cole o link do CifraClub aqui..." 

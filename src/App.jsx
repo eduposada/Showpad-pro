@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { WebMidi } from 'webmidi';
-import { Plus, Music, Trash2, FileUp, Save, Monitor, Settings, Zap, LogOut, SortAsc, UserRound, ChevronLeft, Download, ListMusic } from 'lucide-react';
+import { Plus, Music, Trash2, FileUp, Save, Monitor, Settings, Zap, LogOut, SortAsc, UserRound, ChevronLeft } from 'lucide-react';
 
-// Importação dos Nossos Módulos (Caminhos relativos ./ )
+// Importação dos nossos módulos e lógica
 import { db, transposeContent, supabase, triggerDL } from './ShowPadCore';
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
@@ -13,43 +13,68 @@ import { GarimpoView } from './GarimpoView';
 import { styles } from './Styles';
 
 export default function App() {
-  const [session, setSession] = useState(null), [songs, setSongs] = useState([]), [setlists, setSetlists] = useState([]), [selectedItem, setSelectedItem] = useState(null);
-  const [showMode, setShowMode] = useState(false), [showSettings, setShowSettings] = useState(false), [view, setView] = useState('library');
-  const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30), [sortBy, setSortBy] = useState('title');
-  const [midiStatus, setMidiStatus] = useState("off"), [midiFlash, setMidiFlash] = useState(false), [allInputs, setAllInputs] = useState([]);
-  const [lastSignalUI, setLastSignalUI] = useState(""), [midiLearning, setMidiLearning] = useState(null);
+  const [session, setSession] = useState(null);
+  const [songs, setSongs] = useState([]);
+  const [setlists, setSetlists] = useState([]);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [showMode, setShowMode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [view, setView] = useState('library');
+  const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30);
+  const [sortBy, setSortBy] = useState(localStorage.getItem('sortBy') || 'title');
+  const [midiStatus, setMidiStatus] = useState("off");
+  const [midiFlash, setMidiFlash] = useState(false);
+  const [allInputs, setAllInputs] = useState([]);
+  const [lastSignalUI, setLastSignalUI] = useState("");
+  const [midiLearning, setMidiLearning] = useState(null);
   const [isServerOnline, setIsServerOnline] = useState(false);
-  const midiLearningRef = useRef(null), showScrollRef = useRef(null);
 
+  const midiLearningRef = useRef(null);
+  const showScrollRef = useRef(null);
+
+  // --- MONITOR DE SESSÃO ---
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
+    supabase.auth.getSession().then((res) => { if (res.data) setSession(res.data.session); });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => { if (session) { refreshData(); initMidi(); checkServer(); } }, [session, sortBy]);
+  // --- SINCRONIZAÇÃO E CARREGAMENTO ---
+  useEffect(() => { 
+    if (session) { refreshData(); initMidi(); checkServer(); }
+  }, [session, sortBy]);
+
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
 
   const refreshData = async () => { 
     try {
-        let s = await db.songs.toArray(); const sl = await db.setlists.toArray();
-        s.sort((a,b) => (sortBy === 'artist' ? (a.artist||"").localeCompare(b.artist||"") : a.title.localeCompare(b.title)));
-        setSongs(s); setSetlists(sl); 
+        const s = await db.songs.toArray();
+        const sl = await db.setlists.toArray();
+        s.sort((a,b) => {
+            const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
+            const valB = (sortBy === 'artist' ? b.artist : b.title) || "";
+            return valA.toLowerCase().localeCompare(valB.toLowerCase());
+        });
+        setSongs(s); 
+        setSetlists(sl); 
         if (selectedItem) {
-            const upd = (selectedItem.type === 'song') ? s.find(x => x.id === selectedItem.data.id) : sl.find(x => x.id === selectedItem.data.id);
-            if (upd) setSelectedItem({type: selectedItem.type, data: upd});
+            const found = selectedItem.type === 'song' ? s.find(x => x.id === selectedItem.data.id) : sl.find(x => x.id === selectedItem.data.id);
+            if (found) setSelectedItem({type: selectedItem.type, data: found});
         }
     } catch (e) { console.error(e); }
   };
 
-  const checkServer = () => fetch('http://localhost:3001/ping').then(r => setIsServerOnline(r.ok)).catch(() => setIsServerOnline(false));
+  const checkServer = () => {
+    fetch('http://localhost:3001/ping').then(r => setIsServerOnline(r.ok)).catch(() => setIsServerOnline(false));
+  };
 
   const initMidi = () => {
     WebMidi.enable({ sysex: true }).then(() => {
       const upd = () => {
-        const ins = WebMidi.inputs.filter(i => !i.name.includes("IAC"));
-        setAllInputs(ins.map(i => i.name)); setMidiStatus(ins.length > 0 ? "ready" : "nodevice");
+        const ins = WebMidi.inputs.filter(i => i.name.indexOf("IAC") === -1);
+        setAllInputs(ins.map(i => i.name));
+        setMidiStatus(ins.length > 0 ? "ready" : "nodevice");
         ins.forEach(input => {
           input.removeListener();
           input.addListener("midimessage", e => {
@@ -70,22 +95,26 @@ export default function App() {
 
   const scrollPage = (d) => { if (showScrollRef.current) showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * d, behavior: 'smooth' }); };
 
-  const handleImport = (e, label) => {
+  const handleImport = (e) => {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       try {
-        const d = JSON.parse(ev.target.result); let map = {};
-        if (d.songs) { for (let s of d.songs) { 
+        const d = JSON.parse(ev.target.result);
+        if (d.songs) {
+          for (let s of d.songs) {
             let t = s.title; if (await db.songs.where({title: s.title, artist: s.artist}).first()) t += " (Importada)";
-            const id = await db.songs.add({ ...s, title: t, id: undefined, creator_id: session.user.id }); 
-            map[s.title+s.artist] = await db.songs.get(id); 
-        } }
-        if (d.setlists) { for (let sl of d.setlists) { const ns = (sl.songs || []).map(s => map[s.title+s.artist] || s); await db.setlists.add({ ...sl, id: undefined, songs: ns, creator_id: session.user.id }); } }
-        refreshData(); alert("Importado: " + label);
+            await db.songs.add({ ...s, title: t, id: undefined, creator_id: session.user.id });
+          }
+        }
+        if (d.setlists) {
+          for (let sl of d.setlists) await db.setlists.add({ ...sl, id: undefined, creator_id: session.user.id });
+        }
+        refreshData(); alert("Importado!");
       } catch (err) { alert("Erro JSON"); }
     };
-    reader.readAsText(e.target.files[0]); e.target.value = null;
+    reader.readAsText(e.target.files[0]);
   };
+
   if (!session) return <AuthView styles={styles} />;
 
   return (
@@ -99,8 +128,7 @@ export default function App() {
           </div>
         </div>
         <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
-            <span style={{fontSize:'10px', color:'#666'}}>{session.user.email}</span>
-            <button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Full_Backup.json")}><Save size={14}/> BACKUP</button>
+            <button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup.json")}><Save size={14}/> BACKUP</button>
             <button onClick={() => setShowSettings(true)} style={styles.infoBtn}><Settings size={22}/></button>
             <button onClick={() => supabase.auth.signOut()} style={styles.logoutBtn}><LogOut size={18}/></button>
         </div>
@@ -114,16 +142,14 @@ export default function App() {
             <button onClick={() => setView('garimpo')} style={view === 'garimpo' ? styles.activeTab : styles.tab}>GARIMPAR</button>
             <button onClick={() => setView('bands')} style={view === 'bands' ? styles.activeTab : styles.tab}>BANDAS</button>
           </div>
-
           {view === 'library' && (
               <div style={styles.sortBar}>
-                  <button onClick={()=>setSortBy('title')} style={sortBy==='title'?styles.sortBtnActive:styles.sortBtn}><SortAsc size={12}/> Título</button>
-                  <button onClick={()=>setSortBy('artist')} style={sortBy==='artist'?styles.sortBtnActive:styles.sortBtn}><UserRound size={12}/> Banda</button>
+                  <button onClick={()=>{setSortBy('title'); localStorage.setItem('sortBy', 'title')}} style={sortBy==='title'?styles.sortBtnActive:styles.sortBtn}><SortAsc size={12}/> Título</button>
+                  <button onClick={()=>{setSortBy('artist'); localStorage.setItem('sortBy', 'artist')}} style={sortBy==='artist'?styles.sortBtnActive:styles.sortBtn}><UserRound size={12}/> Banda</button>
               </div>
           )}
-
           <div style={styles.listArea}>
-            {(view === 'library' || view === 'setlists') ? (view === 'library' ? songs : setlists).map(item => (
+            {(view==='library' || view==='setlists') ? (view==='library'?songs:setlists).map(item => (
               <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}>
                 <div style={{flex:1, overflow:'hidden'}} onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
                     <strong style={{color:'#fff'}}>{item.title}</strong>
@@ -134,28 +160,14 @@ export default function App() {
                     <button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
                 </div>
               </div>
-            )) : <div style={{padding:'20px', color:'#888', fontSize:'12px', textAlign:'center'}}>Aba de configuração ativa.</div>}
+            )) : <div style={{padding:'20px', color:'#888', fontSize:'12px'}}>Aba ativa. Painel central disponível.</div>}
           </div>
-          
           <div style={styles.sidebarFooter}>
-            {view === 'library' && (
-                <>
-                <button onClick={async () => { 
-                    const id = await db.songs.add({title:"Nova Música", artist:"Artista", content:"", creator_id: session.user.id}); 
-                    refreshData(); setSelectedItem({type:'song', data: await db.songs.get(id)}); 
-                }} style={styles.addBtn}>+ NOVA MÚSICA</button>
-                <label style={styles.importBtnLabel}>IMPORTAR CIFRA<input type="file" hidden onChange={(e)=>handleImport(e, "Cifra")} /></label>
-                </>
-            )}
-            {view === 'setlists' && (
-                <>
-                <button onClick={async () => { 
-                    const id = await db.setlists.add({title:"Novo Show", songs:[], location:"", time:"", members:"", notes:"", creator_id: session.user.id}); 
-                    refreshData(); setSelectedItem({type:'setlist', data: await db.setlists.get(id)}); 
-                }} style={styles.addBtn}>+ NOVO SHOW</button>
-                <label style={styles.importBtnLabel}>IMPORTAR SHOW<input type="file" hidden onChange={(e)=>handleImport(e, "Show")} /></label>
-                </>
-            )}
+            {(view==='library'||view==='setlists') && <button onClick={async () => { 
+                const obj = view==='library'?{title:"Nova Música", artist:"Artista", content:"", creator_id: session.user.id}:{title:"Novo Show", songs:[], location:"", time:"", members:"", notes:"", creator_id: session.user.id}; 
+                const id = await (view==='library'?db.songs.add(obj):db.setlists.add(obj)); 
+                refreshData(); setSelectedItem({type:view==='library'?'song':'setlist', data: await (view==='library'?db.songs.get(id):db.setlists.get(id))}); 
+            }} style={styles.addBtn}>+ NOVO</button>}
           </div>
         </div>
 
