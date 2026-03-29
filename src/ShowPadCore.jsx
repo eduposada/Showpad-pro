@@ -1,3 +1,4 @@
+import React from 'react'; // Adicionado para suportar o JSX no formatChordsVisual
 import Dexie from 'dexie';
 import { createClient } from '@supabase/supabase-js';
 
@@ -45,15 +46,32 @@ export const formatChordsVisual = (text) => {
     });
 };
 
-// --- NOVAS FUNÇÕES DE NUVEM ---
+// --- FUNÇÃO DE DOWNLOAD (BACKUP) QUE ESTAVA FALTANDO ---
+export const triggerDL = (data, filename) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'ShowPad_Backup.json';
+    document.body.appendChild(a); // Necessário para alguns navegadores no Mac
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+};
+
+// --- FUNÇÕES DE NUVEM ---
 
 export const pushToCloud = async (userId) => {
+    if (!supabase) throw new Error("Supabase não configurado.");
     const songs = await db.songs.toArray();
-    const setlists = await db.setlists.toArray();
     
-    // Sobe as músicas (Upsert usa o título e artista como base ou ID se houver)
     const { error: sErr } = await supabase.from('songs').upsert(
-        songs.map(s => ({ ...s, id: undefined, creator_id: userId }))
+        songs.map(s => ({ 
+            title: s.title, 
+            artist: s.artist, 
+            content: s.content,
+            creator_id: userId 
+        })), { onConflict: ['title', 'artist', 'creator_id'] }
     );
     
     if (sErr) throw sErr;
@@ -61,13 +79,14 @@ export const pushToCloud = async (userId) => {
 };
 
 export const pullFromCloud = async (userId) => {
+    if (!supabase) throw new Error("Supabase não configurado.");
     const { data: cloudSongs, error } = await supabase.from('songs').select('*').eq('creator_id', userId);
     if (error) throw error;
 
     if (cloudSongs) {
         for (let s of cloudSongs) {
             const ex = await db.songs.where({title: s.title, artist: s.artist}).first();
-            if (!ex) await db.songs.add(s);
+            if (!ex) await db.songs.add({ ...s, id: undefined });
         }
     }
     return { success: true };

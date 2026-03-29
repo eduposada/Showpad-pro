@@ -5,7 +5,7 @@ import {
   LogOut, SortAsc, UserRound, ChevronLeft, Cloud, RefreshCw 
 } from 'lucide-react';
 
-// Importação dos nossos módulos e lógica (Certifique-se que o arquivo é ShowPadCore.jsx)
+// Importação dos módulos (Certifique-se que o arquivo se chama ShowPadCore.jsx)
 import { db, transposeContent, supabase, triggerDL, pushToCloud, pullFromCloud } from './ShowPadCore';
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
@@ -62,7 +62,6 @@ export default function App() {
         const s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
         
-        // Lógica de Ordenação aprovada
         s.sort((a,b) => {
             const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
             const valB = (sortBy === 'artist' ? b.artist : b.title) || "";
@@ -77,17 +76,17 @@ export default function App() {
             const upd = (selectedItem.type === 'song') ? s.find(x => x.id === id) : sl.find(x => x.id === id);
             if (upd) setSelectedItem({type: selectedItem.type, data: upd});
         }
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error("Erro ao atualizar dados:", e); }
   };
 
   const checkServer = () => {
     fetch('http://localhost:3001/ping').then(r => setIsServerOnline(r.ok)).catch(() => setIsServerOnline(false));
   };
 
-  // --- 3. LÓGICA DE NUVEM (PUSH / PULL) ---
+  // --- 3. LÓGICA DE NUVEM ---
   const handleCloudPush = async () => {
     if (!session) return;
-    setIsScraping(true); // Usa o ícone de carregamento do garimpo para feedback
+    setIsScraping(true);
     try {
         await pushToCloud(session.user.id);
         alert("ShowPad Cloud: Backup salvo com sucesso!");
@@ -101,7 +100,7 @@ export default function App() {
     try {
         await pullFromCloud(session.user.id);
         await refreshData();
-        alert("ShowPad Cloud: Biblioteca sincronizada no iPad!");
+        alert("ShowPad Cloud: Biblioteca sincronizada!");
     } catch (e) { alert("Erro ao baixar dados: " + e.message); }
     setIsScraping(false);
   };
@@ -133,20 +132,25 @@ export default function App() {
 
   const scrollPage = (d) => { if (showScrollRef.current) showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * d, behavior: 'smooth' }); };
 
-  const handleImport = (e) => {
+  // Função handleImport corrigida para aceitar o modo (song ou setlist)
+  const handleImport = (e, targetMode) => {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       try {
         const d = JSON.parse(ev.target.result);
-        if (d.songs) {
+        if (targetMode === 'library' && d.songs) {
           for (let s of d.songs) {
             if (!(await db.songs.where({title: s.title, artist: s.artist}).first())) {
               await db.songs.add({ ...s, id: undefined, creator_id: session.user.id });
             }
           }
+        } else if (targetMode === 'setlists' && d.setlists) {
+             for (let sl of d.setlists) {
+                await db.setlists.add({ ...sl, id: undefined, creator_id: session.user.id });
+             }
         }
-        refreshData(); alert("Importado!");
-      } catch (err) { alert("Erro JSON"); }
+        refreshData(); alert("Importado com sucesso!");
+      } catch (err) { alert("Erro no arquivo JSON."); }
     };
     reader.readAsText(e.target.files[0]);
   };
@@ -166,12 +170,9 @@ export default function App() {
 
         <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
             <span style={{fontSize:'11px', color:'#007aff', fontWeight:'bold'}}>{session.user.email}</span>
-            
-            {/* BOTÕES DE NUVEM */}
             <button style={{...styles.headerBtn, backgroundColor:'#007aff'}} onClick={handleCloudPush} title="Subir para Nuvem"><Cloud size={14}/> SUBIR</button>
             <button style={{...styles.headerBtn, backgroundColor:'#007aff'}} onClick={handleCloudPull} title="Baixar da Nuvem"><RefreshCw size={14}/> BAIXAR</button>
-            
-            <button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup.json")}>BACKUP</button>
+            <button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup_ShowPad.json")}>BACKUP</button>
             <button onClick={() => setShowSettings(true)} style={styles.infoBtn}><Settings size={22}/></button>
             <button onClick={() => supabase.auth.signOut()} style={styles.logoutBtn} title="Sair"><LogOut size={20}/></button>
         </div>
@@ -194,13 +195,13 @@ export default function App() {
           <div style={styles.listArea}>
             {['library', 'setlists'].includes(view) ? (view === 'library' ? songs : setlists).map(item => (
               <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}>
-                <div style={{flex:1, overflow:'hidden'}} onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
+                <div style={{flex:1, overflow:'hidden', cursor:'pointer'}} onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
                     <strong style={{color:'#fff'}}>{item.title}</strong>
                     <small style={styles.artistYellow}>{item.artist || item.location || "---"}</small>
                 </div>
                 <div style={{display:'flex', gap:'6px'}}>
                     <button style={styles.listActionBtnShow} onClick={() => { setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={16}/></button>
-                    <button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
+                    <button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Deseja excluir permanentemente?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
                 </div>
               </div>
             )) : <div style={{padding:'20px', color:'#888', fontSize:'12px', textAlign:'center'}}>Menu Ativo no Painel Central.</div>}
