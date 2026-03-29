@@ -1,12 +1,10 @@
 import Dexie from 'dexie';
 import { createClient } from '@supabase/supabase-js';
 
-// --- CONEXÃO NUVEM ---
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
-// --- BANCO DE DADOS ---
 export const db = new Dexie('ShowPadProWeb');
 db.version(11).stores({ 
     songs: '++id, title, artist, creator_id, band_id', 
@@ -14,7 +12,6 @@ db.version(11).stores({
     my_bands: 'id, name, invite_code, role'
 });
 
-// --- MOTOR MUSICAL ---
 export const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 export const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
@@ -37,23 +34,41 @@ export const transposeContent = (c, s) => {
     }).join('\n');
 };
 
-// --- ESTA É A FUNÇÃO QUE ESTAVA FALTANDO O "EXPORT" ---
 export const formatChordsVisual = (text) => {
     if (!text) return null;
     return text.split('\n').map((line, i) => {
         const m = line.match(chordRegex);
         const isC = m && m.length > 0 && m.length >= line.trim().split(/\s+/).length * 0.4;
         return (
-            <div key={i} style={{ 
-                color: isC ? '#FFD700' : '#FFFFFF', 
-                fontWeight: isC ? 'bold' : 'normal', 
-                minHeight: '1.2em', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8' 
-            }}>{line || ' '}</div>
+            <div key={i} style={{ color: isC ? '#FFD700' : '#FFFFFF', fontWeight: isC ? 'bold' : 'normal', minHeight: '1.2em', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8' }}>{line || ' '}</div>
         );
     });
 };
 
-export const triggerDL = (d, f) => {
-    const u = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }));
-    const l = document.createElement('a'); l.href = u; l.download = f; l.click();
+// --- NOVAS FUNÇÕES DE NUVEM ---
+
+export const pushToCloud = async (userId) => {
+    const songs = await db.songs.toArray();
+    const setlists = await db.setlists.toArray();
+    
+    // Sobe as músicas (Upsert usa o título e artista como base ou ID se houver)
+    const { error: sErr } = await supabase.from('songs').upsert(
+        songs.map(s => ({ ...s, id: undefined, creator_id: userId }))
+    );
+    
+    if (sErr) throw sErr;
+    return { success: true };
+};
+
+export const pullFromCloud = async (userId) => {
+    const { data: cloudSongs, error } = await supabase.from('songs').select('*').eq('creator_id', userId);
+    if (error) throw error;
+
+    if (cloudSongs) {
+        for (let s of cloudSongs) {
+            const ex = await db.songs.where({title: s.title, artist: s.artist}).first();
+            if (!ex) await db.songs.add(s);
+        }
+    }
+    return { success: true };
 };
