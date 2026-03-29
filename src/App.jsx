@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { WebMidi } from 'webmidi';
 import { Plus, Music, Trash2, FileUp, Save, Monitor, Settings, Zap, LogOut, SortAsc, UserRound } from 'lucide-react';
 
-// Importando nossos módulos e lógica
-import { db, transposeContent, supabase } from './MusicEngine';
+// Importação dos módulos (Certifique-se que o nome é ShowPadCore.jsx)
+import { db, transposeContent, supabase } from './ShowPadCore';
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
 import { SettingsView } from './SettingsView';
@@ -35,8 +35,9 @@ export default function App() {
   const showScrollRef = useRef(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    if (!supabase) return;
+    supabase.auth.getSession().then((res) => setSession(res.data.session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => setSession(sess));
     return () => subscription.unsubscribe();
   }, []);
 
@@ -47,13 +48,17 @@ export default function App() {
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
 
   const refreshData = async () => { 
-    let s = await db.songs.toArray();
+    const s = await db.songs.toArray();
     const sl = await db.setlists.toArray();
-    s.sort((a,b) => (sortBy === 'artist' ? (a.artist||"").localeCompare(b.artist||"") : a.title.localeCompare(b.title)));
+    s.sort((a,b) => {
+      const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
+      const valB = (sortBy === 'artist' ? b.artist : b.title) || "";
+      return valA.localeCompare(valB);
+    });
     setSongs(s); setSetlists(sl); 
     if (selectedItem) {
-        const item = selectedItem.type === 'song' ? s.find(x => x.id === selectedItem.data.id) : sl.find(x => x.id === selectedItem.data.id);
-        if (item) setSelectedItem({type: selectedItem.type, data: item});
+        const up = selectedItem.type === 'song' ? s.find(x => x.id === selectedItem.data.id) : sl.find(x => x.id === selectedItem.data.id);
+        if (up) setSelectedItem({type: selectedItem.type, data: up});
     }
   };
 
@@ -86,8 +91,7 @@ export default function App() {
   };
 
   const scrollPage = (d) => { if (showScrollRef.current) showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * d, behavior: 'smooth' }); };
-  const triggerDL = (d, f) => { const u = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' })); const l = document.createElement('a'); l.href = u; l.download = f; l.click(); };
-
+  
   const handleImport = (e) => {
     const reader = new FileReader();
     reader.onload = async (ev) => {
@@ -95,9 +99,8 @@ export default function App() {
         const d = JSON.parse(ev.target.result);
         if (d.songs) {
           for (let s of d.songs) {
-            if (!(await db.songs.where({title: s.title, artist: s.artist}).first())) {
-              await db.songs.add({ ...s, id: undefined, creator_id: session.user.id });
-            }
+            const ex = await db.songs.where({title: s.title, artist: s.artist}).first();
+            if (!ex) await db.songs.add({ ...s, id: undefined, creator_id: session.user.id });
           }
         }
         refreshData(); alert("Importado!");
@@ -106,13 +109,22 @@ export default function App() {
     reader.readAsText(e.target.files[0]);
   };
 
+  const triggerDL = (d, f) => { 
+    const u = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' })); 
+    const l = document.createElement('a'); l.href = u; l.download = f; l.click(); 
+  };
+
   if (!session) return <AuthView styles={styles} />;
 
   return (
     <div style={styles.appContainer}>
       <header style={styles.mainHeader}>
-        <div style={{display:'flex', alignItems:'center', gap:'12px'}}><Music color="#007aff" /><h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
-          <div style={midiFlash ? styles.midiBadgeActive : (midiStatus === 'ready' ? styles.midiBadgeOn : styles.midiBadgeOff)}><Zap size={10}/> {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}</div>
+        <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
+          <Music color="#007aff" />
+          <h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
+          <div style={midiFlash ? styles.midiBadgeActive : (midiStatus === 'ready' ? styles.midiBadgeOn : styles.midiBadgeOff)}>
+            <Zap size={10}/> {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}
+          </div>
         </div>
         <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
             <span style={{fontSize:'10px', color:'#666'}}>{session.user.email}</span>

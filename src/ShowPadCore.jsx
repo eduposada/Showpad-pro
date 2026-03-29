@@ -1,12 +1,15 @@
 import Dexie from 'dexie';
 import { createClient } from '@supabase/supabase-js';
 
-// --- CONEXÃO COM A NUVEM (SUPABASE) ---
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// --- CONEXÃO SUPABASE ---
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
-// --- BANCO DE DADOS LOCAL (DEXIE) ---
+export const supabase = (supabaseUrl && supabaseKey) 
+    ? createClient(supabaseUrl, supabaseKey) 
+    : null;
+
+// --- BANCO DE DADOS LOCAL ---
 export const db = new Dexie('ShowPadProWeb');
 db.version(11).stores({ 
     songs: '++id, title, artist, creator_id, band_id', 
@@ -30,7 +33,7 @@ export const transposeContent = (c, s) => {
     return c.split('\n').map(l => {
         if (l.toLowerCase().indexOf("tom") !== -1) return l.replace(/([A-G][#b]?)/g, (m) => shiftNote(m, s));
         const m = l.match(chordRegex);
-        if (m && m.length >= l.trim().split(/\s+/).length * 0.4) return l.replace(chordRegex, (match) => shiftNote(match, s));
+        if (m && m.length > 0 && m.length >= l.trim().split(/\s+/).length * 0.4) return l.replace(chordRegex, (match) => shiftNote(match, s));
         return l;
     }).join('\n');
 };

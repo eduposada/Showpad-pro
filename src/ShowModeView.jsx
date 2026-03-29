@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronLeft, Menu, Type, ChevronUp, ChevronDown, Piano, X, ChevronRight } from 'lucide-react';
-import { chordRegex } from './MusicEngine';
+import { chordRegex } from './ShowPadCore';
 
 export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose, showScrollRef, lastSignal, styles }) => {
     const [idx, setIdx] = useState(0), [dr, setDr] = useState(false);
