@@ -5,7 +5,7 @@ import {
   LogOut, SortAsc, UserRound, ChevronLeft, Cloud, RefreshCw 
 } from 'lucide-react';
 
-// Importação dos módulos (Certifique-se que o arquivo se chama ShowPadCore.jsx)
+// Importação dos módulos
 import { db, transposeContent, supabase, triggerDL, pushToCloud, pullFromCloud } from './ShowPadCore';
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
@@ -16,20 +16,17 @@ import { GarimpoView } from './GarimpoView';
 import { styles } from './Styles';
 
 export default function App() {
-  // --- ESTADOS DE DADOS ---
   const [session, setSession] = useState(null);
   const [songs, setSongs] = useState([]);
   const [setlists, setSetlists] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   
-  // --- ESTADOS DE INTERFACE ---
   const [showMode, setShowMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [view, setView] = useState('library'); 
   const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30);
   const [sortBy, setSortBy] = useState(localStorage.getItem('sortBy') || 'title');
 
-  // --- ESTADOS MIDI E GARIMPO ---
   const [midiStatus, setMidiStatus] = useState("off");
   const [midiFlash, setMidiFlash] = useState(false);
   const [allInputs, setAllInputs] = useState([]);
@@ -41,7 +38,6 @@ export default function App() {
   const midiLearningRef = useRef(null);
   const showScrollRef = useRef(null);
 
-  // --- 1. MONITOR DE SESSÃO ---
   useEffect(() => {
     if (supabase) {
       supabase.auth.getSession().then((res) => { if (res.data) setSession(res.data.session); });
@@ -50,7 +46,6 @@ export default function App() {
     }
   }, []);
 
-  // --- 2. CARREGAMENTO E SINCRONIZACAO ---
   useEffect(() => { 
     if (session) { refreshData(); initMidi(); checkServer(); }
   }, [session, sortBy]);
@@ -61,16 +56,13 @@ export default function App() {
     try {
         const s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
-        
         s.sort((a,b) => {
             const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
             const valB = (sortBy === 'artist' ? b.artist : b.title) || "";
             return valA.toLowerCase().localeCompare(valB.toLowerCase());
         });
-
         setSongs(s); 
         setSetlists(sl); 
-        
         if (selectedItem) {
             const id = selectedItem.data.id;
             const upd = (selectedItem.type === 'song') ? s.find(x => x.id === id) : sl.find(x => x.id === id);
@@ -83,29 +75,22 @@ export default function App() {
     fetch('http://localhost:3001/ping').then(r => setIsServerOnline(r.ok)).catch(() => setIsServerOnline(false));
   };
 
-  // --- 3. LÓGICA DE NUVEM ---
   const handleCloudPush = async () => {
     if (!session) return;
     setIsScraping(true);
-    try {
-        await pushToCloud(session.user.id);
-        alert("ShowPad Cloud: Backup salvo com sucesso!");
-    } catch (e) { alert("Erro ao subir dados: " + e.message); }
+    try { await pushToCloud(session.user.id); alert("ShowPad Cloud: Backup salvo!"); } 
+    catch (e) { alert("Erro ao subir: " + e.message); }
     setIsScraping(false);
   };
 
   const handleCloudPull = async () => {
     if (!session) return;
     setIsScraping(true);
-    try {
-        await pullFromCloud(session.user.id);
-        await refreshData();
-        alert("ShowPad Cloud: Biblioteca sincronizada!");
-    } catch (e) { alert("Erro ao baixar dados: " + e.message); }
+    try { await pullFromCloud(session.user.id); await refreshData(); alert("ShowPad Cloud: Sincronizado!"); } 
+    catch (e) { alert("Erro ao baixar: " + e.message); }
     setIsScraping(false);
   };
 
-  // --- 4. LÓGICA MIDI ---
   const initMidi = () => {
     WebMidi.enable({ sysex: true }).then(() => {
       const upd = () => {
@@ -132,7 +117,6 @@ export default function App() {
 
   const scrollPage = (d) => { if (showScrollRef.current) showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * d, behavior: 'smooth' }); };
 
-  // Função handleImport corrigida para aceitar o modo (song ou setlist)
   const handleImport = (e, targetMode) => {
     const reader = new FileReader();
     reader.onload = async (ev) => {
@@ -149,8 +133,8 @@ export default function App() {
                 await db.setlists.add({ ...sl, id: undefined, creator_id: session.user.id });
              }
         }
-        refreshData(); alert("Importado com sucesso!");
-      } catch (err) { alert("Erro no arquivo JSON."); }
+        refreshData(); alert("Importado!");
+      } catch (err) { alert("Erro JSON."); }
     };
     reader.readAsText(e.target.files[0]);
   };
@@ -167,48 +151,43 @@ export default function App() {
             <Zap size={10}/> {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}
           </div>
         </div>
-
         <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
-            <span style={{fontSize:'11px', color:'#007aff', fontWeight:'bold'}}>{session.user.email}</span>
-            <button style={{...styles.headerBtn, backgroundColor:'#007aff'}} onClick={handleCloudPush} title="Subir para Nuvem"><Cloud size={14}/> SUBIR</button>
-            <button style={{...styles.headerBtn, backgroundColor:'#007aff'}} onClick={handleCloudPull} title="Baixar da Nuvem"><RefreshCw size={14}/> BAIXAR</button>
-            <button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup_ShowPad.json")}>BACKUP</button>
+            <button style={styles.headerBtn} onClick={handleCloudPush}><Cloud size={14}/> SUBIR</button>
+            <button style={styles.headerBtn} onClick={handleCloudPull}><RefreshCw size={14}/> BAIXAR</button>
+            <button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup.json")}>BACKUP</button>
             <button onClick={() => setShowSettings(true)} style={styles.infoBtn}><Settings size={22}/></button>
-            <button onClick={() => supabase.auth.signOut()} style={styles.logoutBtn} title="Sair"><LogOut size={20}/></button>
+            <button onClick={() => supabase.auth.signOut()} style={styles.logoutBtn}><LogOut size={20}/></button>
         </div>
       </header>
 
-      <div style={{display:'flex', flex: 1, overflow:'hidden'}}>
+      {/* contentBody garante que Sidebar e Editor fiquem lado a lado corretamente */}
+      <div style={{ display:'flex', flex: 1, overflow:'hidden', width: '100%' }}>
         <div style={styles.sidebar}>
           <div style={styles.navTabs}>
-            <button onClick={() => { setView('library'); setSelectedItem(null); }} style={view === 'library' ? styles.activeTab : styles.tab}>BIBLIOTECA</button>
-            <button onClick={() => { setView('setlists'); setSelectedItem(null); }} style={view === 'setlists' ? styles.activeTab : styles.tab}>SHOWS</button>
-            <button onClick={() => { setView('garimpo'); setSelectedItem(null); }} style={view === 'garimpo' ? styles.activeTab : styles.tab}>GARIMPAR</button>
-            <button onClick={() => { setView('bands'); setSelectedItem(null); }} style={view === 'bands' ? styles.activeTab : styles.tab}>BANDAS</button>
+            <button onClick={() => { setView('library'); }} style={view === 'library' ? styles.activeTab : styles.tab}>MÚSICAS</button>
+            <button onClick={() => { setView('setlists'); }} style={view === 'setlists' ? styles.activeTab : styles.tab}>SHOWS</button>
+            <button onClick={() => { setView('bands'); }} style={view === 'bands' ? styles.activeTab : styles.tab}>BANDAS</button>
+            <button onClick={() => { setView('garimpo'); }} style={view === 'garimpo' ? styles.activeTab : styles.tab}>GARIMPAR</button>
           </div>
-          {view === 'library' && (
-              <div style={styles.sortBar}>
-                  <button onClick={()=>{setSortBy('title');}} style={sortBy==='title'?styles.sortBtnActive:styles.sortBtn}><SortAsc size={12}/> Título</button>
-                  <button onClick={()=>{setSortBy('artist');}} style={sortBy==='artist'?styles.sortBtnActive:styles.sortBtn}><UserRound size={12}/> Banda</button>
-              </div>
-          )}
+
           <div style={styles.listArea}>
             {['library', 'setlists'].includes(view) ? (view === 'library' ? songs : setlists).map(item => (
-              <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}>
-                <div style={{flex:1, overflow:'hidden', cursor:'pointer'}} onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
-                    <strong style={{color:'#fff'}}>{item.title}</strong>
+              <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}
+                   onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
+                <div style={{flex:1, overflow:'hidden'}}>
+                    <strong style={{color:'#fff', display:'block'}}>{item.title}</strong>
                     <small style={styles.artistYellow}>{item.artist || item.location || "---"}</small>
                 </div>
                 <div style={{display:'flex', gap:'6px'}}>
-                    <button style={styles.listActionBtnShow} onClick={() => { setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={16}/></button>
-                    <button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Deseja excluir permanentemente?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
+                    <button style={styles.listActionBtnShow} onClick={(e) => { e.stopPropagation(); setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={16}/></button>
+                    <button style={styles.listActionBtnDelete} onClick={async (e) => { e.stopPropagation(); if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
                 </div>
               </div>
-            )) : <div style={{padding:'20px', color:'#888', fontSize:'12px', textAlign:'center'}}>Menu Ativo no Painel Central.</div>}
+            )) : <div style={{padding:'20px', color:'#888', fontSize:'11px', textAlign:'center'}}>Menu Ativo no Painel Central.</div>}
           </div>
+
           <div style={styles.sidebarFooter}>
-            {['library', 'setlists'].includes(view) && <button onClick={async () => { const obj = view==='setlists'?{title:"Novo Show", songs:[], location:"", time:"", members:"", notes:"", creator_id: session.user.id}:{title:"Nova Música", artist:"Artista", content:"", creator_id: session.user.id}; const id = await (view==='setlists'?db.setlists.add(obj):db.songs.add(obj)); refreshData(); setSelectedItem({type:view==='setlists'?'setlist':'song', data: await (view==='setlists'?db.setlists.get(id):db.songs.get(id))}); }} style={styles.addBtn}>+ NOVO {view === 'setlists' ? 'SHOW' : 'MÚSICA'}</button>}
-            {['library', 'setlists'].includes(view) && <label style={styles.importBtnLabel}>IMPORTAR {view==='setlists'?'SHOW':'CIFRA'}<input type="file" hidden onChange={(e)=>handleImport(e, view)} /></label>}
+            {['library', 'setlists'].includes(view) && <button onClick={async () => { const obj = view==='setlists'?{title:"Novo Show", songs:[], location:"", time:"", members:"", notes:"", creator_id: session.user.id}:{title:"Nova Música", artist:"Artista", content:"", creator_id: session.user.id}; const id = await (view==='setlists'?db.setlists.add(obj):db.songs.add(obj)); refreshData(); setSelectedItem({type:view==='setlists'?'setlist':'song', data: await (view==='setlists'?db.setlists.get(id):db.songs.get(id))}); }} style={styles.addBtn}>+ NOVO</button>}
           </div>
         </div>
 
@@ -219,10 +198,11 @@ export default function App() {
           : <div style={styles.empty}>
               <Music size={120} color="#111" />
               <h1 style={{fontSize:'40px', fontWeight:'900', color:'#111', margin:0}}>SHOWPAD PRO</h1>
-              <p style={{color:'#222', fontWeight:'bold'}}>Selecione um item na lateral para começar.</p>
+              <p style={{color:'#333', fontWeight:'bold'}}>Selecione uma música para editar.</p>
             </div>}
         </div>
       </div>
+
       {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} onClose={()=>setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} styles={styles} />}
       {showSettings && <SettingsView onClose={()=>setShowSettings(false)} inputs={allInputs} setMidiLearning={setMidiLearning} midiLearning={midiLearning} midiStatus={midiStatus} handleImport={handleImport} styles={styles} />}
     </div>
