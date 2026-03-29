@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { WebMidi } from 'webmidi';
 import { Plus, Music, Trash2, FileUp, Save, Monitor, Settings, Zap, LogOut, SortAsc, UserRound, ChevronLeft } from 'lucide-react';
-
 import { db, transposeContent, supabase, triggerDL } from './ShowPadCore';
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
@@ -16,8 +15,7 @@ export default function App() {
   const [showMode, setShowMode] = useState(false), [showSettings, setShowSettings] = useState(false), [view, setView] = useState('library');
   const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30), [sortBy, setSortBy] = useState('title');
   const [midiStatus, setMidiStatus] = useState("off"), [midiFlash, setMidiFlash] = useState(false), [allInputs, setAllInputs] = useState([]);
-  const [lastSignalUI, setLastSignalUI] = useState(""), [midiLearning, setMidiLearning] = useState(null);
-  const [isServerOnline, setIsServerOnline] = useState(false);
+  const [lastSignalUI, setLastSignalUI] = useState(""), [midiLearning, setMidiLearning] = useState(null), [isServerOnline, setIsServerOnline] = useState(false);
   const midiLearningRef = useRef(null), showScrollRef = useRef(null);
 
   useEffect(() => {
@@ -31,13 +29,15 @@ export default function App() {
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
 
   const refreshData = async () => { 
-    let s = await db.songs.toArray(); const sl = await db.setlists.toArray();
-    s.sort((a,b) => (sortBy === 'artist' ? (a.artist||"").localeCompare(b.artist||"") : a.title.localeCompare(b.title)));
-    setSongs(s); setSetlists(sl); 
-    if (selectedItem) {
-        const upd = (selectedItem.type === 'song') ? s.find(x => x.id === selectedItem.data.id) : sl.find(x => x.id === selectedItem.data.id);
-        if (upd) setSelectedItem({type: selectedItem.type, data: upd});
-    }
+    try {
+        let s = await db.songs.toArray(); const sl = await db.setlists.toArray();
+        s.sort((a,b) => (sortBy === 'artist' ? (a.artist||"").localeCompare(b.artist||"") : a.title.localeCompare(b.title)));
+        setSongs(s); setSetlists(sl); 
+        if (selectedItem) {
+            const upd = (selectedItem.type === 'song') ? s.find(x => x.id === selectedItem.data.id) : sl.find(x => x.id === selectedItem.data.id);
+            if (upd) setSelectedItem({type: selectedItem.type, data: upd});
+        }
+    } catch (e) { console.error(e); }
   };
 
   const checkServer = () => fetch('http://localhost:3001/ping').then(r => setIsServerOnline(r.ok)).catch(() => setIsServerOnline(false));
@@ -72,7 +72,7 @@ export default function App() {
       try {
         const d = JSON.parse(ev.target.result); let map = {};
         if (d.songs) { for (let s of d.songs) { 
-            let t = s.title; if (await db.songs.where({title: s.title, artist: s.artist}).first()) t += " (Importada)";
+            let t = s.title; if (await db.songs.where({title: s.title, artist: s.artist}).first()) t += " (Import)";
             const id = await db.songs.add({ ...s, title: t, id: undefined, creator_id: session.user.id }); 
             map[s.title+s.artist] = await db.songs.get(id); 
         } }
@@ -88,18 +88,12 @@ export default function App() {
   return (
     <div style={styles.appContainer}>
       <header style={styles.mainHeader}>
-        <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
-          <Music color="#007aff" />
-          <h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
-          <div style={midiFlash ? styles.midiBadgeActive : (midiStatus === 'ready' ? styles.midiBadgeOn : styles.midiBadgeOff)}>
-            <Zap size={10}/> {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}
-          </div>
+        <div style={{display:'flex', alignItems:'center', gap:'12px'}}><Music color="#007aff" /><h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
+          <div style={midiFlash ? styles.midiBadgeActive : (midiStatus === 'ready' ? styles.midiBadgeOn : styles.midiBadgeOff)}><Zap size={10}/> {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}</div>
         </div>
-        
-        {/* GRUPO DE AÇÕES À DIREITA REORGANIZADO (REQUISITO 6 e 7) */}
         <div style={{display:'flex', gap:'20px', alignItems:'center'}}>
             <span style={{fontSize:'11px', color:'#007aff', fontWeight:'bold'}}>{session.user.email}</span>
-            <button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup.json")}>BACKUP</button>
+            <button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup.json")}><Save size={14}/> BACKUP</button>
             <button onClick={() => setShowSettings(true)} style={styles.infoBtn}><Settings size={22}/></button>
             <button onClick={() => supabase.auth.signOut()} style={styles.logoutBtn} title="Sair"><LogOut size={20}/></button>
         </div>
@@ -143,7 +137,7 @@ export default function App() {
           {view === 'garimpo' ? <GarimpoView isServerOnline={isServerOnline} styles={styles} refresh={refreshData} session={session} />
           : view === 'bands' ? <BandView session={session} styles={styles} />
           : selectedItem ? <MainEditor key={selectedItem.data.id} item={selectedItem} songs={songs} triggerDL={triggerDL} onClose={()=>setSelectedItem(null)} onShow={()=>setShowMode(true)} refresh={refreshData} styles={styles} />
-          : <div style={styles.empty}><Music size={80} color="#222" /><h2>ShowPad Pro</h2></div>}
+          : <div style={styles.empty}><Music size={120} color="#111" /><h1 style={{fontSize:'40px', fontWeight:'900', color:'#111', margin:0}}>SHOWPAD PRO</h1><p style={{color:'#222', fontWeight:'bold'}}>Selecione um item na lateral para começar.</p></div>}
         </div>
       </div>
       {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} onClose={()=>setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} styles={styles} />}
