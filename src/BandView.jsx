@@ -48,24 +48,38 @@ export const BandView = ({ session, styles }) => {
 
     return (
         <div style={styles.garimpoPanel}>
-            <h2>Bandas</h2>
+            <h2 style={{color: '#fff', marginBottom:'20px'}}>Gestão de Bandas</h2>
             <div style={{display:'flex', gap:'20px', marginBottom:'30px'}}>
-                <div style={{flex:1, background:'#2c2c2e', padding:'20px', borderRadius:'15px'}}>
-                    <h4>Criar Banda</h4>
-                    <input style={styles.inputField} placeholder="Nome" value={newBandName} onChange={e=>setNewBandName(e.target.value)} />
-                    <button style={styles.primaryButton} onClick={createBand}>Criar</button>
+                <div style={{flex:1, background:'#1a1a1a', padding:'25px', borderRadius:'15px', border:'1px solid #333'}}>
+                    <h4 style={{marginBottom:'15px'}}>Criar Nova Banda</h4>
+                    <input style={styles.whiteInputLarge} placeholder="Nome da Banda" value={newBandName} onChange={e=>setNewBandName(e.target.value)} />
+                    {/* CORREÇÃO AQUI (LINHA 45): Estilo fundido em um só objeto */}
+                    <button 
+                        style={{...styles.wideGreenBtn, backgroundColor:'#007aff', marginTop:'15px'}} 
+                        onClick={createBand} 
+                        disabled={loading}
+                    >
+                        CRIAR BANDA E GERAR CÓDIGO
+                    </button>
                 </div>
-                <div style={{flex:1, background:'#2c2c2e', padding:'20px', borderRadius:'15px'}}>
-                    <h4>Entrar</h4>
-                    <input style={styles.inputField} placeholder="Código" value={inviteCode} onChange={e=>setInviteCode(e.target.value)} />
-                    <button style={{...styles.primaryButton, backgroundColor:'#34c759'}} onClick={joinBand}>Entrar</button>
+                <div style={{flex:1, background:'#1a1a1a', padding:'25px', borderRadius:'15px', border:'1px solid #333'}}>
+                    <h4 style={{marginBottom:'15px'}}>Entrar com Convite</h4>
+                    <input style={styles.whiteInputLarge} placeholder="Código" value={inviteCode} onChange={e=>setInviteCode(e.target.value)} />
+                    <button 
+                        style={{...styles.wideGreenBtn, backgroundColor:'#34c759', marginTop:'15px'}} 
+                        onClick={joinBand} 
+                        disabled={loading}
+                    >
+                        ENTRAR NA BANDA
+                    </button>
                 </div>
             </div>
+            <h3>Minhas Bandas</h3>
             <div style={styles.scrollList}>
                 {bands.map(b => (
                     <div key={b.id} style={styles.miniItem}>
-                        <div><strong>{b.name}</strong><div style={{fontSize:'10px'}}>{b.role==='admin'?'Líder':'Membro'}</div></div>
-                        <div>CÓDIGO: <code style={{color:'#007aff'}}>{b.invite_code}</code></div>
+                        <div><strong style={{color:'#fff'}}>{b.name}</strong><div style={{fontSize:'10px', color:'#aaa'}}>{b.role==='admin'?'Líder':'Membro'}</div></div>
+                        <div style={{textAlign:'right'}}>CÓDIGO: <code style={{color:'#007aff', fontSize:'16px'}}>{b.invite_code}</code></div>
                     </div>
                 ))}
             </div>
