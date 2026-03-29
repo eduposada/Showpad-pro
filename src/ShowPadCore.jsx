@@ -1,18 +1,23 @@
 import Dexie from 'dexie';
 import { createClient } from '@supabase/supabase-js';
 
+// --- CONEXÃO SUPABASE ---
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
-export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
+export const supabase = (supabaseUrl && supabaseKey) 
+    ? createClient(supabaseUrl, supabaseKey) 
+    : null;
 
+// --- BANCO DE DADOS LOCAL (Dexie) ---
 export const db = new Dexie('ShowPadProWeb');
-db.version(12).stores({ 
+db.version(11).stores({ 
     songs: '++id, title, artist, creator_id, band_id', 
     setlists: '++id, title, location, time, members, notes, creator_id, band_id',
-    my_bands: 'id, name, invite_code, role' // Cache local das bandas
+    my_bands: 'id, name, invite_code, role'
 });
 
+// --- MOTOR MUSICAL ---
 export const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 export const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
@@ -43,7 +48,7 @@ export const formatChordsVisual = (text) => {
         return (
             <div key={i} style={{ 
                 color: isC ? '#FFD700' : '#FFFFFF', 
-                fontWeight: isChordLine ? 'bold' : 'normal', 
+                fontWeight: isC ? 'bold' : 'normal', 
                 minHeight: '1.2em', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8' 
             }}>{line || ' '}</div>
         );
