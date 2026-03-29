@@ -1,7 +1,9 @@
-import React from 'react'; // Adicionado para suportar o JSX no formatChordsVisual
+import React from 'react';
 import Dexie from 'dexie';
 import { createClient } from '@supabase/supabase-js';
 
+// No iPad Mini 2, o processamento de variáveis de ambiente do Vite pode falhar.
+// Se a tela ficar branca lá, precisaremos colocar as strings direto aqui.
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
@@ -46,26 +48,27 @@ export const formatChordsVisual = (text) => {
     });
 };
 
-// --- FUNÇÃO DE DOWNLOAD (BACKUP) QUE ESTAVA FALTANDO ---
+// BACKUP: Compatível com o clique do Mac e iPad
 export const triggerDL = (data, filename) => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename || 'ShowPad_Backup.json';
-    document.body.appendChild(a); // Necessário para alguns navegadores no Mac
+    document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 };
 
-// --- FUNÇÕES DE NUVEM ---
+// --- NUVEM: CORREÇÃO PARA UPLOAD/DOWNLOAD ---
 
 export const pushToCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
     const songs = await db.songs.toArray();
     
-    const { error: sErr } = await supabase.from('songs').upsert(
+    // Removemos o 'id' local para o Supabase não entrar em conflito
+    const { error } = await supabase.from('songs').upsert(
         songs.map(s => ({ 
             title: s.title, 
             artist: s.artist, 
@@ -74,13 +77,14 @@ export const pushToCloud = async (userId) => {
         })), { onConflict: ['title', 'artist', 'creator_id'] }
     );
     
-    if (sErr) throw sErr;
-    return { success: true };
+    if (error) throw error;
+    return true;
 };
 
 export const pullFromCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
     const { data: cloudSongs, error } = await supabase.from('songs').select('*').eq('creator_id', userId);
+    
     if (error) throw error;
 
     if (cloudSongs) {
@@ -89,5 +93,5 @@ export const pullFromCloud = async (userId) => {
             if (!ex) await db.songs.add({ ...s, id: undefined });
         }
     }
-    return { success: true };
+    return true;
 };
