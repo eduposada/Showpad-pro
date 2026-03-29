@@ -2,12 +2,10 @@ import React from 'react';
 import Dexie from 'dexie';
 import { createClient } from '@supabase/supabase-js';
 
-// Configuração do Supabase via variáveis de ambiente do Vite
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
-// Configuração do Banco de Dados Local (Dexie)
 export const db = new Dexie('ShowPadProWeb');
 db.version(11).stores({ 
     songs: '++id, title, artist, creator_id, band_id', 
@@ -15,7 +13,6 @@ db.version(11).stores({
     my_bands: 'id, name, invite_code, role'
 });
 
-// Lógica Musical: Escala e Regex de Cifras
 export const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 export const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
@@ -44,84 +41,80 @@ export const formatChordsVisual = (text) => {
         const m = line.match(chordRegex);
         const isC = m && m.length > 0 && m.length >= line.trim().split(/\s+/).length * 0.4;
         return (
-            <div key={i} style={{ 
-                color: isC ? '#FFD700' : '#FFFFFF', 
-                fontWeight: isC ? 'bold' : 'normal', 
-                minHeight: '1.2em', 
-                whiteSpace: 'pre-wrap', 
-                textAlign: 'left', 
-                lineHeight: '1.8' 
-            }}>{line || ' '}</div>
+            <div key={i} style={{ color: isC ? '#FFD700' : '#FFFFFF', fontWeight: isC ? 'bold' : 'normal', minHeight: '1.2em', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8' }}>{line || ' '}</div>
         );
     });
 };
 
-// Função de Download (Backup JSON)
 export const triggerDL = (data, filename) => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename || 'ShowPad_Backup.json';
+    a.download = filename || 'ShowPad_Full_Backup.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 };
 
-// --- FUNÇÕES DE NUVEM (UPLOAD / DOWNLOAD) ---
+// --- NUVEM: UPLOAD E DOWNLOAD DE TUDO ---
 
 export const pushToCloud = async (userId) => {
-    if (!supabase) throw new Error("Supabase não configurado no .env");
+    if (!supabase) throw new Error("Supabase não configurado.");
     
-    const songs = await db.songs.toArray();
-    if (songs.length === 0) return { success: true };
-
-    // Limpeza de campos para evitar conflito de chaves primárias
-    const songsToUpload = songs.map(s => ({
-        title: String(s.title || "Sem Título"),
-        artist: String(s.artist || "Artista Desconhecido"),
-        content: String(s.content || ""),
-        creator_id: userId,
-        notes: String(s.notes || "")
-    }));
-
-    // UPSERT: Usa a constraint (title, artist, creator_id) que já existe no seu banco
-    const { error } = await supabase
-        .from('songs')
-        .upsert(songsToUpload, { onConflict: 'title,artist,creator_id' });
-    
-    if (error) {
-        console.error("Erro Supabase:", error.message);
-        throw error;
+    // 1. Músicas
+    const localSongs = await db.songs.toArray();
+    if (localSongs.length > 0) {
+        await supabase.from('songs').upsert(
+            localSongs.map(s => ({ 
+                title: s.title, artist: s.artist, content: s.content, 
+                creator_id: userId, band_id: s.band_id || null, notes: s.notes || ""
+            })), { onConflict: 'title,artist,creator_id' }
+        );
     }
+
+    // 2. Setlists (Shows) - Aqui estava o erro
+    const localSetlists = await db.setlists.toArray();
+    if (localSetlists.length > 0) {
+        const { error } = await supabase.from('setlists').upsert(
+            localSetlists.map(sl => ({
+                title: sl.title, 
+                location: sl.location || "", 
+                time: sl.time || "",
+                members: sl.members || "", 
+                notes: sl.notes || "", 
+                creator_id: userId,
+                songs: sl.songs || [], // Garante que a lista de músicas vá como array
+                band_id: sl.band_id || null
+            })), { onConflict: 'title,creator_id' }
+        );
+        if (error) console.error("Erro ao subir Shows:", error.message);
+    }
+
     return { success: true };
 };
 
 export const pullFromCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
-    
-    const { data: cloudSongs, error } = await supabase
-        .from('songs')
-        .select('*')
-        .eq('creator_id', userId);
-        
-    if (error) throw error;
 
-    if (cloudSongs) {
-        for (let s of cloudSongs) {
-            // Verifica se a música já existe localmente para não duplicar no Dexie
+    // 1. Baixar Músicas
+    const { data: cSongs } = await supabase.from('songs').select('*').eq('creator_id', userId);
+    if (cSongs) {
+        for (let s of cSongs) {
             const ex = await db.songs.where({title: s.title, artist: s.artist}).first();
-            if (!ex) {
-                await db.songs.add({
-                    title: s.title,
-                    artist: s.artist,
-                    content: s.content,
-                    creator_id: userId,
-                    notes: s.notes || ""
-                });
-            }
+            if (!ex) await db.songs.add({ ...s, id: undefined });
         }
     }
+
+    // 2. Baixar Setlists (Shows)
+    const { data: cSetlists } = await supabase.from('setlists').select('*').eq('creator_id', userId);
+    if (cSetlists) {
+        for (let sl of cSetlists) {
+            const ex = await db.setlists.where({title: sl.title}).first();
+            if (!ex) await db.setlists.add({ ...sl, id: undefined });
+        }
+    }
+
     return { success: true };
 };
