@@ -2,12 +2,12 @@ import React from 'react';
 import Dexie from 'dexie';
 import { createClient } from '@supabase/supabase-js';
 
-// No iPad Mini 2, o processamento de variáveis de ambiente do Vite pode falhar.
-// Se a tela ficar branca lá, precisaremos colocar as strings direto aqui.
+// Configuração do Supabase via variáveis de ambiente do Vite
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
+// Configuração do Banco de Dados Local (Dexie)
 export const db = new Dexie('ShowPadProWeb');
 db.version(11).stores({ 
     songs: '++id, title, artist, creator_id, band_id', 
@@ -15,6 +15,7 @@ db.version(11).stores({
     my_bands: 'id, name, invite_code, role'
 });
 
+// Lógica Musical: Escala e Regex de Cifras
 export const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 export const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
@@ -43,12 +44,19 @@ export const formatChordsVisual = (text) => {
         const m = line.match(chordRegex);
         const isC = m && m.length > 0 && m.length >= line.trim().split(/\s+/).length * 0.4;
         return (
-            <div key={i} style={{ color: isC ? '#FFD700' : '#FFFFFF', fontWeight: isC ? 'bold' : 'normal', minHeight: '1.2em', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8' }}>{line || ' '}</div>
+            <div key={i} style={{ 
+                color: isC ? '#FFD700' : '#FFFFFF', 
+                fontWeight: isC ? 'bold' : 'normal', 
+                minHeight: '1.2em', 
+                whiteSpace: 'pre-wrap', 
+                textAlign: 'left', 
+                lineHeight: '1.8' 
+            }}>{line || ' '}</div>
         );
     });
 };
 
-// BACKUP: Compatível com o clique do Mac e iPad
+// Função de Download (Backup JSON)
 export const triggerDL = (data, filename) => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -61,37 +69,59 @@ export const triggerDL = (data, filename) => {
     URL.revokeObjectURL(url);
 };
 
-// --- NUVEM: CORREÇÃO PARA UPLOAD/DOWNLOAD ---
+// --- FUNÇÕES DE NUVEM (UPLOAD / DOWNLOAD) ---
 
 export const pushToCloud = async (userId) => {
-    if (!supabase) throw new Error("Supabase não configurado.");
+    if (!supabase) throw new Error("Supabase não configurado no .env");
+    
     const songs = await db.songs.toArray();
+    if (songs.length === 0) return { success: true };
+
+    // Limpeza de campos para evitar conflito de chaves primárias
+    const songsToUpload = songs.map(s => ({
+        title: String(s.title || "Sem Título"),
+        artist: String(s.artist || "Artista Desconhecido"),
+        content: String(s.content || ""),
+        creator_id: userId,
+        notes: String(s.notes || "")
+    }));
+
+    // UPSERT: Usa a constraint (title, artist, creator_id) que já existe no seu banco
+    const { error } = await supabase
+        .from('songs')
+        .upsert(songsToUpload, { onConflict: 'title,artist,creator_id' });
     
-    // Removemos o 'id' local para o Supabase não entrar em conflito
-    const { error } = await supabase.from('songs').upsert(
-        songs.map(s => ({ 
-            title: s.title, 
-            artist: s.artist, 
-            content: s.content,
-            creator_id: userId 
-        })), { onConflict: ['title', 'artist', 'creator_id'] }
-    );
-    
-    if (error) throw error;
-    return true;
+    if (error) {
+        console.error("Erro Supabase:", error.message);
+        throw error;
+    }
+    return { success: true };
 };
 
 export const pullFromCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
-    const { data: cloudSongs, error } = await supabase.from('songs').select('*').eq('creator_id', userId);
     
+    const { data: cloudSongs, error } = await supabase
+        .from('songs')
+        .select('*')
+        .eq('creator_id', userId);
+        
     if (error) throw error;
 
     if (cloudSongs) {
         for (let s of cloudSongs) {
+            // Verifica se a música já existe localmente para não duplicar no Dexie
             const ex = await db.songs.where({title: s.title, artist: s.artist}).first();
-            if (!ex) await db.songs.add({ ...s, id: undefined });
+            if (!ex) {
+                await db.songs.add({
+                    title: s.title,
+                    artist: s.artist,
+                    content: s.content,
+                    creator_id: userId,
+                    notes: s.notes || ""
+                });
+            }
         }
     }
-    return true;
+    return { success: true };
 };
