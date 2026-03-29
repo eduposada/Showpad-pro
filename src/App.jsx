@@ -23,7 +23,8 @@ export default function App() {
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
-    supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => { if (session) { refreshData(); initMidi(); checkServer(); } }, [session, sortBy]);
@@ -65,8 +66,7 @@ export default function App() {
   };
 
   const scrollPage = (d) => { if (showScrollRef.current) showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * d, behavior: 'smooth' }); };
-
-  const handleImport = (e, label) => {
+  const handleImport = (e) => {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       try {
@@ -76,11 +76,11 @@ export default function App() {
             const id = await db.songs.add({ ...s, title: t, id: undefined, creator_id: session.user.id }); 
             map[s.title+s.artist] = await db.songs.get(id); 
         } }
-        if (d.setlists) { for (let sl of d.setlists) { const ns = (sl.songs || []).map(s => map[s.title+s.artist] || s); await db.setlists.add({ ...sl, id: undefined, songs: ns, creator_id: session.user.id }); } }
-        refreshData(); alert("Importado: " + label);
+        if (d.setlists) { for (let sl of d.setlists) { const ns = (sl.songs || []).map(song => map[song.title+song.artist] || song); await db.setlists.add({ ...sl, id: undefined, songs: ns, creator_id: session.user.id }); } }
+        refreshData(); alert("Importado!");
       } catch (err) { alert("Erro JSON"); }
     };
-    reader.readAsText(e.target.files[0]); e.target.value = null;
+    reader.readAsText(e.target.files[0]);
   };
 
   if (!session) return <AuthView styles={styles} />;
@@ -88,15 +88,20 @@ export default function App() {
   return (
     <div style={styles.appContainer}>
       <header style={styles.mainHeader}>
-        <div style={{display:'flex', alignItems:'center', gap:'12px'}}><Music color="#007aff" /><h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
-          <div style={midiFlash ? styles.midiBadgeActive : (midiStatus === 'ready' ? styles.midiBadgeOn : styles.midiBadgeOff)}><Zap size={10}/> {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}</div>
+        <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
+          <Music color="#007aff" />
+          <h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
+          <div style={midiFlash ? styles.midiBadgeActive : (midiStatus === 'ready' ? styles.midiBadgeOn : styles.midiBadgeOff)}>
+            <Zap size={10}/> {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}
+          </div>
         </div>
-        <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
-            {/* REQUISITO 7: NOME DO USUÁRIO NO TOPO */}
+        
+        {/* GRUPO DE AÇÕES À DIREITA REORGANIZADO (REQUISITO 6 e 7) */}
+        <div style={{display:'flex', gap:'20px', alignItems:'center'}}>
             <span style={{fontSize:'11px', color:'#007aff', fontWeight:'bold'}}>{session.user.email}</span>
             <button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup.json")}>BACKUP</button>
             <button onClick={() => setShowSettings(true)} style={styles.infoBtn}><Settings size={22}/></button>
-            <button onClick={() => supabase.auth.signOut()} style={styles.logoutBtn}><LogOut size={18}/></button>
+            <button onClick={() => supabase.auth.signOut()} style={styles.logoutBtn} title="Sair"><LogOut size={20}/></button>
         </div>
       </header>
 
@@ -119,7 +124,6 @@ export default function App() {
               <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}>
                 <div style={{flex:1, overflow:'hidden'}} onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
                     <strong style={{color:'#fff'}}>{item.title}</strong>
-                    {/* REQUISITO 2: BANDA EM AMARELO NA LISTA */}
                     <small style={styles.artistYellow}>{item.artist || item.location || "---"}</small>
                 </div>
                 <div style={{display:'flex', gap:'6px'}}>
@@ -127,10 +131,10 @@ export default function App() {
                     <button style={styles.listActionBtnDelete} onClick={async () => { if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
                 </div>
               </div>
-            )) : <div style={{padding:'20px', color:'#888', fontSize:'11px'}}>Menu Ativo.</div>}
+            )) : <div style={{padding:'20px', color:'#888', fontSize:'12px', textAlign:'center'}}>Menu Ativo.</div>}
           </div>
           <div style={styles.sidebarFooter}>
-            {['library', 'setlists'].includes(view) && <button onClick={async () => { const obj = view==='library'?{title:"Nova Música", artist:"Artista", content:"", creator_id: session.user.id}:{title:"Novo Show", songs:[], location:"", time:"", members:"", notes:"", creator_id: session.user.id}; const id = await (view==='library'?db.songs.add(obj):db.setlists.add(obj)); refreshData(); const ni = await (view==='library'?db.songs.get(id):db.setlists.get(id)); setSelectedItem({type:view==='library'?'song':'setlist', data: ni}); }} style={styles.addBtn}>+ NOVO</button>}
+            {['library', 'setlists'].includes(view) && <button onClick={async () => { const obj = view==='setlists'?{title:"Novo Show", songs:[], location:"", time:"", members:"", notes:"", creator_id: session.user.id}:{title:"Nova Música", artist:"Artista", content:"", creator_id: session.user.id}; const id = await (view==='setlists'?db.setlists.add(obj):db.songs.add(obj)); refreshData(); setSelectedItem({type:view==='setlists'?'setlist':'song', data: await (view==='setlists'?db.setlists.get(id):db.songs.get(id))}); }} style={styles.addBtn}>+ NOVO {view === 'setlists' ? 'SHOW' : 'MÚSICA'}</button>}
             {['library', 'setlists'].includes(view) && <label style={styles.importBtnLabel}>IMPORTAR {view==='setlists'?'SHOW':'CIFRA'}<input type="file" hidden onChange={(e)=>handleImport(e, view)} /></label>}
           </div>
         </div>
