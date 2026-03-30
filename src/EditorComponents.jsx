@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, ArrowUp, ArrowDown, Plus, X, Download, Share2, CheckCircle2, Monitor, User } from 'lucide-react';
+import { Trash2, ArrowUp, ArrowDown, Plus, X, Download, Share2, CheckCircle2, Monitor, User, Music } from 'lucide-react';
 import { db, transposeContent } from './ShowPadCore';
 
 export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, styles }) => {
@@ -36,31 +36,65 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
     onClose();
   };
 
+  // Estilo comum para as caixas de input
+  const inputContainerStyle = {
+    backgroundColor: '#1c1c1e',
+    border: '1px solid #444',
+    borderRadius: '6px',
+    padding: '8px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    marginBottom: '10px'
+  };
+
+  const labelStyle = {
+    fontSize: '10px',
+    color: '#FFD700', // Amarelo Dourado
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px'
+  };
+
   return (
     <div style={styles.mainEditor}>
       <div style={styles.editorHeader}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', width: '100%'}}>
-            <div style={{flex:1, display:'flex', flexDirection:'column', gap:'8px'}}>
-                {/* ÁREA DE TÍTULO */}
-                <div>
-                    <span style={{fontSize:'10px', color:'#007aff', fontWeight:'bold', textTransform:'uppercase'}}>Título</span>
-                    <input style={styles.hInput} value={lT} onChange={e => setLT(e.target.value)} onBlur={save} placeholder="Título..."/>
+            <div style={{flex:1, display:'flex', flexDirection:'column'}}>
+                
+                {/* CAIXA DE EDIÇÃO DO TÍTULO */}
+                <div style={inputContainerStyle}>
+                    <span style={labelStyle}>
+                        {item.type === 'song' ? 'Título da Música' : 'Nome do Show'}
+                    </span>
+                    <input 
+                        style={{...styles.hInput, fontSize: '18px', padding: 0}} 
+                        value={lT} 
+                        onChange={e => setLT(e.target.value)} 
+                        onBlur={save} 
+                        placeholder="Clique para editar..."
+                    />
                 </div>
 
-                {/* CAMPO ARTISTA - EXCLUSIVO PARA MÚSICAS */}
+                {/* CAIXA DE EDIÇÃO DO ARTISTA (EXCLUSIVO MÚSICAS) */}
                 {item.type === 'song' && (
-                    <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
-                        <User size={12} color="#34c759" />
-                        <div style={{flex:1}}>
-                            <span style={{fontSize:'10px', color:'#34c759', fontWeight:'bold', textTransform:'uppercase', display:'block'}}>Artista / Banda</span>
-                            <input 
-                                style={{...styles.artistInput, borderBottom: '1px solid #333', padding: '2px 0', width: '100%'}} 
-                                value={lA} 
-                                onChange={e => setLA(e.target.value)} 
-                                onBlur={save} 
-                                placeholder="Nome do artista..."
-                            />
-                        </div>
+                    <div style={inputContainerStyle}>
+                        <span style={labelStyle}>Artista / Banda</span>
+                        <input 
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#FFF',
+                                outline: 'none',
+                                fontSize: '14px',
+                                padding: 0,
+                                width: '100%'
+                            }} 
+                            value={lA} 
+                            onChange={e => setLA(e.target.value)} 
+                            onBlur={save} 
+                            placeholder="Nome do artista..."
+                        />
                     </div>
                 )}
             </div>
@@ -74,22 +108,21 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
                     color: confirmDelete ? '#fff' : '#444',
                     border: confirmDelete ? '1px solid #fff' : '1px solid #333',
                     borderRadius: '8px',
-                    padding: '8px 12px',
+                    padding: '12px',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
-                    transition: 'all 0.2s',
                     marginLeft: '15px'
                 }}
             >
-                <Trash2 size={18}/>
-                {confirmDelete && <span style={{fontSize:'10px', fontWeight:'bold'}}>CONFIRMA EXCLUSÃO?</span>}
+                <Trash2 size={20}/>
+                {confirmDelete && <span style={{fontSize:'10px', fontWeight:'bold'}}>EXCLUIR?</span>}
             </button>
         </div>
 
-        <div style={{...styles.btnGroup, marginTop: '10px'}}>
-          <button style={styles.exportBtn} onClick={() => triggerDL({songs:[{...item.data, content:lC, title:lT, artist:lA}]}, `Musica_${lT}.json`)}>EXPORTAR</button>
+        <div style={{...styles.btnGroup, marginTop: '5px'}}>
+          <button style={styles.exportBtn} onClick={() => triggerDL({songs:[{...item.data, content:lC, title:lT, artist:lA}]}, `Export_${lT}.json`)}>EXPORTAR</button>
           {item.type === 'song' && (
             <>
               <button style={styles.transpBtn} onClick={() => { const n = transposeContent(lC, 1); setLC(n); }}>+ Tom</button>
@@ -109,7 +142,7 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
             value={lC} 
             onChange={e=>setLC(e.target.value)} 
             onBlur={save}
-            placeholder="Digite ou cole a cifra aqui..."
+            placeholder="Cole a cifra aqui..."
         />
       ) : (
         <div style={styles.setlistSplit}>
