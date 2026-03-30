@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, ArrowUp, ArrowDown, Plus, X, Download, Share2, CheckCircle2, Monitor } from 'lucide-react';
+import { Trash2, ArrowUp, ArrowDown, Plus, X, Download, Share2, CheckCircle2, Monitor, User } from 'lucide-react';
 import { db, transposeContent } from './ShowPadCore';
 
 export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, styles }) => {
@@ -16,7 +16,7 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
 
   useEffect(() => { 
     db.my_bands.toArray().then(setMyBands); 
-    setConfirmDelete(false); // Reseta a trava ao trocar de música
+    setConfirmDelete(false); 
   }, [item.data.id]);
 
   const save = async () => {
@@ -33,21 +33,39 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
     if (item.type === 'song') await db.songs.delete(item.data.id);
     else await db.setlists.delete(item.data.id);
     refresh();
-    onClose(); // Fecha o editor após excluir
+    onClose();
   };
 
   return (
     <div style={styles.mainEditor}>
       <div style={styles.editorHeader}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', width: '100%'}}>
-            <div style={{flex:1}}>
-                <span style={{fontSize:'10px', color:'#007aff', fontWeight:'bold', textTransform:'uppercase'}}>
-                    {item.type === 'song' ? 'Edição de Música' : 'Edição de Show'}
-                </span>
-                <input style={styles.hInput} value={lT} onChange={e => setLT(e.target.value)} onBlur={save} placeholder="Título..."/>
+            <div style={{flex:1, display:'flex', flexDirection:'column', gap:'8px'}}>
+                {/* ÁREA DE TÍTULO */}
+                <div>
+                    <span style={{fontSize:'10px', color:'#007aff', fontWeight:'bold', textTransform:'uppercase'}}>Título</span>
+                    <input style={styles.hInput} value={lT} onChange={e => setLT(e.target.value)} onBlur={save} placeholder="Título..."/>
+                </div>
+
+                {/* CAMPO ARTISTA - EXCLUSIVO PARA MÚSICAS */}
+                {item.type === 'song' && (
+                    <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                        <User size={12} color="#34c759" />
+                        <div style={{flex:1}}>
+                            <span style={{fontSize:'10px', color:'#34c759', fontWeight:'bold', textTransform:'uppercase', display:'block'}}>Artista / Banda</span>
+                            <input 
+                                style={{...styles.artistInput, borderBottom: '1px solid #333', padding: '2px 0', width: '100%'}} 
+                                value={lA} 
+                                onChange={e => setLA(e.target.value)} 
+                                onBlur={save} 
+                                placeholder="Nome do artista..."
+                            />
+                        </div>
+                    </div>
+                )}
             </div>
             
-            {/* GATILHO DE EXCLUSÃO COM TRAVA DE SEGURANÇA */}
+            {/* TRAVA DE SEGURANÇA PARA EXCLUSÃO */}
             <button 
                 onClick={() => confirmDelete ? handleDelete() : setConfirmDelete(true)}
                 onMouseLeave={() => setConfirmDelete(false)}
@@ -66,11 +84,11 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
                 }}
             >
                 <Trash2 size={18}/>
-                {confirmDelete && <span style={{fontSize:'10px', fontWeight:'bold'}}>EXCLUIR DEFINITIVAMENTE?</span>}
+                {confirmDelete && <span style={{fontSize:'10px', fontWeight:'bold'}}>CONFIRMA EXCLUSÃO?</span>}
             </button>
         </div>
 
-        <div style={styles.btnGroup}>
+        <div style={{...styles.btnGroup, marginTop: '10px'}}>
           <button style={styles.exportBtn} onClick={() => triggerDL({songs:[{...item.data, content:lC, title:lT, artist:lA}]}, `Musica_${lT}.json`)}>EXPORTAR</button>
           {item.type === 'song' && (
             <>
