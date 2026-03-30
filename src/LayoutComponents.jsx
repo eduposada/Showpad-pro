@@ -23,23 +23,12 @@ export const Header = ({ midiFlash, midiStatus, session, triggerDL, setShowSetti
 export const Sidebar = ({ view, setView, sortBy, setSortBy, songs, setlists, selectedItem, setSelectedItem, setShowMode, refreshData, styles }) => {
   const [confirmDelete, setConfirmDelete] = useState(null);
 
-  // Função ajustada para "furar" o bloqueio do Web MIDI Browser
-  const handleDelete = async (e, item) => {
-    // e.preventDefault() aqui evita que o navegador trate o toque como scroll
-    if (e.cancelable) e.preventDefault();
-    e.stopPropagation();
-
-    if (confirmDelete === item.id) {
-      if (view === 'library') await db.songs.delete(item.id);
-      else await db.setlists.delete(item.id);
-      refreshData();
-      setSelectedItem(null);
-      setConfirmDelete(null);
-    } else {
-      setConfirmDelete(item.id);
-      // Mantém o botão "armado" por 4 segundos
-      setTimeout(() => setConfirmDelete(null), 4000);
-    }
+  const executeDelete = async (id) => {
+    if (view === 'library') await db.songs.delete(id);
+    else await db.setlists.delete(id);
+    refreshData();
+    setSelectedItem(null);
+    setConfirmDelete(null);
   };
 
   return (
@@ -63,45 +52,67 @@ export const Sidebar = ({ view, setView, sortBy, setSortBy, songs, setlists, sel
         </div>
       )}
 
-      <div style={styles.listArea}>
+      <div style={{...styles.listArea, WebkitOverflowScrolling: 'touch'}}>
         {(view==='library' || view==='setlists') ? (view==='library'?songs:setlists).map(item => (
-          <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}>
+          <div key={item.id} 
+               style={{
+                 ...(selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem),
+                 position: 'relative',
+                 display: 'flex',
+                 justifyContent: 'space-between',
+                 alignItems: 'center',
+                 userSelect: 'none',
+                 WebkitUserSelect: 'none'
+               }}>
+            
+            {/* ÁREA DE SELEÇÃO: Otimizada para iPad */}
             <div 
-              style={{flex:1, overflow:'hidden', cursor:'pointer', padding: '5px 0'}} 
-              onPointerDown={() => { setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setConfirmDelete(null); }}
+              style={{flex: 1, height: '100%', padding: '10px 0', cursor: 'pointer', zIndex: 1}} 
+              onPointerUp={() => { setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setConfirmDelete(null); }}
             >
               <strong style={{display:'block', color:'#fff'}}>{item.title}</strong>
               <small style={styles.artistYellow}>{item.artist || item.location || "---"}</small>
             </div>
-            <div style={{display:'flex', gap:'12px', alignItems:'center', paddingRight: '10px'}}>
+            
+            {/* ÁREA DE COMANDO: Botões com Z-Index alto e área de toque expandida */}
+            <div style={{display:'flex', gap:'15px', alignItems:'center', zIndex: 10, pointerEvents: 'auto'}}>
               <button 
-                style={{background:'none', border:'none', color:'#007aff', cursor:'pointer', padding:'8px'}} 
-                onPointerDown={(e) => { e.stopPropagation(); setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}
+                onPointerUp={(e) => { e.stopPropagation(); setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}
+                style={{background:'none', border:'none', color:'#007aff', padding:'12px'}}
               >
-                <Monitor size={20}/>
+                <Monitor size={22}/>
               </button>
               
               <button 
-                // onPointerDown é o segredo para o iPad 8 reagir na hora
-                onPointerDown={(e) => handleDelete(e, item)}
+                onPointerUp={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  if (confirmDelete === item.id) {
+                    executeDelete(item.id);
+                  } else {
+                    setConfirmDelete(item.id);
+                    setTimeout(() => setConfirmDelete(null), 4000);
+                  }
+                }}
                 style={{
-                  background: confirmDelete === item.id ? '#ff3b30' : 'none', 
-                  border: confirmDelete === item.id ? '1px solid #fff' : 'none', 
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  color: confirmDelete === item.id ? '#fff' : '#444',
-                  padding: '8px',
+                  backgroundColor: confirmDelete === item.id ? '#ff3b30' : 'rgba(255,255,255,0.05)', 
+                  border: confirmDelete === item.id ? '2px solid #fff' : '1px solid #333',
+                  borderRadius: '8px',
+                  color: confirmDelete === item.id ? '#fff' : '#666',
+                  padding: '10px',
+                  width: '45px',
+                  height: '45px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  touchAction: 'none' // Bloqueia gestos nativos do navegador neste botão
+                  touchAction: 'none'
                 }}
               >
                 {confirmDelete === item.id ? <Trash2 size={24} strokeWidth={3} /> : <Trash2 size={20}/>}
               </button>
             </div>
           </div>
-        )) : <div style={{padding:'20px', color:'#888', fontSize:'12px', textAlign:'center'}}>Aba ativa no painel central.</div>}
+        )) : <div style={{padding:'20px', color:'#888', textAlign:'center'}}>Menu Central Ativo.</div>}
       </div>
     </div>
   );
