@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Music, Settings, Zap, LogOut, Save, FileUp, Monitor, Trash2, SortAsc, UserRound } from 'lucide-react';
-import { supabase, db } from './ShowPadCore'; // Ajustei para o nome do seu arquivo de motor
+import { supabase, db } from './ShowPadCore'; 
 
 export const Header = ({ midiFlash, midiStatus, session, triggerDL, setShowSettings, songs, setlists, styles }) => (
   <header style={styles.mainHeader}>
@@ -21,11 +21,14 @@ export const Header = ({ midiFlash, midiStatus, session, triggerDL, setShowSetti
 );
 
 export const Sidebar = ({ view, setView, sortBy, setSortBy, songs, setlists, selectedItem, setSelectedItem, setShowMode, refreshData, styles }) => {
-  // Estado para controle de exclusão segura sem pop-up
   const [confirmDelete, setConfirmDelete] = useState(null);
 
+  // Função ajustada para "furar" o bloqueio do Web MIDI Browser
   const handleDelete = async (e, item) => {
+    // e.preventDefault() aqui evita que o navegador trate o toque como scroll
+    if (e.cancelable) e.preventDefault();
     e.stopPropagation();
+
     if (confirmDelete === item.id) {
       if (view === 'library') await db.songs.delete(item.id);
       else await db.setlists.delete(item.id);
@@ -34,15 +37,15 @@ export const Sidebar = ({ view, setView, sortBy, setSortBy, songs, setlists, sel
       setConfirmDelete(null);
     } else {
       setConfirmDelete(item.id);
-      // "Desarma" o botão após 3 segundos
-      setTimeout(() => setConfirmDelete(null), 3000);
+      // Mantém o botão "armado" por 4 segundos
+      setTimeout(() => setConfirmDelete(null), 4000);
     }
   };
 
   return (
     <div style={styles.sidebar}>
       <div style={styles.navTabs}>
-        {['library', 'setlists', 'garimpo', 'bands'].map(v => (
+        {['library', 'setlists', 'bands', 'garimpo'].map(v => (
           <button 
             key={v} 
             onClick={() => { setView(v); setConfirmDelete(null); }} 
@@ -63,24 +66,38 @@ export const Sidebar = ({ view, setView, sortBy, setSortBy, songs, setlists, sel
       <div style={styles.listArea}>
         {(view==='library' || view==='setlists') ? (view==='library'?songs:setlists).map(item => (
           <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}>
-            <div style={{flex:1, overflow:'hidden', cursor:'pointer'}} onClick={() => { setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setConfirmDelete(null); }}>
+            <div 
+              style={{flex:1, overflow:'hidden', cursor:'pointer', padding: '5px 0'}} 
+              onPointerDown={() => { setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setConfirmDelete(null); }}
+            >
               <strong style={{display:'block', color:'#fff'}}>{item.title}</strong>
               <small style={styles.artistYellow}>{item.artist || item.location || "---"}</small>
             </div>
-            <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
-              <button style={{background:'none', border:'none', color:'#007aff', cursor:'pointer'}} onClick={(e) => { e.stopPropagation(); setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={18}/></button>
+            <div style={{display:'flex', gap:'12px', alignItems:'center', paddingRight: '10px'}}>
+              <button 
+                style={{background:'none', border:'none', color:'#007aff', cursor:'pointer', padding:'8px'}} 
+                onPointerDown={(e) => { e.stopPropagation(); setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}
+              >
+                <Monitor size={20}/>
+              </button>
               
               <button 
-                onClick={(e) => handleDelete(e, item)}
+                // onPointerDown é o segredo para o iPad 8 reagir na hora
+                onPointerDown={(e) => handleDelete(e, item)}
                 style={{
-                  background: 'none', 
-                  border: 'none', 
+                  background: confirmDelete === item.id ? '#ff3b30' : 'none', 
+                  border: confirmDelete === item.id ? '1px solid #fff' : 'none', 
+                  borderRadius: '6px',
                   cursor: 'pointer',
-                  color: confirmDelete === item.id ? '#ff3b30' : '#444',
-                  transition: 'all 0.2s'
+                  color: confirmDelete === item.id ? '#fff' : '#444',
+                  padding: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  touchAction: 'none' // Bloqueia gestos nativos do navegador neste botão
                 }}
               >
-                {confirmDelete === item.id ? <Trash2 size={22} strokeWidth={3} /> : <Trash2 size={18}/>}
+                {confirmDelete === item.id ? <Trash2 size={24} strokeWidth={3} /> : <Trash2 size={20}/>}
               </button>
             </div>
           </div>
