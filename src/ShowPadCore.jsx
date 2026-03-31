@@ -7,6 +7,7 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
 export const db = new Dexie('ShowPadProWeb');
+// Mantendo a versão 11 conforme seu arquivo original
 db.version(11).stores({ 
     songs: '++id, title, artist, creator_id, band_id', 
     setlists: '++id, title, location, time, members, notes, creator_id, band_id',
@@ -58,18 +59,20 @@ export const triggerDL = (data, filename) => {
     URL.revokeObjectURL(url);
 };
 
-// --- NUVEM: UPLOAD E DOWNLOAD INTEGRAL (CIRURGIA FINAL) ---
+// --- NUVEM: UPLOAD E DOWNLOAD INTEGRAL (REVISADO PARA BPM E NOTAS) ---
 
 export const pushToCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
     
-    // 1. MÚSICAS
+    // 1. MÚSICAS (Adicionados BPM e NOTES)
     const localSongs = await db.songs.toArray();
     if (localSongs.length > 0) {
         const songsPayload = localSongs.map(s => ({ 
             title: String(s.title || ""), 
             artist: String(s.artist || ""), 
             content: String(s.content || ""), 
+            notes: String(s.notes || ""), // NOVO
+            bpm: Number(s.bpm || 120),    // NOVO
             creator_id: userId,
             band_id: s.band_id || null
         }));
@@ -86,7 +89,7 @@ export const pushToCloud = async (userId) => {
             members: String(sl.members || ""),
             notes: String(sl.notes || ""),
             creator_id: userId,
-            songs: Array.isArray(sl.songs) ? sl.songs : [], // Envia o array de músicas para a coluna JSONB
+            songs: Array.isArray(sl.songs) ? sl.songs : [], 
             band_id: sl.band_id || null
         }));
 
@@ -104,10 +107,11 @@ export const pullFromCloud = async (userId) => {
     if (cSongs) {
         for (let s of cSongs) {
             const ex = await db.songs.where({title: s.title, artist: s.artist}).first();
-            const { id, ...cleanSong } = s; // Remove o ID do Supabase para não brigar com o Dexie
+            const { id, ...cleanSong } = s; 
             if (!ex) {
                 await db.songs.add(cleanSong);
             } else {
+                // O update aqui já incluirá bpm e notes vindo do Supabase
                 await db.songs.update(ex.id, cleanSong);
             }
         }
@@ -118,7 +122,7 @@ export const pullFromCloud = async (userId) => {
     if (cSetlists) {
         for (let sl of cSetlists) {
             const ex = await db.setlists.where({title: sl.title}).first();
-            const { id, ...cleanSetlist } = sl; // Remove o ID do Supabase
+            const { id, ...cleanSetlist } = sl; 
             if (!ex) {
                 await db.setlists.add(cleanSetlist);
             } else {
