@@ -25,6 +25,12 @@ export const styles = {
     artistInput: { fontSize: '14px', background: 'none', border: 'none', color: '#34c759', outline:'none', width:'100%', fontWeight:'bold' },
     mainTextArea: { flex: 1, background: '#000', color: '#FFF', border: 'none', padding: '25px', fontSize: '18px', fontFamily: 'monospace', outline: 'none', resize: 'none', lineHeight: '1.6', overflowY: 'auto', boxSizing: 'border-box' },
 
+    // NOVOS ESTILOS PARA BPM E NOTAS (OFICINA)
+    bpmControlGroup: { display: 'flex', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: '6px', border: '1px solid #444', padding: '2px 6px', gap: '4px' },
+    bpmDisplay: { color: '#007aff', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold', minWidth: '35px', textAlign: 'center' },
+    bpmBtnSmall: { background: 'none', border: 'none', color: '#888', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2px' },
+    notesTextArea: { width: '100%', backgroundColor: '#111', color: '#FFD700', border: '1px dashed #444', borderRadius: '6px', padding: '10px', fontSize: '12px', outline: 'none', resize: 'none', marginTop: '10px', boxSizing: 'border-box', fontFamily: 'sans-serif' },
+
     // --- MIDI BADGES ---
     midiBadgeOn: { backgroundColor: '#1a332a', color: '#34c759', padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' },
     midiBadgeOff: { backgroundColor: '#331a1a', color: '#ff3b30', padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' },
@@ -40,7 +46,7 @@ export const styles = {
     settingsLabel: { fontSize: '11px', color: '#007aff', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '10px', display: 'block' },
     midiSignalBox: { backgroundColor: '#000', padding: '15px', borderRadius: '8px', textAlign: 'center', border: '1px solid #007aff', color: '#007aff', fontFamily: 'monospace', fontSize: '20px', fontWeight: 'bold' },
 
-    // --- TABELA DE BANDAS (RESTAURADA) ---
+    // --- TABELA DE BANDAS ---
     tableHeader: { display: 'flex', padding: '10px 15px', borderBottom: '2px solid #333', color: '#888', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', backgroundColor: '#111' },
     tableRow: { display: 'flex', padding: '15px', borderBottom: '1px solid #333', alignItems: 'center', color: '#fff' },
     colName: { flex: 2, fontWeight: 'bold' },
@@ -50,19 +56,14 @@ export const styles = {
     // --- GARIMPO PANEL ---
     garimpoPanel: { padding: '40px', display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#000', color: '#fff' },
     showLabel: { color: '#666', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '4px', display: 'block' },
-    whiteInputLarge: { backgroundColor: '#FFF', color: '#000', padding: '10px 12px', borderRadius: '6px', fontSize: '16px', fontWeight: 'bold', width: '100%', border: 'none', outline: 'none' },
-    whiteInputMedium: { backgroundColor: '#FFF', color: '#000', padding: '8px 10px', borderRadius: '5px', fontSize: '14px', fontWeight: 'bold', width: '100%', border: 'none', outline: 'none' },
 
     // --- BOTÕES E COMPONENTES ---
-    btnGroup: { display: 'flex', gap: '8px', alignItems:'center', padding: '10px 0' },
+    btnGroup: { display: 'flex', gap: '8px', alignItems:'center', padding: '10px 0', flexWrap: 'wrap' },
     saveBtn: { padding: '10px 15px', backgroundColor: '#34c759', border: 'none', borderRadius: '6px', color: '#fff', fontWeight: 'bold', fontSize:'12px', cursor:'pointer' },
-    showBtn: { padding: '10px 15px', backgroundColor: '#ff3b30', border: 'none', borderRadius: '6px', color: '#fff', fontWeight: 'bold', fontSize:'12px', cursor:'pointer' },
+    showBtn: { padding: '10px 15px', backgroundColor: '#ff3b30', border: 'none', borderRadius: '6px', color: '#fff', fontWeight: 'bold', fontSize:'12px', cursor:'pointer', display:'flex', alignItems:'center' },
     transpBtn: { padding: '8px 12px', border: '1px solid #555', borderRadius: '5px', background: 'none', color: '#fff', cursor: 'pointer', fontSize:'11px' },
     exportBtn: { padding: '8px 12px', backgroundColor: '#444', border: 'none', borderRadius: '5px', color: '#fff', cursor: 'pointer', fontSize:'11px' },
     
-    listActionBtnShow: { background: 'none', border: 'none', color: '#007aff', cursor: 'pointer', padding: '5px' },
-    listActionBtnDelete: { background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: '5px' },
-
     // SETLIST E SHOW MODE
     setlistSplit: { display: 'flex', flex: 1, gap: '20px', padding: '20px', overflow: 'hidden' },
     setlistHalf: { flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '15px', border: '1px solid #333', borderRadius: '15px', backgroundColor: '#1c1c1e' },
@@ -71,6 +72,4 @@ export const styles = {
     showOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 2000, display: 'flex', flexDirection: 'column' },
     showToolbar: { padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1c1c1e', borderBottom:'1px solid #333', height: '60px' },
     showContent: { flex: 1, overflowY: 'auto', padding: '30px', textAlign: 'left', backgroundColor: '#000', color:'#fff' },
-    scrollList: { flex: 1, overflowY: 'auto', backgroundColor: '#000', borderRadius: '12px', padding: '0', marginBottom: '20px', border: '1px solid #333' },
-    empty: { flex: 1, display: 'flex', flexDirection:'column', justifyContent: 'center', alignItems: 'center', color: '#333' },
 };
