@@ -71,7 +71,6 @@ export default function App() {
     } catch (e) { console.error("Erro ao atualizar dados:", e); }
   };
 
-  // CORREÇÃO DO LOCALHOST PARA EVITAR TRAVAMENTOS NA VERCEL
   const checkServer = () => {
     if (window.location.hostname === "localhost") {
       fetch('http://localhost:3001/ping')
@@ -98,28 +97,43 @@ export default function App() {
     setIsScraping(false);
   };
 
+  // VERSÃO ULTRA-COMPATÍVEL PARA MIDI (FOCO IPAD MINI 2)
   const initMidi = () => {
     WebMidi.enable({ sysex: true }).then(() => {
-      const upd = () => {
-        const ins = WebMidi.inputs.filter(i => i.name.indexOf("IAC") === -1);
+      const updateMidi = () => {
+        const ins = WebMidi.inputs;
         setAllInputs(ins.map(i => i.name));
         setMidiStatus(ins.length > 0 ? "ready" : "nodevice");
+        
         ins.forEach(input => {
           input.removeListener();
           input.addListener("midimessage", e => {
             const st = e.data[0], d1 = e.data[1], d2 = e.data[2];
+            // Captura Note On (com volume) ou Control Change (Pedais)
             if ((st >= 144 && st <= 159 && d2 > 0) || (st >= 176 && st <= 191)) {
               const sig = (st >= 144 && st <= 159 ? "note" : "cc") + "-" + d1;
-              setMidiFlash(true); setLastSignalUI(sig); setTimeout(() => { setMidiFlash(false); setLastSignalUI(""); }, 1500);
-              if (midiLearningRef.current) { localStorage.setItem("midi-" + midiLearningRef.current, sig); setMidiLearning(null); return; }
+              setMidiFlash(true); 
+              setLastSignalUI(sig); 
+              setTimeout(() => { setMidiFlash(false); setLastSignalUI(""); }, 1000);
+              
+              if (midiLearningRef.current) { 
+                localStorage.setItem("midi-" + midiLearningRef.current, sig); 
+                setMidiLearning(null); 
+                return; 
+              }
               if (sig === localStorage.getItem('midi-up')) scrollPage(-1);
               if (sig === localStorage.getItem('midi-down')) scrollPage(1);
             }
           });
         });
       };
-      upd(); WebMidi.addListener("connected", upd);
-    }).catch(() => setMidiStatus("blocked"));
+      updateMidi();
+      WebMidi.addListener("connected", updateMidi);
+      WebMidi.addListener("disconnected", updateMidi);
+    }).catch(err => {
+      console.warn("MIDI bloqueado ou não suportado:", err);
+      setMidiStatus("blocked");
+    });
   };
 
   const scrollPage = (d) => { if (showScrollRef.current) showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * d, behavior: 'smooth' }); };
