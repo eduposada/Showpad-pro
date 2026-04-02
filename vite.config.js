@@ -1,13 +1,23 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import legacy from '@vitejs/plugin-legacy'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    legacy({
+      // Define os alvos: navegadores com mais de 1% de uso ou versões específicas
+      targets: ['defaults', 'not IE 11', 'ios >= 12'],
+      // Garante que o Polyfill (tradutor de funções novas) seja incluído
+      additionalLegacyPolyfills: ['regenerator-runtime/runtime']
+    })
+  ],
   build: {
-    // Define o alvo para navegadores de 2015 (compatível com iPad Mini 2 / iOS 12)
     target: 'es2015', 
-    cssTarget: 'chrome61', // Garante que o visual (CSS) também não quebre
-    minify: 'terser', // Usa um tradutor mais robusto para códigos antigos
+    cssTarget: 'chrome61',
+    minify: 'terser',
+    // Esta opção ajuda a evitar erros de carregamento em redes oscilantes
+    chunkSizeWarningLimit: 1000,
   }
 })

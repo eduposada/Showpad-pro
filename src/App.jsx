@@ -71,16 +71,16 @@ export default function App() {
     } catch (e) { console.error("Erro ao atualizar dados:", e); }
   };
 
-  const checkServer = () => {
-    fetch('http://localhost:3001/ping').then(r => setIsServerOnline(r.ok)).catch(() => setIsServerOnline(false));
-  };
-
-  const handleCloudPush = async () => {
-    if (!session) return;
-    setIsScraping(true);
-    try { await pushToCloud(session.user.id); alert("ShowPad Cloud: Backup salvo!"); } 
-    catch (e) { alert("Erro ao subir: " + e.message); }
-    setIsScraping(false);
+const checkServer = () => {
+    // Só tenta o fetch se estiver rodando em localhost (seu Mac)
+    if (window.location.hostname === "localhost") {
+      fetch('http://localhost:3001/ping')
+        .then(r => setIsServerOnline(r.ok))
+        .catch(() => setIsServerOnline(false));
+    } else {
+      // Se estiver na Vercel/Internet, assume que o server local está offline
+      setIsServerOnline(false);
+    }
   };
 
   const handleCloudPull = async () => {
