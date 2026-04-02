@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { WebMidi } from 'webmidi';
 import { 
-  Plus, Music, Trash2, FileUp, Save, Monitor, Settings, Zap, 
-  LogOut, SortAsc, UserRound, ChevronLeft, Cloud, RefreshCw 
+  Plus, Music, Trash2, Save, Monitor, Settings, Zap, 
+  LogOut, SortAsc, UserRound, Cloud, RefreshCw 
 } from 'lucide-react';
 
 // Importação dos módulos
@@ -71,16 +71,23 @@ export default function App() {
     } catch (e) { console.error("Erro ao atualizar dados:", e); }
   };
 
-const checkServer = () => {
-    // Só tenta o fetch se estiver rodando em localhost (seu Mac)
+  // CORREÇÃO DO LOCALHOST PARA EVITAR TRAVAMENTOS NA VERCEL
+  const checkServer = () => {
     if (window.location.hostname === "localhost") {
       fetch('http://localhost:3001/ping')
         .then(r => setIsServerOnline(r.ok))
         .catch(() => setIsServerOnline(false));
     } else {
-      // Se estiver na Vercel/Internet, assume que o server local está offline
       setIsServerOnline(false);
     }
+  };
+
+  const handleCloudPush = async () => {
+    if (!session) return;
+    setIsScraping(true);
+    try { await pushToCloud(session.user.id); alert("ShowPad Cloud: Backup salvo!"); } 
+    catch (e) { alert("Erro ao subir: " + e.message); }
+    setIsScraping(false);
   };
 
   const handleCloudPull = async () => {
@@ -155,12 +162,11 @@ const checkServer = () => {
             <button style={styles.headerBtn} onClick={handleCloudPush}><Cloud size={14}/> SUBIR</button>
             <button style={styles.headerBtn} onClick={handleCloudPull}><RefreshCw size={14}/> BAIXAR</button>
             <button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup.json")}>BACKUP</button>
-            <button onClick={() => setShowSettings(true)} style={styles.infoBtn}><Settings size={22}/></button>
-            <button onClick={() => supabase.auth.signOut()} style={styles.logoutBtn}><LogOut size={20}/></button>
+            <button onClick={() => setShowSettings(true)} style={{background:'none', border:'none', cursor:'pointer', color:'#fff'}}><Settings size={22}/></button>
+            <button onClick={() => supabase.auth.signOut()} style={{background:'none', border:'none', cursor:'pointer', color:'#ff3b30'}}><LogOut size={20}/></button>
         </div>
       </header>
 
-      {/* contentBody garante que Sidebar e Editor fiquem lado a lado corretamente */}
       <div style={{ display:'flex', flex: 1, overflow:'hidden', width: '100%' }}>
         <div style={styles.sidebar}>
           <div style={styles.navTabs}>
@@ -179,8 +185,8 @@ const checkServer = () => {
                     <small style={styles.artistYellow}>{item.artist || item.location || "---"}</small>
                 </div>
                 <div style={{display:'flex', gap:'6px'}}>
-                    <button style={styles.listActionBtnShow} onClick={(e) => { e.stopPropagation(); setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={16}/></button>
-                    <button style={styles.listActionBtnDelete} onClick={async (e) => { e.stopPropagation(); if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={16}/></button>
+                    <div style={{cursor:'pointer'}} onClick={(e) => { e.stopPropagation(); setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={20} color="#007aff"/></div>
+                    <div style={{cursor:'pointer'}} onClick={async (e) => { e.stopPropagation(); if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={20} color="#444"/></div>
                 </div>
               </div>
             )) : <div style={{padding:'20px', color:'#888', fontSize:'11px', textAlign:'center'}}>Menu Ativo no Painel Central.</div>}
