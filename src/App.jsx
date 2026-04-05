@@ -5,8 +5,9 @@ import {
   LogOut, UserRound, Cloud, RefreshCw, Activity, Users 
 } from 'lucide-react';
 
-// IMPORTANTE: Incluí o 'supabase' abaixo para resolver o erro de tela branca
-import { db, triggerDL, pushToCloud, pullFromCloud, supabase } from './ShowPadCore';
+// IMPORTAÇÃO BLINDADA: supabase deve ser um dos primeiros
+import { supabase, db, triggerDL, pushToCloud, pullFromCloud } from './ShowPadCore';
+
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
 import { SettingsView } from './SettingsView';
@@ -37,10 +38,21 @@ export default function App() {
   const midiLearningRef = useRef(null);
   const showScrollRef = useRef(null);
 
+  // Efeito para Gerenciamento de Sessão (Blindado contra Undefined)
   useEffect(() => {
-    if (supabase) {
-      supabase.auth.getSession().then((res) => { if (res.data) setSession(res.data.session); });
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    const checkSession = async () => {
+      if (supabase && supabase.auth) {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session) setSession(data.session);
+      }
+    };
+    
+    checkSession();
+
+    if (supabase && supabase.auth) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+        setSession(s);
+      });
       return () => subscription.unsubscribe();
     }
   }, []);
@@ -55,17 +67,19 @@ export default function App() {
     try {
         const s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
-        const bands = await db.bands.toArray();
         
         // Criar Banda Solo se não existir
-        if (session && !bands.find(b => b.is_solo)) {
-            const soloName = `${session.user.user_metadata?.full_name || 'Edu'} (Solo)`;
-            await db.bands.add({
-                name: soloName,
-                is_solo: true,
-                members: [session.user.email],
-                creator_id: session.user.id
-            });
+        if (session) {
+            const bands = await db.bands.toArray();
+            if (!bands.find(b => b.is_solo)) {
+                const soloName = `${session.user.user_metadata?.full_name || 'Edu'} (Solo)`;
+                await db.bands.add({
+                    name: soloName,
+                    is_solo: true,
+                    members: [session.user.email],
+                    creator_id: session.user.id
+                });
+            }
         }
 
         s.sort((a,b) => {
@@ -155,6 +169,7 @@ export default function App() {
     reader.readAsText(e.target.files[0]);
   };
 
+  // Se não houver sessão ou supabase estiver carregando
   if (!session) return <AuthView styles={styles} />;
 
   return (
