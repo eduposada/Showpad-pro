@@ -22,7 +22,7 @@ export const GarimpoView = ({ styles, refresh, session }) => {
                 const nomeMusica = url.split('/').filter(x => x).pop() || "música";
                 setStatus(`Extraindo: ${nomeMusica}...`);
                 
-                // Chamada para a Serverless Function na Vercel
+                // Chamada para a Serverless Function na Vercel (Independente do Mac)
                 const response = await fetch('/api/scrape', { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
@@ -34,9 +34,11 @@ export const GarimpoView = ({ styles, refresh, session }) => {
                 const song = await response.json();
                 
                 if (song.title) {
+                    // Adicionando BPM padrão para evitar erros no Modo Show
                     await db.songs.add({ 
                         ...song, 
                         notes: "", 
+                        bpm: 120,
                         creator_id: session.user.id 
                     });
                 }
@@ -46,20 +48,25 @@ export const GarimpoView = ({ styles, refresh, session }) => {
             }
         }
 
-        setIsScraping(false); 
+        setIsScraping(true); // Manter o loader por um breve momento
         setStatus("✅ Concluído!"); 
         setGarimpoQueue([]); 
-        refresh(); // Atualiza a lista na lateral esquerda
+        refresh(); // Sincroniza a lista lateral
         
-        // Limpa o status após 3 segundos
-        setTimeout(() => setStatus(""), 3000);
+        setTimeout(() => {
+            setIsScraping(false);
+            setStatus("");
+        }, 2000);
     };
 
     return (
         <div style={styles.garimpoPanel}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
                 <h2 style={{margin:0, color:'#007aff'}}>GARIMPO DE CIFRAS</h2>
-                <span style={{fontSize:'10px', color:'#888'}}>{status}</span>
+                <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                    {isScraping && <Loader2 size={14} className="spin" color="#007aff" />}
+                    <span style={{fontSize:'11px', color:'#888', fontWeight:'bold'}}>{status}</span>
+                </div>
             </div>
 
             <p style={{fontSize:'12px', color:'#aaa', marginBottom:'15px'}}>
@@ -72,8 +79,15 @@ export const GarimpoView = ({ styles, refresh, session }) => {
                     placeholder="Cole a URL aqui..." 
                     value={garimpoInput} 
                     onChange={e => setGarimpoInput(e.target.value)}
+                    onKeyPress={e => {
+                        if (e.key === 'Enter' && garimpoInput) {
+                            setGarimpoQueue([...garimpoQueue, garimpoInput]);
+                            setGarimpoInput("");
+                        }
+                    }}
                 />
                 <button 
+                    title="Colar do Clipboard"
                     style={{...styles.headerBtn, height:'100%', padding:'0 15px'}} 
                     onClick={async () => {
                         try {
@@ -105,7 +119,7 @@ export const GarimpoView = ({ styles, refresh, session }) => {
                 ) : (
                     garimpoQueue.map((url, i) => (
                         <div key={i} style={styles.miniItemGarimpo}>
-                            <span style={{color: '#FFFFFF', fontSize:'12px', overflow:'hidden', textOverflow:'ellipsis'}}>
+                            <span style={{color: '#FFFFFF', fontSize:'12px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'85%'}}>
                                 {url.split('/').filter(x => x).pop()}
                             </span>
                             <X 
@@ -123,12 +137,13 @@ export const GarimpoView = ({ styles, refresh, session }) => {
                 style={{
                     ...styles.wideGreenBtn, 
                     opacity: (garimpoQueue.length > 0 && !isScraping) ? 1 : 0.5,
-                    cursor: (garimpoQueue.length > 0 && !isScraping) ? 'pointer' : 'not-allowed'
+                    cursor: (garimpoQueue.length > 0 && !isScraping) ? 'pointer' : 'not-allowed',
+                    marginTop: '20px'
                 }} 
                 onClick={handleGarimpo} 
                 disabled={isScraping || garimpoQueue.length === 0}
             >
-                {isScraping ? <Loader2 className="spin" size={20}/> : "PROCESSAR E SALVAR NA BIBLIOTECA"}
+                {isScraping ? "PROCESSANDO..." : `SALVAR ${garimpoQueue.length} MÚSICA(S) NA BIBLIOTECA`}
             </button>
         </div>
     );
