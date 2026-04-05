@@ -44,6 +44,17 @@ export const styles = {
     drawerItem: { padding: '15px 20px', borderBottom: '1px solid #222', cursor: 'pointer', color: '#888', fontSize: '14px' },
     drawerItemActive: { padding: '15px 20px', borderBottom: '1px solid #333', cursor: 'pointer', color: '#fff', backgroundColor: '#007aff22', borderLeft: '5px solid #007aff', fontSize: '14px', fontWeight: 'bold' },
     
+    // --- NOVO VISUAL DE CONFIGURAÇÕES (FLUTUANTE PREMIUM) ---
+    settingsOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', zIndex: 5000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' },
+    settingsCard: { backgroundColor: '#1c1c1e', borderRadius: '24px', width: '90%', maxWidth: '480px', maxHeight: '90vh', border: '1px solid #333', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 40px rgba(0,0,0,0.6)', overflow: 'hidden' },
+    settingsHeader: { padding: '20px 30px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#2c2c2e' },
+    settingsTitle: { fontSize: '18px', fontWeight: '800', color: '#fff', margin: 0, letterSpacing: '-0.5px' },
+    settingsContent: { padding: '30px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px' },
+    settingsSection: { backgroundColor: '#2c2c2e', borderRadius: '16px', padding: '20px', border: '1px solid #444', display: 'flex', flexDirection: 'column', gap: '12px' },
+    settingsLabel: { fontSize: '10px', color: '#007aff', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' },
+    midiSignalBox: { backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #007aff', color: '#007aff', fontFamily: 'monospace', fontSize: '18px', fontWeight: 'bold', textAlign: 'center', boxShadow: '0 0 15px rgba(0,122,255,0.2)' },
+    closeBtn: { background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+
     // --- COMPONENTES GERAIS ---
     garimpoPanel: { padding: '40px', display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#000', color: '#fff' },
     saveBtn: { padding: '10px 15px', backgroundColor: '#34c759', border: 'none', borderRadius: '6px', color: '#fff', fontWeight: 'bold', fontSize:'12px', cursor:'pointer' },
