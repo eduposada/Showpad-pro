@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Menu, Type, ChevronUp, ChevronDown, X, ChevronRight, Activity } from 'lucide-react';
+import { ChevronLeft, PanelLeftOpen, Type, ChevronUp, ChevronDown, X, ChevronRight } from 'lucide-react';
 import { formatChordsVisual } from './ShowPadCore';
 
 export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose, showScrollRef, lastSignal, styles }) => {
@@ -7,7 +7,6 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
     const songsArr = (item && item.type === 'setlist') ? (item.data.songs || []) : (item ? [item.data] : []);
     const song = songsArr[idx];
 
-    // Estilo padrão para os botões de controle (unificados)
     const controlBtnStyle = {
         width: '44px',
         height: '44px',
@@ -23,28 +22,52 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
 
     return (
         <div style={styles.showOverlay}>
-            {/* GAVETA LATERAL */}
-            {dr && (
-                <div style={styles.showDrawer}>
-                    <div style={styles.drawerHeader}>SET LIST <X onClick={() => setDr(false)} style={{ cursor: 'pointer' }} /></div>
-                    <div style={{ overflowY: 'auto', flex: 1 }}>
-                        {songsArr.map((s, i) => (
-                            <div key={i} style={idx === i ? styles.drawerItemActive : styles.drawerItem} onClick={() => { setIdx(i); setDr(false); if (showScrollRef.current) showScrollRef.current.scrollTop = 0; }}>
-                                {i + 1}. {s.title}
-                            </div>
-                        ))}
-                    </div>
+            {/* GAVETA LATERAL COM ANIMAÇÃO DE SLIDE */}
+            <div style={{
+                ...styles.showDrawer,
+                transform: dr ? 'translateX(0)' : 'translateX(-100%)',
+                visibility: dr ? 'visible' : 'hidden'
+            }}>
+                <div style={styles.drawerHeader}>
+                    SET LIST ATUAL 
+                    <X onClick={() => setDr(false)} style={{ cursor: 'pointer' }} color="#ff3b30" />
                 </div>
-            )}
+                <div style={{ overflowY: 'auto', flex: 1 }}>
+                    {songsArr.map((s, i) => (
+                        <div 
+                            key={i} 
+                            style={idx === i ? styles.drawerItemActive : styles.drawerItem} 
+                            onClick={() => { 
+                                setIdx(i); 
+                                setDr(false); 
+                                if (showScrollRef.current) showScrollRef.current.scrollTop = 0; 
+                            }}
+                        >
+                            <span style={{opacity: 0.5, marginRight: '10px'}}>{(i + 1).toString().padStart(2, '0')}</span>
+                            {s.title}
+                        </div>
+                    ))}
+                </div>
+                <div style={{padding: '20px', borderTop: '1px solid #333', fontSize: '10px', color: '#444'}}>
+                    SHOWPAD PRO HUD v2.0
+                </div>
+            </div>
 
             {/* TOOLBAR REFORMULADA */}
             <div style={{...styles.showToolbar, height: '100px', padding: '10px 20px'}}>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <button onClick={() => setDr(true)} style={controlBtnStyle}><Menu /></button>
-                    <button onClick={onClose} style={{...controlBtnStyle, width: 'auto', padding: '0 15px'}}><ChevronLeft /> Sair</button>
+                    <button 
+                        onClick={() => setDr(true)} 
+                        style={{...controlBtnStyle, backgroundColor: dr ? '#007aff' : '#2c2c2e'}}
+                    >
+                        <PanelLeftOpen />
+                    </button>
+                    <button onClick={onClose} style={{...controlBtnStyle, width: 'auto', padding: '0 15px'}}>
+                        <ChevronLeft /> Sair
+                    </button>
                 </div>
 
-                {/* BLOCO CENTRAL: TÍTULO, BANDA E BPM */}
+                {/* BLOCO CENTRAL */}
                 <div style={{ flex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                     <strong style={{ color: '#fff', fontSize: '36px', lineHeight: '1', display: 'block', textTransform: 'uppercase' }}>
                         {song ? song.title : "FIM DO SHOW"}
@@ -55,9 +78,8 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
                     {lastSignal && <div style={styles.midiProbeFloating}>MIDI: {lastSignal}</div>}
                 </div>
 
-                {/* BPM E CONTROLES PADRONIZADOS */}
+                {/* BPM E CONTROLES */}
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    {/* VISOR BPM */}
                     <div style={{ 
                         backgroundColor: '#000', 
                         border: '2px solid #007aff', 
@@ -81,7 +103,7 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
                 </div>
             </div>
 
-            {/* CONTEÚDO COM OBSERVAÇÕES */}
+            {/* CONTEÚDO */}
             <div ref={showScrollRef} style={{ ...styles.showContent, padding: '40px' }}>
                 {song && song.notes && (
                     <div style={{

@@ -143,7 +143,53 @@ export const styles = {
     setlistHalf: { flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '15px', border: '1px solid #333', borderRadius: '15px', backgroundColor: '#1c1c1e' },
     miniItemReorder: { padding: '10px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', color: '#fff' },
     reorderControls: { display:'flex', gap:'10px', alignItems:'center' },
+    
+    // --- ESTILOS SHOW MODE (CORRIGIDOS) ---
     showOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 2000, display: 'flex', flexDirection: 'column' },
     showToolbar: { padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1c1c1e', borderBottom:'1px solid #333', height: '60px' },
     showContent: { flex: 1, overflowY: 'auto', padding: '30px', textAlign: 'left', backgroundColor: '#000', color:'#fff' },
+    
+    showDrawer: { 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        width: '300px', 
+        height: '100%', 
+        backgroundColor: 'rgba(28, 28, 30, 0.95)', 
+        backdropFilter: 'blur(10px)', 
+        zIndex: 3000, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        borderRight: '1px solid #333',
+        boxShadow: '10px 0 30px rgba(0,0,0,0.5)',
+        transition: 'transform 0.3s ease-in-out'
+    },
+    drawerHeader: { 
+        padding: '20px', 
+        fontSize: '14px', 
+        fontWeight: 'bold', 
+        color: '#007aff', 
+        borderBottom: '1px solid #333', 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center' 
+    },
+    drawerItem: { 
+        padding: '15px 20px', 
+        borderBottom: '1px solid #222', 
+        cursor: 'pointer', 
+        color: '#888', 
+        fontSize: '14px', 
+        transition: 'all 0.2s' 
+    },
+    drawerItemActive: { 
+        padding: '15px 20px', 
+        borderBottom: '1px solid #333', 
+        cursor: 'pointer', 
+        color: '#fff', 
+        backgroundColor: '#007aff22', 
+        borderLeft: '5px solid #007aff', 
+        fontSize: '14px', 
+        fontWeight: 'bold' 
+    }
 };
