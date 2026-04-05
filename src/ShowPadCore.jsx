@@ -7,11 +7,12 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
 export const db = new Dexie('ShowPadProWeb');
-// Mantendo a versão 11 conforme seu arquivo original
-db.version(11).stores({ 
+
+// ATUALIZADO PARA VERSÃO 12: Padronizando 'bands' e garantindo campos de BPM e Notes
+db.version(12).stores({ 
     songs: '++id, title, artist, creator_id, band_id', 
-    setlists: '++id, title, location, time, members, notes, creator_id, band_id',
-    my_bands: 'id, name, invite_code, role'
+    setlists: '++id, name, title, band_id, creator_id', // Adicionado 'name' que usamos no novo BandsView
+    bands: '++id, name, is_solo, creator_id' // Nome padronizado para 'bands'
 });
 
 export const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -59,31 +60,26 @@ export const triggerDL = (data, filename) => {
     URL.revokeObjectURL(url);
 };
 
-// --- NUVEM: UPLOAD E DOWNLOAD INTEGRAL (REVISADO PARA BPM E NOTAS) ---
-
 export const pushToCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
-    
-    // 1. MÚSICAS (Adicionados BPM e NOTES)
     const localSongs = await db.songs.toArray();
     if (localSongs.length > 0) {
         const songsPayload = localSongs.map(s => ({ 
             title: String(s.title || ""), 
             artist: String(s.artist || ""), 
             content: String(s.content || ""), 
-            notes: String(s.notes || ""), // NOVO
-            bpm: Number(s.bpm || 120),    // NOVO
+            notes: String(s.notes || ""),
+            bpm: Number(s.bpm || 120),
             creator_id: userId,
             band_id: s.band_id || null
         }));
         await supabase.from('songs').upsert(songsPayload, { onConflict: 'title,artist,creator_id' });
     }
 
-    // 2. SHOWS (SETLISTS)
     const localSetlists = await db.setlists.toArray();
     if (localSetlists.length > 0) {
         const setlistsPayload = localSetlists.map(sl => ({
-            title: String(sl.title || "Sem Nome"),
+            title: String(sl.title || sl.name || "Sem Nome"),
             location: String(sl.location || ""),
             time: String(sl.time || ""),
             members: String(sl.members || ""),
@@ -92,42 +88,29 @@ export const pushToCloud = async (userId) => {
             songs: Array.isArray(sl.songs) ? sl.songs : [], 
             band_id: sl.band_id || null
         }));
-
-        const { error } = await supabase.from('setlists').upsert(setlistsPayload, { onConflict: 'title,creator_id' });
-        if (error) throw new Error("Erro nos Shows: " + error.message);
+        await supabase.from('setlists').upsert(setlistsPayload, { onConflict: 'title,creator_id' });
     }
     return { success: true };
 };
 
 export const pullFromCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
-
-    // Baixar Músicas
     const { data: cSongs } = await supabase.from('songs').select('*').eq('creator_id', userId);
     if (cSongs) {
         for (let s of cSongs) {
             const ex = await db.songs.where({title: s.title, artist: s.artist}).first();
             const { id, ...cleanSong } = s; 
-            if (!ex) {
-                await db.songs.add(cleanSong);
-            } else {
-                // O update aqui já incluirá bpm e notes vindo do Supabase
-                await db.songs.update(ex.id, cleanSong);
-            }
+            if (!ex) await db.songs.add(cleanSong);
+            else await db.songs.update(ex.id, cleanSong);
         }
     }
-
-    // Baixar Shows
     const { data: cSetlists } = await supabase.from('setlists').select('*').eq('creator_id', userId);
     if (cSetlists) {
         for (let sl of cSetlists) {
             const ex = await db.setlists.where({title: sl.title}).first();
             const { id, ...cleanSetlist } = sl; 
-            if (!ex) {
-                await db.setlists.add(cleanSetlist);
-            } else {
-                await db.setlists.update(ex.id, cleanSetlist);
-            }
+            if (!ex) await db.setlists.add(cleanSetlist);
+            else await db.setlists.update(ex.id, cleanSetlist);
         }
     }
     return { success: true };
