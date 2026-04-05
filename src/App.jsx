@@ -5,13 +5,13 @@ import {
   LogOut, UserRound, Cloud, RefreshCw, Activity, Users 
 } from 'lucide-react';
 
-// Importação dos módulos
-import { db, triggerDL, pushToCloud, pullFromCloud } from './ShowPadCore';
+// IMPORTANTE: Incluí o 'supabase' abaixo para resolver o erro de tela branca
+import { db, triggerDL, pushToCloud, pullFromCloud, supabase } from './ShowPadCore';
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
 import { SettingsView } from './SettingsView';
 import { AuthView } from './AuthView';
-import { BandsView } from './BandsView'; // Nome corrigido para o novo padrão plural
+import { BandsView } from './BandsView'; 
 import { GarimpoView } from './GarimpoView';
 import { styles } from './Styles';
 
@@ -55,11 +55,11 @@ export default function App() {
     try {
         const s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
-        
-        // Garantir criação da Banda Solo se não existir
-        const soloName = `${session.user.user_metadata?.full_name || 'Edu'} (Solo)`;
         const bands = await db.bands.toArray();
-        if (!bands.find(b => b.is_solo)) {
+        
+        // Criar Banda Solo se não existir
+        if (session && !bands.find(b => b.is_solo)) {
+            const soloName = `${session.user.user_metadata?.full_name || 'Edu'} (Solo)`;
             await db.bands.add({
                 name: soloName,
                 is_solo: true,
@@ -132,9 +132,7 @@ export default function App() {
       updateMidi();
       WebMidi.addListener("connected", updateMidi);
       WebMidi.addListener("disconnected", updateMidi);
-    }).catch(err => {
-      setMidiStatus("blocked");
-    });
+    }).catch(() => setMidiStatus("blocked"));
   };
 
   const scrollPage = (d) => { if (showScrollRef.current) showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * d, behavior: 'smooth' }); };
@@ -234,7 +232,6 @@ export default function App() {
                 session={session} 
                 onOpenSetlist={(sl) => {
                     setSelectedItem({ type: 'setlist', data: sl });
-                    // Não mudamos a aba, apenas abrimos o editor central
                 }} 
             />
           ) : selectedItem ? (
