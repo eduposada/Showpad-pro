@@ -71,6 +71,42 @@ export default function App() {
     } catch (e) { console.error("Erro ao atualizar dados:", e); }
   };
 
+  // FUNÇÃO CORRIGIDA: CRIA E JÁ ABRE PARA EDIÇÃO COM FOCO
+  const handleCreateNew = async () => {
+    const isSetlist = view === 'setlists';
+    const obj = isSetlist ? {
+      title: "Novo Show",
+      songs: [],
+      location: "",
+      time: "",
+      members: "",
+      notes: "",
+      creator_id: session.user.id
+    } : {
+      title: "Nova Música",
+      artist: "Artista",
+      content: "",
+      creator_id: session.user.id,
+      bpm: 120
+    };
+
+    const id = await (isSetlist ? db.setlists.add(obj) : db.songs.add(obj));
+    await refreshData();
+    
+    // Recupera o item recém criado do banco para garantir que temos o ID correto e dados limpos
+    const savedItem = await (isSetlist ? db.setlists.get(id) : db.songs.get(id));
+    setSelectedItem({ type: isSetlist ? 'setlist' : 'song', data: savedItem });
+
+    // Foco automático no input de título após renderização
+    setTimeout(() => {
+      const titleInput = document.querySelector('input[value="Nova Música"], input[value="Novo Show"], input[placeholder*="Título"]');
+      if (titleInput) {
+        titleInput.focus();
+        titleInput.select(); // Seleciona o texto para facilitar a troca do nome
+      }
+    }, 150);
+  };
+
   const checkServer = () => {
     if (window.location.hostname === "localhost") {
       fetch('http://localhost:3001/ping')
@@ -97,7 +133,6 @@ export default function App() {
     setIsScraping(false);
   };
 
-  // VERSÃO ULTRA-COMPATÍVEL PARA MIDI (FOCO IPAD MINI 2)
   const initMidi = () => {
     WebMidi.enable({ sysex: true }).then(() => {
       const updateMidi = () => {
@@ -109,7 +144,6 @@ export default function App() {
           input.removeListener();
           input.addListener("midimessage", e => {
             const st = e.data[0], d1 = e.data[1], d2 = e.data[2];
-            // Captura Note On (com volume) ou Control Change (Pedais)
             if ((st >= 144 && st <= 159 && d2 > 0) || (st >= 176 && st <= 191)) {
               const sig = (st >= 144 && st <= 159 ? "note" : "cc") + "-" + d1;
               setMidiFlash(true); 
@@ -207,7 +241,9 @@ export default function App() {
           </div>
 
           <div style={styles.sidebarFooter}>
-            {['library', 'setlists'].includes(view) && <button onClick={async () => { const obj = view==='setlists'?{title:"Novo Show", songs:[], location:"", time:"", members:"", notes:"", creator_id: session.user.id}:{title:"Nova Música", artist:"Artista", content:"", creator_id: session.user.id}; const id = await (view==='setlists'?db.setlists.add(obj):db.songs.add(obj)); refreshData(); setSelectedItem({type:view==='setlists'?'setlist':'song', data: await (view==='setlists'?db.setlists.get(id):db.songs.get(id))}); }} style={styles.addBtn}>+ NOVO</button>}
+            {['library', 'setlists'].includes(view) && (
+              <button onClick={handleCreateNew} style={styles.addBtn}>+ NOVO</button>
+            )}
           </div>
         </div>
 
