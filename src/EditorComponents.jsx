@@ -10,38 +10,45 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
   const [lTim, setLTim] = useState(item.data.time || "");
   const [lMem, setLMem] = useState(item.data.members || "");
   const [lNot, setLNot] = useState(item.data.notes || "");
-  const [lBpm, setLBpm] = useState(item.data.bpm || 120);
-  const [myBands, setMyBands] = useState([]);
-  const [selectedBand, setSelectedBand] = useState(item.data.band_id || "");
+  const [lBpm, setLBpm] = useState(parseInt(item.data.bpm, 10) || 120);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => { 
-    db.my_bands.toArray().then(setMyBands); 
     setConfirmDelete(false); 
     setLC(item.data.content || "");
     setLT(item.data.title || "");
     setLA(item.data.artist || "");
+    setLLoc(item.data.location || "");
+    setLTim(item.data.time || "");
+    setLMem(item.data.members || "");
     setLNot(item.data.notes || "");
-    setLBpm(item.data.bpm || 120);
+    setLBpm(parseInt(item.data.bpm, 10) || 120);
   }, [item.data.id]);
 
-  const save = async () => {
-    const changes = item.type === 'song' 
-        ? { content: lC, title: lT, artist: lA, notes: lNot, bpm: lBpm, band_id: selectedBand || null }
-        : { title: lT, location: lLoc, time: lTim, members: lMem };
+  const save = async (overideBpm) => {
+    const isSong = item.type === 'song';
+    const finalBpm = overideBpm !== undefined ? overideBpm : lBpm;
     
-    await (item.type === 'song' ? db.songs : db.setlists).update(item.data.id, changes);
+    const changes = isSong 
+        ? { content: lC, title: lT, artist: lA, notes: lNot, bpm: parseInt(finalBpm, 10) }
+        : { title: lT, location: lLoc, time: lTim, members: lMem, notes: lNot };
+    
+    await (isSong ? db.songs : db.setlists).update(item.data.id, changes);
     refresh();
   };
 
   const adjustBpm = (val) => {
-    const next = lBpm + val;
-    if (next >= 40 && next <= 250) setLBpm(next);
+    const next = parseInt(lBpm, 10) + val;
+    if (next >= 40 && next <= 250) {
+        setLBpm(next);
+        save(next); // Salva imediatamente com o valor correto
+    }
   };
 
   const handleTranspose = (dir) => {
     const newContent = transposeContent(lC, dir);
     setLC(newContent);
+    save();
   };
 
   if (item.type === 'setlist') {
@@ -51,16 +58,29 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
                 <input style={styles.hInput} value={lT} onChange={e=>setLT(e.target.value)} onBlur={save} placeholder="Título do Show" />
                 <div style={{display:'flex', gap:'10px'}}>
                     <input style={{...styles.artistInput, color:'#888'}} value={lLoc} onChange={e=>setLLoc(e.target.value)} onBlur={save} placeholder="Local" />
-                    <input style={{...styles.artistInput, color:'#888'}} value={lTim} onChange={e=>setLTim(e.target.value)} onBlur={save} placeholder="Data/Hora" />
+                    <input style={{...styles.artistInput, color:'#888'}} value={lTim} onChange={e=>setLTim(e.target.value)} onBlur={save} placeholder="Horário" />
                 </div>
             </div>
+            
+            <textarea 
+                style={{...styles.notesTextArea, marginBottom:'10px'}} 
+                value={lNot} 
+                onChange={e=>setLNot(e.target.value)} 
+                onBlur={save} 
+                placeholder="Observações do show, cronograma, lembretes..."
+                rows={2}
+            />
+
             <div style={styles.setlistSplit}>
                 <div style={styles.setlistHalf}>
                     <h3 style={{color:'#888', fontSize:'12px', marginBottom:'10px'}}>Músicas no Show</h3>
                     {item.data.songs?.map((s, i) => (
-                        <div key={i} style={styles.miniItemReorder}>
-                            <span>{s.title}</span>
-                            <div style={styles.reorderControls}>
+                        <div key={i} style={{display:'flex', justifyContent:'space-between', padding:'8px', borderBottom:'1px solid #222'}}>
+                            <div style={{display:'flex', flexDirection:'column'}}>
+                                <span style={{fontSize:'13px'}}>{s.title}</span>
+                                <small style={{color:'#FFD700', fontSize:'10px'}}>BPM: {s.bpm || "---"}</small>
+                            </div>
+                            <div style={{display:'flex', gap:'5px'}}>
                                 <button onClick={async ()=>{const n=[...item.data.songs]; if(i>0){[n[i],n[i-1]]=[n[i-1],n[i]]; await db.setlists.update(item.data.id,{songs:n}); refresh();}}} style={{background:'none', border:'none', color:'#888'}}><ArrowUp size={14}/></button>
                                 <button onClick={async ()=>{const n=[...item.data.songs]; if(i<n.length-1){[n[i],n[i+1]]=[n[i+1],n[i]]; await db.setlists.update(item.data.id,{songs:n}); refresh();}}} style={{background:'none', border:'none', color:'#888'}}><ArrowDown size={14}/></button>
                                 <button onClick={async ()=>{const n=[...item.data.songs]; n.splice(i,1); await db.setlists.update(item.data.id,{songs:n}); refresh();}} style={{background:'none', border:'none', color:'#ff3b30'}}><Trash2 size={14}/></button>
@@ -93,34 +113,25 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
         <input style={styles.artistInput} value={lA} onChange={e=>setLA(e.target.value)} onBlur={save} placeholder="Artista / Banda" />
         
         <div style={styles.btnGroup}>
-          {/* GRUPO DE TOM */}
-          <button onClick={() => handleTranspose(-1)} style={styles.transpBtn}>- TOM</button>
-          <button onClick={() => handleTranspose(1)} style={styles.transpBtn}>+ TOM</button>
+          <button onClick={() => handleTranspose(-1)} style={{...styles.headerBtn, padding:'8px 15px'}}>- TOM</button>
+          <button onClick={() => handleTranspose(1)} style={{...styles.headerBtn, padding:'8px 15px'}}>+ TOM</button>
           
-          {/* GRUPO DE BPM */}
           <div style={styles.bpmControlGroup}>
             <span style={{fontSize:'9px', color:'#666', fontWeight:'bold'}}>BPM</span>
             <div style={styles.bpmDisplay}>{lBpm}</div>
             <div style={{display:'flex', flexDirection:'column'}}>
-                <button onClick={() => { adjustBpm(1); save(); }} style={styles.bpmBtnSmall}><ChevronUp size={14}/></button>
-                <button onClick={() => { adjustBpm(-1); save(); }} style={styles.bpmBtnSmall}><ChevronDown size={14}/></button>
+                <button onClick={() => adjustBpm(1)} style={styles.bpmBtnSmall}><ChevronUp size={14}/></button>
+                <button onClick={() => adjustBpm(-1)} style={styles.bpmBtnSmall}><ChevronDown size={14}/></button>
             </div>
           </div>
 
-          {/* AÇÕES */}
-          <button onClick={() => onShow(item.data)} style={styles.showBtn}>
+          <button onClick={async () => { await save(); onShow(item.data); }} style={styles.showBtn}>
             <Monitor size={16} style={{marginRight:'8px'}}/> SHOW
           </button>
-          
           <button onClick={onClose} style={styles.saveBtn}>CONCLUIR</button>
-          
-          <button onClick={() => triggerDL(item.data, `${lT}.txt`)} style={styles.exportBtn}>EXPORTAR</button>
-          
-          <button onClick={() => setConfirmDelete(true)} style={{background:'none', border:'none', color:'#444', marginLeft:'auto'}}><Trash2 size={18}/></button>
         </div>
       </div>
 
-      {/* CAMPO DE OBSERVAÇÕES */}
       <textarea 
         style={styles.notesTextArea} 
         value={lNot} 
@@ -142,10 +153,9 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
         <div style={styles.settingsOverlay}>
           <div style={{...styles.settingsCard, padding:'30px', textAlign:'center'}}>
             <h3 style={{color:'#fff', marginBottom:'10px'}}>EXCLUIR MÚSICA?</h3>
-            <p style={{color:'#888', marginBottom:'20px'}}>Esta ação não pode ser desfeita.</p>
             <div style={{display:'flex', gap:'15px', justifyContent:'center'}}>
               <button onClick={()=>setConfirmDelete(false)} style={{...styles.saveBtn, backgroundColor:'#444'}}>CANCELAR</button>
-              <button onClick={async ()=>{await db.songs.delete(item.data.id); refresh(); onClose();}} style={{...styles.saveBtn, backgroundColor:'#ff3b30'}}>EXCLUIR AGORA</button>
+              <button onClick={async ()=>{await db.songs.delete(item.data.id); refresh(); onClose();}} style={{...styles.saveBtn, backgroundColor:'#ff3b30'}}>EXCLUIR</button>
             </div>
           </div>
         </div>

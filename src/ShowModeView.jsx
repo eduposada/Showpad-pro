@@ -4,7 +4,7 @@ import { formatChordsVisual } from './ShowPadCore';
 
 export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose, showScrollRef, lastSignal, styles }) => {
     const [idx, setIdx] = useState(0), [dr, setDr] = useState(false);
-    const [btnPressed, setBtnPressed] = useState(null); // Para efeito visual do clique
+    const [btnPressed, setBtnPressed] = useState(null); 
     
     const songsArr = (item && item.type === 'setlist') ? (item.data.songs || []) : (item ? [item.data] : []);
     const song = songsArr[idx];
@@ -48,7 +48,7 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
                 </div>
             </div>
 
-            {/* TOOLBAR SUPERIOR (SEM PROX/ANT) */}
+            {/* TOOLBAR SUPERIOR */}
             <div style={{...styles.showToolbar, height: '100px', padding: '10px 20px'}}>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <button onClick={() => setDr(true)} style={{...controlBtnStyle, backgroundColor: dr ? '#007aff' : '#2c2c2e'}}>
@@ -81,7 +81,7 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
             {/* CONTEÚDO DA CIFRA */}
             <div ref={showScrollRef} style={{ ...styles.showContent, padding: '40px' }}>
                 {song && song.notes && (
-                    <div style={{ backgroundColor: 'rgba(255, 215, 0, 0.1)', borderLeft: '5px solid #FFD700', padding: '15px', marginBottom: '30px', color: '#FFD700', fontSize: '20px' }}>
+                    <div style={{ backgroundColor: 'rgba(255, 215, 0, 0.1)', borderLeft: '5px solid #FFD700', padding: '15px', marginBottom: '30px', color: '#FFD700', fontSize: '20px', whiteSpace: 'pre-wrap' }}>
                         <strong>OBSERVAÇÕES:</strong><br/>{song.notes}
                     </div>
                 )}
@@ -90,7 +90,7 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
                 </div>
             </div>
 
-            {/* NOVO RODAPÉ DE NAVEGAÇÃO 50/50 3D */}
+            {/* RODAPÉ 3D 50/50 */}
             <div style={styles.showFooter}>
                 <button 
                     onMouseDown={() => setBtnPressed('prev')}
