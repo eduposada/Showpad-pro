@@ -2,17 +2,21 @@ import React from 'react';
 import Dexie from 'dexie';
 import { createClient } from '@supabase/supabase-js';
 
+// Configuração Supabase
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
+// BANCO DE DADOS LOCAL (DEXIE)
+// Versão 12: Adicionado 'is_solo' para proteção da banda padrão
 export const db = new Dexie('ShowPadProWeb');
-db.version(11).stores({ 
+db.version(12).stores({ 
     songs: '++id, title, artist, creator_id, band_id', 
     setlists: '++id, title, location, time, members, notes, creator_id, band_id',
-    my_bands: 'id, name, invite_code, role'
+    my_bands: 'id, name, invite_code, role, is_solo' 
 });
 
+// LÓGICA MUSICAL (TRANSPOSIÇÃO)
 export const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 export const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
@@ -35,17 +39,28 @@ export const transposeContent = (c, s) => {
     }).join('\n');
 };
 
+// FORMATAÇÃO VISUAL (CIFRAS EM AMARELO)
 export const formatChordsVisual = (text) => {
     if (!text) return null;
     return text.split('\n').map((line, i) => {
         const m = line.match(chordRegex);
         const isC = m && m.length > 0 && m.length >= line.trim().split(/\s+/).length * 0.4;
         return (
-            <div key={i} style={{ color: isC ? '#FFD700' : '#FFFFFF', fontWeight: isC ? 'bold' : 'normal', minHeight: '1.2em', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8' }}>{line || ' '}</div>
+            <div key={i} style={{ 
+                color: isC ? '#FFD700' : '#FFFFFF', 
+                fontWeight: isC ? 'bold' : 'normal', 
+                minHeight: '1.2em', 
+                whiteSpace: 'pre-wrap', 
+                textAlign: 'left', 
+                lineHeight: '1.8' 
+            }}>
+                {line || ' '}
+            </div>
         );
     });
 };
 
+// DOWNLOAD DE BACKUP
 export const triggerDL = (data, filename) => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -58,8 +73,10 @@ export const triggerDL = (data, filename) => {
     URL.revokeObjectURL(url);
 };
 
+// SINCRONIA: PUSH (LOCAL -> CLOUD)
 export const pushToCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
+    
     const localSongs = await db.songs.toArray();
     if (localSongs.length > 0) {
         const songsPayload = localSongs.map(s => ({ 
@@ -67,12 +84,13 @@ export const pushToCloud = async (userId) => {
             artist: String(s.artist || ""), 
             content: String(s.content || ""), 
             notes: String(s.notes || ""),
-            bpm: Math.round(Number(s.bpm || 120)), // Trava de integridade
+            bpm: Math.round(Number(s.bpm || 120)),
             creator_id: userId,
             band_id: s.band_id || null
         }));
         await supabase.from('songs').upsert(songsPayload, { onConflict: 'title,artist,creator_id' });
     }
+    
     const localSetlists = await db.setlists.toArray();
     if (localSetlists.length > 0) {
         const setlistsPayload = localSetlists.map(sl => ({
@@ -90,8 +108,10 @@ export const pushToCloud = async (userId) => {
     return { success: true };
 };
 
+// SINCRONIA: PULL (CLOUD -> LOCAL)
 export const pullFromCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
+    
     const { data: cSongs } = await supabase.from('songs').select('*').eq('creator_id', userId);
     if (cSongs) {
         for (let s of cSongs) {
@@ -101,6 +121,7 @@ export const pullFromCloud = async (userId) => {
             else await db.songs.update(ex.id, cleanSong);
         }
     }
+    
     const { data: cSetlists } = await supabase.from('setlists').select('*').eq('creator_id', userId);
     if (cSetlists) {
         for (let sl of cSetlists) {

@@ -5,7 +5,6 @@ import {
   LogOut, SortAsc, UserRound, Cloud, RefreshCw 
 } from 'lucide-react';
 
-// Importação dos módulos
 import { db, transposeContent, supabase, triggerDL, pushToCloud, pullFromCloud } from './ShowPadCore';
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
@@ -46,8 +45,49 @@ export default function App() {
     }
   }, []);
 
+  // Lógica de Nascimento da Banda Solo
+  const checkSoloBand = async (user) => {
+    if (!user) return;
+    const soloId = `SOLO-${user.id.substring(0,8)}`;
+    const existing = await db.my_bands.get(soloId);
+    
+    if (!existing) {
+        const soloName = `${user.user_metadata?.full_name?.toUpperCase() || "MEU"} - SOLO`;
+        const soloData = {
+            id: soloId,
+            name: soloName,
+            invite_code: "SOLO",
+            role: 'admin',
+            is_solo: true // Campo de proteção
+        };
+
+        // Salva Local
+        await db.my_bands.put(soloData);
+
+        // Tenta salvar no Supabase (se falhar, o local sustenta)
+        try {
+            await supabase.from('bands').upsert({
+                id: soloId,
+                name: soloName,
+                invite_code: `SOLO-${user.id.substring(0,5)}`,
+                owner_id: user.id
+            });
+            await supabase.from('band_members').upsert({
+                band_id: soloId,
+                profile_id: user.id,
+                role: 'admin'
+            });
+        } catch(e) { console.warn("Sync Solo Band failed, using local only."); }
+    }
+  };
+
   useEffect(() => { 
-    if (session) { refreshData(); initMidi(); checkServer(); }
+    if (session) { 
+        checkSoloBand(session.user);
+        refreshData(); 
+        initMidi(); 
+        checkServer(); 
+    }
   }, [session, sortBy]);
 
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
@@ -71,7 +111,6 @@ export default function App() {
     } catch (e) { console.error("Erro ao atualizar dados:", e); }
   };
 
-  // FUNÇÃO CORRIGIDA: CRIA E JÁ ABRE PARA EDIÇÃO COM FOCO
   const handleCreateNew = async () => {
     const isSetlist = view === 'setlists';
     const obj = isSetlist ? {
@@ -92,17 +131,14 @@ export default function App() {
 
     const id = await (isSetlist ? db.setlists.add(obj) : db.songs.add(obj));
     await refreshData();
-    
-    // Recupera o item recém criado do banco para garantir que temos o ID correto e dados limpos
     const savedItem = await (isSetlist ? db.setlists.get(id) : db.songs.get(id));
     setSelectedItem({ type: isSetlist ? 'setlist' : 'song', data: savedItem });
 
-    // Foco automático no input de título após renderização
     setTimeout(() => {
       const titleInput = document.querySelector('input[value="Nova Música"], input[value="Novo Show"], input[placeholder*="Título"]');
       if (titleInput) {
         titleInput.focus();
-        titleInput.select(); // Seleciona o texto para facilitar a troca do nome
+        titleInput.select();
       }
     }, 150);
   };
