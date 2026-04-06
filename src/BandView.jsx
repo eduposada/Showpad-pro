@@ -39,13 +39,57 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         }
     }, [showSettings]);
 
+    // OTIMIZAÇÃO DE IMAGEM V6.5: Processamento ultra-rápido
     const handleImageUpload = (e) => {
         const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => setEditLogo(reader.result);
-            reader.readAsDataURL(file);
-        }
+        if (!file) return;
+
+        setLoading(true); // Feedback visual imediato
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const SIZE = 200; // Tamanho fixo otimizado para logos
+                
+                let width = img.width;
+                let height = img.height;
+
+                // Cálculo de Crop Quadrado Centralizado
+                let sourceX = 0;
+                let sourceY = 0;
+                let sourceWidth = width;
+                let sourceHeight = height;
+
+                if (width > height) {
+                    sourceWidth = height;
+                    sourceX = (width - height) / 2;
+                } else {
+                    sourceHeight = width;
+                    sourceY = (height - width) / 2;
+                }
+
+                canvas.width = SIZE;
+                canvas.height = SIZE;
+                
+                const ctx = canvas.getContext('2d');
+                // Aplica suavização de imagem
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                
+                ctx.drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, SIZE, SIZE);
+                
+                // Qualidade 0.6 é o "sweet spot" entre peso e visual
+                const dataurl = canvas.toDataURL('image/jpeg', 0.6);
+                
+                setEditLogo(dataurl);
+                setLoading(false);
+            };
+        };
+        reader.readAsDataURL(file);
     };
 
     const fetchBands = async () => {
@@ -74,16 +118,13 @@ export const BandView = ({ session, styles, onSelectShow }) => {
 
     const handleDeleteBand = async (band) => {
         if (band.is_solo) return; 
-        const msg = `ATENÇÃO: Deseja excluir a banda "${band.name}"?\n\nIsso apagará todos os shows e conexões de repertório desta banda no dispositivo e na nuvem.\n\nAs músicas da biblioteca geral NÃO serão apagadas.`;
-        
+        const msg = `ATENÇÃO: Deseja excluir a banda "${band.name}"?`;
         if (window.confirm(msg)) {
             setLoading(true);
             try {
                 await deleteBandComplete(band.id);
                 await fetchBands();
-            } catch (err) {
-                alert("Erro ao excluir: " + err.message);
-            }
+            } catch (err) { alert(err.message); }
             setLoading(false);
         }
     };
@@ -102,7 +143,6 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         const relations = await db.band_songs.where('band_id').equals(showRepertoire.id).toArray();
         const songIds = relations.map(r => r.song_id);
         const specific = total.filter(s => songIds.includes(s.id));
-        
         setAllSongs(total);
         setBandSongs(specific);
     };
@@ -110,11 +150,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const addSongToBand = async (songId) => {
         if (!showRepertoire) return;
         try {
-            await db.band_songs.put({
-                band_id: showRepertoire.id,
-                song_id: songId,
-                custom_tone: 0
-            });
+            await db.band_songs.put({ band_id: showRepertoire.id, song_id: songId, custom_tone: 0 });
             await refreshRepertoire();
         } catch (e) { console.error(e); }
     };
@@ -122,10 +158,8 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const removeSongFromBand = async (songId) => {
         if (!showRepertoire) return;
         try {
-            const relation = await db.band_songs
-                .where({ band_id: showRepertoire.id, song_id: songId })
-                .first();
-            if (relation) await db.band_songs.delete(relation.id);
+            const rel = await db.band_songs.where({ band_id: showRepertoire.id, song_id: songId }).first();
+            if (rel) await db.band_songs.delete(rel.id);
             await refreshRepertoire();
         } catch (e) { console.error(e); }
     };
@@ -139,7 +173,6 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 .from('bands')
                 .insert([{ name: newBandName, owner_id: session.user.id, invite_code: code }])
                 .select().single();
-
             if (band) {
                 await supabase.from('band_members').insert([{ band_id: band.id, profile_id: session.user.id, role: 'admin' }]);
                 setNewBandName(''); 
@@ -155,11 +188,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
             .from('bands')
             .update({ name: editName, description: editDesc, logo_url: editLogo, created_at: editDate })
             .eq('id', showSettings.id);
-        
-        if (!error) {
-            await fetchBands();
-            setShowSettings(null);
-        }
+        if (!error) { await fetchBands(); setShowSettings(null); }
         setLoading(false);
     };
 
@@ -176,6 +205,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 <button onClick={fetchBands} style={styles.headerBtn}><RefreshCw size={16} className={loading ? "animate-spin" : ""}/> ATUALIZAR</button>
             </div>
 
+            {/* Inclusão de Nova Banda */}
             <div style={{ display: 'flex', gap: '20px', marginBottom: '40px' }}>
                 <div style={{ flex: 1, background: '#1c1c1e', padding: '20px', borderRadius: '15px', border: '1px solid #333' }}>
                     <h4 style={{ color: '#007aff', fontSize: '10px', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>Nova Banda</h4>
@@ -189,6 +219,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 </div>
             </div>
 
+            {/* Listagem de Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
                 {bands.map(b => (
                     <div key={b.id} style={{ ...styles.settingsCard, maxWidth: 'none', background: '#1c1c1e', border: '1px solid #333' }}>
@@ -219,6 +250,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 ))}
             </div>
 
+            {/* Modal de Repertório */}
             {showRepertoire && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '850px', height: '85vh', borderRadius: '24px', border: '1px solid #444', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -261,6 +293,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 </div>
             )}
 
+            {/* Modal de Configurações */}
             {showSettings && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '550px', borderRadius: '28px', border: '1px solid #444', overflow: 'hidden' }}>
@@ -274,7 +307,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                                     {editLogo ? <img src={editLogo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImageIcon size={30} color="#222" />}
                                 </div>
                                 <div style={{ flex: 1 }}>
-                                    <label style={{ color: '#666', fontSize: '10px' }}>UPLOAD DE LOGO</label>
+                                    <label style={{ color: '#666', fontSize: '10px' }}>UPLOAD DE LOGO (Auto-Crop)</label>
                                     <label style={{ ...styles.primaryButton, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '11px', padding: '8px 12px' }}>
                                         <Plus size={14} /> IMAGEM <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
                                     </label>
@@ -285,7 +318,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                             <textarea style={{ ...styles.inputField, height: '80px' }} value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Observações..." />
                         </div>
                         <div style={{ padding: '20px', background: '#252529' }}>
-                            <button onClick={handleUpdateBand} style={{ ...styles.saveBtn, width: '100%', background: '#34c759' }}><Save size={18}/> SALVAR ALTERAÇÕES</button>
+                            <button onClick={handleUpdateBand} style={{ ...styles.saveBtn, width: '100%', background: '#34c759' }}><Save size={18}/> SALVAR ALTERAÇÕES {loading && "..."}</button>
                         </div>
                     </div>
                 </div>
