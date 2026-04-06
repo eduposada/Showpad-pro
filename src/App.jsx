@@ -18,7 +18,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [songs, setSongs] = useState([]);
   const [setlists, setSetlists] = useState([]);
-  const [bands, setBands] = useState([]); // Agora carregamos as bandas globalmente
+  const [bands, setBands] = useState([]); 
   const [selectedItem, setSelectedItem] = useState(null);
   
   const [showMode, setShowMode] = useState(false);
@@ -46,20 +46,55 @@ export default function App() {
     }
   }, []);
 
+  // LIMPA-TRILHOS AUTOMÁTICO
+  const fixSoloBandMemory = async () => {
+    try {
+        const solo = await db.my_bands.where('is_solo').equals(true).first();
+        if (solo && solo.logo_url && solo.logo_url.length > 500000) {
+            console.log("Detectado logo pesado na banda Solo. Limpando memória...");
+            await db.my_bands.update(solo.id, { logo_url: null });
+            refreshData();
+        }
+    } catch (e) { console.warn("Erro no fix de memória."); }
+  };
+
+  // RESET DE IDENTIDADE SOLO V2 (v6.5.2)
   const checkSoloBand = async (user) => {
     if (!user) return;
-    const soloId = `SOLO-${user.id.substring(0,8)}`;
+    
+    // Mudamos para SOLO_V2 para forçar um registro limpo no Supabase e no Dexie
+    const soloId = `SOLO_V2-${user.id.substring(0,8)}`;
     const existing = await db.my_bands.get(soloId);
     
     if (!existing) {
+        console.log("Criando nova Identidade Solo v2 (Limpa)...");
         const soloName = `${user.user_metadata?.full_name?.toUpperCase() || "MEU"} - SOLO`;
-        const soloData = { id: soloId, name: soloName, invite_code: "SOLO", role: 'admin', is_solo: true };
+        const soloData = { id: soloId, name: soloName, invite_code: "SOLO_V2", role: 'admin', is_solo: true };
+        
+        // 1. Grava no Dexie local
         await db.my_bands.put(soloData);
+        
+        // 2. Grava no Supabase
         try {
-            await supabase.from('bands').upsert({ id: soloId, name: soloName, invite_code: `SOLO-${user.id.substring(0,5)}`, owner_id: user.id });
-            await supabase.from('band_members').upsert({ band_id: soloId, profile_id: user.id, role: 'admin' });
-        } catch(e) { console.warn("Sync Solo Band failed."); }
+            const { error: bErr } = await supabase.from('bands').upsert({ 
+                id: soloId, 
+                name: soloName, 
+                invite_code: `SOLO_V2-${user.id.substring(0,5)}`, 
+                owner_id: user.id 
+            });
+            if (bErr) console.error("Erro ao criar banda no Supabase:", bErr);
+
+            const { error: mErr } = await supabase.from('band_members').upsert({ 
+                band_id: soloId, 
+                profile_id: user.id, 
+                role: 'admin' 
+            });
+            if (mErr) console.error("Erro ao vincular membro no Supabase:", mErr);
+            
+            console.log("Banda Solo v2 sincronizada!");
+        } catch(e) { console.warn("Sincronização falhou, mas local está ok."); }
     }
+    fixSoloBandMemory();
   };
 
   useEffect(() => { 
@@ -77,7 +112,7 @@ export default function App() {
     try {
         const s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
-        const b = await db.my_bands.toArray(); // Sincroniza a lista de bandas localmente
+        const b = await db.my_bands.toArray(); 
         
         s.sort((a,b) => {
             const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
@@ -221,7 +256,6 @@ export default function App() {
 
           <div style={styles.listArea}>
             {['library', 'setlists'].includes(view) ? (view === 'library' ? songs : setlists).map(item => {
-              // Busca o objeto da banda para exibir o nome em laranja
               const band = item.band_id ? bands.find(b => b.id === item.band_id) : null;
               
               return (
