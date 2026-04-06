@@ -46,19 +46,28 @@ export default function App() {
     }
   }, []);
 
-  // NASCIMENTO SEGURO DA BANDA SOLO V3 (v6.7 - UUID Nativo)
+  // FILTRO DE SEGURANÇA E LIMPEZA DE SOLO (v6.8)
   const checkSoloBandV3 = async (user) => {
     if (!user) return;
     
-    // Verificamos no Dexie se já temos uma banda com o código SOLO_V3
+    // 1. FAXINA: Remove qualquer banda solo que NÃO seja V3 do banco local
+    try {
+        const legacySolos = await db.my_bands.filter(b => b.is_solo && b.invite_code !== 'SOLO_V3').toArray();
+        if (legacySolos.length > 0) {
+            for (let ls of legacySolos) await db.my_bands.delete(ls.id);
+            console.log("🧹 Faxina v6.8: Bandas solo obsoletas removidas.");
+        }
+    } catch (e) { console.warn("Erro na faxina de solos."); }
+
+    // 2. VERIFICAÇÃO V3
+    const soloId = `SOLO_V3-${user.id.substring(0,8)}`;
     const existing = await db.my_bands.where('invite_code').equals('SOLO_V3').first();
     
     if (!existing) {
-        console.log("⚓ Iniciando nascimento da Banda Solo V3 (UUID Nativo)...");
+        console.log("⚓ Iniciando nascimento da Banda Solo V3...");
         const soloName = `${user.user_metadata?.full_name?.toUpperCase() || "MEU"} - SOLO`;
 
         try {
-            // 1. Inserimos no Supabase SEM forçar o ID (deixando o banco gerar o UUID)
             const { data: newBand, error: bErr } = await supabase.from('bands').insert([{ 
                 name: soloName, 
                 invite_code: 'SOLO_V3', 
@@ -67,7 +76,6 @@ export default function App() {
             
             if (bErr) throw bErr;
 
-            // 2. Vinculamos o usuário como admin usando o ID gerado pelo Supabase
             const { error: mErr } = await supabase.from('band_members').insert([{ 
                 band_id: newBand.id, 
                 profile_id: user.id, 
@@ -76,20 +84,10 @@ export default function App() {
 
             if (mErr) throw mErr;
 
-            // 3. Salvamos no Dexie local com o ID real e a flag is_solo
-            const soloData = { 
-                ...newBand,
-                role: 'admin', 
-                is_solo: true 
-            };
-            
+            const soloData = { ...newBand, role: 'admin', is_solo: true };
             await db.my_bands.put(soloData);
-            console.log("✅ Banda Solo V3 criada com sucesso com UUID oficial!");
             refreshData();
-
-        } catch(e) { 
-            console.error("❌ Falha no nascimento da Solo V3:", e.message);
-        }
+        } catch(e) { console.error("❌ Erro no nascimento da Solo V3:", e.message); }
     }
   };
 
@@ -108,7 +106,10 @@ export default function App() {
     try {
         const s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
-        const b = await db.my_bands.toArray(); 
+        
+        // FILTRO DE EXIBIÇÃO: Só deixa passar as bandas normais ou a Solo V3 oficial
+        let b = await db.my_bands.toArray(); 
+        b = b.filter(band => !band.is_solo || band.invite_code === 'SOLO_V3');
         
         s.sort((a,b) => {
             const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
