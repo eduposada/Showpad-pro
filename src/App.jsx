@@ -68,10 +68,12 @@ export default function App() {
         const s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
         
-        // Criar Banda Solo se não existir
+        // PROTEÇÃO ANTI-DUPLICIDADE: Criar Banda Solo apenas se o radar estiver limpo
         if (session) {
             const bands = await db.bands.toArray();
-            if (!bands.find(b => b.is_solo)) {
+            const existingSolo = bands.find(b => b.is_solo === true || b.is_solo === 1);
+            
+            if (!existingSolo) {
                 const soloName = `${session.user.user_metadata?.full_name || 'Edu'} (Solo)`;
                 await db.bands.add({
                     name: soloName,
@@ -102,7 +104,10 @@ export default function App() {
   const handleCloudPush = async () => {
     if (!session) return;
     setIsSyncing(true);
-    try { await pushToCloud(session.user.id); alert("ShowPad Cloud: Backup salvo!"); } 
+    try { 
+        await pushToCloud(session.user.id); 
+        alert("ShowPad Cloud: Backup salvo com sucesso!"); 
+    } 
     catch (e) { alert("Erro ao subir: " + e.message); }
     setIsSyncing(false);
   };
@@ -110,7 +115,11 @@ export default function App() {
   const handleCloudPull = async () => {
     if (!session) return;
     setIsSyncing(true);
-    try { await pullFromCloud(session.user.id); await refreshData(); alert("ShowPad Cloud: Sincronizado!"); } 
+    try { 
+        await pullFromCloud(session.user.id); 
+        await refreshData(); 
+        alert("ShowPad Cloud: Sincronização concluída!"); 
+    } 
     catch (e) { alert("Erro ao baixar: " + e.message); }
     setIsSyncing(false);
   };
@@ -163,13 +172,12 @@ export default function App() {
             }
           }
         }
-        refreshData(); alert("Importado!");
-      } catch (err) { alert("Erro JSON."); }
+        refreshData(); alert("Importado com sucesso!");
+      } catch (err) { alert("Erro ao ler o arquivo JSON."); }
     };
     reader.readAsText(e.target.files[0]);
   };
 
-  // Se não houver sessão ou supabase estiver carregando
   if (!session) return <AuthView styles={styles} />;
 
   return (

@@ -17,11 +17,11 @@ export const BandsView = ({ styles, session, onOpenSetlist }) => {
         // 1. Carregar Bandas
         let b = await db.bands.toArray();
         
-        // 2. Verificar/Criar Banda Solo
+        // 2. Verificar/Criar Banda Solo de forma blindada
         const soloName = `${session.user.user_metadata?.full_name || 'Edu'} (Solo)`;
-        const hasSolo = b.find(x => x.name.includes("(Solo)"));
+        const existingSolo = b.find(x => x.is_solo === true || x.is_solo === 1);
         
-        if (!hasSolo) {
+        if (!existingSolo) {
             await db.bands.add({ 
                 name: soloName, 
                 is_solo: true, 
@@ -50,6 +50,27 @@ export const BandsView = ({ styles, session, onOpenSetlist }) => {
         loadData();
     };
 
+    const deleteBand = async (bandId) => {
+        if (confirm("Deseja apagar esta banda e todos os seus setlists? As músicas individuais não serão apagadas.")) {
+            // Limpa setlists da banda
+            const relatedSetlists = await db.setlists.where({ band_id: bandId }).toArray();
+            for (let sl of relatedSetlists) {
+                await db.setlists.delete(sl.id);
+            }
+            // Apaga a banda
+            await db.bands.delete(bandId);
+            loadData();
+        }
+    };
+
+    const deleteSetlist = async (e, slId) => {
+        e.stopPropagation();
+        if (confirm("Apagar este setlist?")) {
+            await db.setlists.delete(slId);
+            loadData();
+        }
+    };
+
     return (
         <div style={{ padding: '30px', backgroundColor: '#000', height: '100%', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
@@ -71,10 +92,22 @@ export const BandsView = ({ styles, session, onOpenSetlist }) => {
                 {bands.map(band => (
                     <div key={band.id} style={styles.bandCard}>
                         <div style={styles.bandHeader}>
-                            <h3 style={styles.bandName}>{band.name}</h3>
-                            <span style={band.is_solo ? styles.bandTagSolo : styles.bandTagGroup}>
-                                {band.is_solo ? "MODO SOLO" : "GRUPO"}
-                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <h3 style={styles.bandName}>{band.name}</h3>
+                                <span style={band.is_solo ? styles.bandTagSolo : styles.bandTagGroup}>
+                                    {band.is_solo ? "MODO SOLO" : "GRUPO"}
+                                </span>
+                            </div>
+                            
+                            {/* LIXEIRA: Só aparece se não for a Banda Solo */}
+                            {!band.is_solo && (
+                                <Trash2 
+                                    size={18} 
+                                    color="#444" 
+                                    style={{ cursor: 'pointer' }} 
+                                    onClick={() => deleteBand(band.id)}
+                                />
+                            )}
                         </div>
 
                         <div style={{ borderTop: '1px solid #333', paddingTop: '15px' }}>
@@ -92,8 +125,11 @@ export const BandsView = ({ styles, session, onOpenSetlist }) => {
                                             style={styles.setlistItemMini}
                                             onClick={() => onOpenSetlist(sl)}
                                         >
-                                            {sl.name}
-                                            <span style={{ fontSize: '10px', opacity: 0.5 }}>{sl.songs?.length || 0} músicas</span>
+                                            <span>{sl.name}</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <span style={{ fontSize: '10px', opacity: 0.5 }}>{sl.songs?.length || 0} músicas</span>
+                                                <Trash2 size={14} color="#555" onClick={(e) => deleteSetlist(e, sl.id)} />
+                                            </div>
                                         </div>
                                     ))
                                 )}
