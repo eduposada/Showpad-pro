@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, RefreshCw, Users, Trash2, Layout, Music, X, Settings, Save, UserMinus, ImageIcon, Zap, MinusCircle, Upload } from 'lucide-react';
-import { supabase, db } from './ShowPadCore';
+import { supabase, db, deleteBandComplete } from './ShowPadCore';
 import { BandShowManager } from './BandShowManager';
 
 export const BandView = ({ session, styles, onSelectShow }) => {
@@ -51,7 +51,6 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const fetchBands = async () => {
         setLoading(true);
         try {
-            // Tenta buscar da nuvem
             const { data, error } = await supabase
                 .from('band_members')
                 .select(`role, bands (*)`)
@@ -63,7 +62,6 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                     role: i.role,
                     is_solo: i.bands.invite_code.startsWith("SOLO")
                 }));
-                // Faz o PUT no Dexie (Blindagem: não apaga o local se falhar)
                 for (let b of cloudList) await db.my_bands.put(b);
             }
 
@@ -72,6 +70,22 @@ export const BandView = ({ session, styles, onSelectShow }) => {
             setBands(localBands);
         } catch (err) { console.error(err); }
         setLoading(false);
+    };
+
+    const handleDeleteBand = async (band) => {
+        if (band.is_solo) return; 
+        const msg = `ATENÇÃO: Deseja excluir a banda "${band.name}"?\n\nIsso apagará todos os shows e conexões de repertório desta banda no dispositivo e na nuvem.\n\nAs músicas da biblioteca geral NÃO serão apagadas.`;
+        
+        if (window.confirm(msg)) {
+            setLoading(true);
+            try {
+                await deleteBandComplete(band.id);
+                await fetchBands();
+            } catch (err) {
+                alert("Erro ao excluir: " + err.message);
+            }
+            setLoading(false);
+        }
     };
 
     const fetchMembers = async (bandId) => {
@@ -85,8 +99,6 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const refreshRepertoire = async () => {
         if (!showRepertoire) return;
         const total = await db.songs.toArray();
-        
-        // NOVA LÓGICA: Busca conexões na tabela band_songs
         const relations = await db.band_songs.where('band_id').equals(showRepertoire.id).toArray();
         const songIds = relations.map(r => r.song_id);
         const specific = total.filter(s => songIds.includes(s.id));
@@ -98,7 +110,6 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const addSongToBand = async (songId) => {
         if (!showRepertoire) return;
         try {
-            // Adiciona na tabela de ligação (Biblioteca Mestra)
             await db.band_songs.put({
                 band_id: showRepertoire.id,
                 song_id: songId,
@@ -111,7 +122,6 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const removeSongFromBand = async (songId) => {
         if (!showRepertoire) return;
         try {
-            // Remove apenas a ligação
             const relation = await db.band_songs
                 .where({ band_id: showRepertoire.id, song_id: songId })
                 .first();
@@ -190,9 +200,16 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                                 <h2 style={{ color: b.is_solo ? '#007aff' : '#FFD700', margin: 0, fontSize: '18px', fontWeight: '900' }}>{b.name}</h2>
                                 <span style={{ color: '#888', fontSize: '10px', fontWeight: 'bold' }}>{b.role?.toUpperCase()}</span>
                             </div>
-                            {b.role === 'admin' && (
-                                <button onClick={() => setShowSettings(b)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}><Settings size={20} /></button>
-                            )}
+                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                {!b.is_solo && b.role === 'admin' && (
+                                    <button onClick={() => handleDeleteBand(b)} style={{ background: 'none', border: 'none', color: '#ff3b30', cursor: 'pointer', opacity: 0.7 }}>
+                                        <Trash2 size={18} />
+                                    </button>
+                                )}
+                                {b.role === 'admin' && (
+                                    <button onClick={() => setShowSettings(b)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}><Settings size={20} /></button>
+                                )}
+                            </div>
                         </div>
                         <div style={{ padding: '15px 20px', borderTop: '1px solid #222', display: 'flex', gap: '10px', background: '#161618' }}>
                             <button onClick={() => setShowRepertoire(b)} style={{ ...styles.headerBtn, flex: 1, color: '#FFD700' }}><Music size={14}/> REPERTÓRIO</button>
@@ -202,7 +219,6 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 ))}
             </div>
 
-            {/* MODAL DE REPERTÓRIO (ATUALIZADO PARA TABELA DE LIGAÇÃO) */}
             {showRepertoire && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '850px', height: '85vh', borderRadius: '24px', border: '1px solid #444', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -245,7 +261,6 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 </div>
             )}
 
-            {/* MODAIS DE CONFIGURAÇÕES E SHOWS PERMANECEM OS MESMOS */}
             {showSettings && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '550px', borderRadius: '28px', border: '1px solid #444', overflow: 'hidden' }}>
