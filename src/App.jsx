@@ -58,13 +58,11 @@ export default function App() {
             name: soloName,
             invite_code: "SOLO",
             role: 'admin',
-            is_solo: true // Campo de proteção
+            is_solo: true 
         };
 
-        // Salva Local
         await db.my_bands.put(soloData);
 
-        // Tenta salvar no Supabase (se falhar, o local sustenta)
         try {
             await supabase.from('bands').upsert({
                 id: soloId,
@@ -77,7 +75,7 @@ export default function App() {
                 profile_id: user.id,
                 role: 'admin'
             });
-        } catch(e) { console.warn("Sync Solo Band failed, using local only."); }
+        } catch(e) { console.warn("Sync Solo Band failed."); }
     }
   };
 
@@ -133,14 +131,12 @@ export default function App() {
     await refreshData();
     const savedItem = await (isSetlist ? db.setlists.get(id) : db.songs.get(id));
     setSelectedItem({ type: isSetlist ? 'setlist' : 'song', data: savedItem });
+  };
 
-    setTimeout(() => {
-      const titleInput = document.querySelector('input[value="Nova Música"], input[value="Novo Show"], input[placeholder*="Título"]');
-      if (titleInput) {
-        titleInput.focus();
-        titleInput.select();
-      }
-    }, 150);
+  // FUNÇÃO DE PONTE PARA BANDAS: Abre o show direto no editor
+  const openBandShow = (show) => {
+    setSelectedItem({ type: 'setlist', data: show });
+    setView('setlists'); // Alterna para o editor de setlists
   };
 
   const checkServer = () => {
@@ -156,7 +152,7 @@ export default function App() {
   const handleCloudPush = async () => {
     if (!session) return;
     setIsScraping(true);
-    try { await pushToCloud(session.user.id); alert("ShowPad Cloud: Backup salvo!"); } 
+    try { await pushToCloud(session.user.id); alert("Backup salvo!"); } 
     catch (e) { alert("Erro ao subir: " + e.message); }
     setIsScraping(false);
   };
@@ -164,7 +160,7 @@ export default function App() {
   const handleCloudPull = async () => {
     if (!session) return;
     setIsScraping(true);
-    try { await pullFromCloud(session.user.id); await refreshData(); alert("ShowPad Cloud: Sincronizado!"); } 
+    try { await pullFromCloud(session.user.id); await refreshData(); alert("Sincronizado!"); } 
     catch (e) { alert("Erro ao baixar: " + e.message); }
     setIsScraping(false);
   };
@@ -175,7 +171,6 @@ export default function App() {
         const ins = WebMidi.inputs;
         setAllInputs(ins.map(i => i.name));
         setMidiStatus(ins.length > 0 ? "ready" : "nodevice");
-        
         ins.forEach(input => {
           input.removeListener();
           input.addListener("midimessage", e => {
@@ -185,7 +180,6 @@ export default function App() {
               setMidiFlash(true); 
               setLastSignalUI(sig); 
               setTimeout(() => { setMidiFlash(false); setLastSignalUI(""); }, 1000);
-              
               if (midiLearningRef.current) { 
                 localStorage.setItem("midi-" + midiLearningRef.current, sig); 
                 setMidiLearning(null); 
@@ -201,7 +195,6 @@ export default function App() {
       WebMidi.addListener("connected", updateMidi);
       WebMidi.addListener("disconnected", updateMidi);
     }).catch(err => {
-      console.warn("MIDI bloqueado ou não suportado:", err);
       setMidiStatus("blocked");
     });
   };
@@ -254,10 +247,10 @@ export default function App() {
       <div style={{ display:'flex', flex: 1, overflow:'hidden', width: '100%' }}>
         <div style={styles.sidebar}>
           <div style={styles.navTabs}>
-            <button onClick={() => { setView('library'); }} style={view === 'library' ? styles.activeTab : styles.tab}>MÚSICAS</button>
-            <button onClick={() => { setView('setlists'); }} style={view === 'setlists' ? styles.activeTab : styles.tab}>SHOWS</button>
-            <button onClick={() => { setView('bands'); }} style={view === 'bands' ? styles.activeTab : styles.tab}>BANDAS</button>
-            <button onClick={() => { setView('garimpo'); }} style={view === 'garimpo' ? styles.activeTab : styles.tab}>GARIMPAR</button>
+            <button onClick={() => setView('library')} style={view === 'library' ? styles.activeTab : styles.tab}>MÚSICAS</button>
+            <button onClick={() => setView('setlists')} style={view === 'setlists' ? styles.activeTab : styles.tab}>SHOWS</button>
+            <button onClick={() => setView('bands')} style={view === 'bands' ? styles.activeTab : styles.tab}>BANDAS</button>
+            <button onClick={() => setView('garimpo')} style={view === 'garimpo' ? styles.activeTab : styles.tab}>GARIMPAR</button>
           </div>
 
           <div style={styles.listArea}>
@@ -285,7 +278,7 @@ export default function App() {
 
         <div style={styles.mainEditor}>
           {view === 'garimpo' ? <GarimpoView isServerOnline={isServerOnline} styles={styles} refresh={refreshData} session={session} />
-          : view === 'bands' ? <BandView session={session} styles={styles} />
+          : view === 'bands' ? <BandView session={session} styles={styles} onSelectShow={openBandShow} />
           : selectedItem ? <MainEditor key={selectedItem.data.id} item={selectedItem} songs={songs} triggerDL={triggerDL} onClose={()=>setSelectedItem(null)} onShow={()=>setShowMode(true)} refresh={refreshData} styles={styles} />
           : <div style={styles.empty}>
               <Music size={120} color="#111" />

@@ -1,20 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, RefreshCw, Users, Trash2, Layout, Music, X, Settings, Save, UserMinus, ImageIcon, Zap, MinusCircle, Upload } from 'lucide-react';
 import { supabase, db } from './ShowPadCore';
+import { BandShowManager } from './BandShowManager'; // Certifique-se de criar este arquivo
 
-export const BandView = ({ session, styles }) => {
+export const BandView = ({ session, styles, onSelectShow }) => {
     const [loading, setLoading] = useState(false);
     const [bands, setBands] = useState([]);
     const [newBandName, setNewBandName] = useState('');
     const [inviteCode, setInviteCode] = useState('');
     
+    // Estados para Modais
     const [showRepertoire, setShowRepertoire] = useState(null); 
     const [showSettings, setShowSettings] = useState(null); 
+    const [showBandShows, setShowBandShows] = useState(null); // Modal de Agenda
     
+    // Estados de Dados
     const [allSongs, setAllSongs] = useState([]);
     const [bandSongs, setBandSongs] = useState([]);
     const [members, setMembers] = useState([]);
 
+    // Estados de Edição da Banda
     const [editName, setEditName] = useState('');
     const [editDesc, setEditDesc] = useState('');
     const [editLogo, setEditLogo] = useState('');
@@ -37,13 +42,12 @@ export const BandView = ({ session, styles }) => {
         }
     }, [showSettings]);
 
-    // Função para converter imagem em Base64 para o Upload
     const handleImageUpload = (e) => {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
             reader.onloadend = () => {
-                setEditLogo(reader.result); // Isso gera a string da imagem
+                setEditLogo(reader.result);
             };
             reader.readAsDataURL(file);
         }
@@ -145,7 +149,6 @@ export const BandView = ({ session, styles }) => {
 
     return (
         <div style={styles.garimpoPanel}>
-            {/* CABEÇALHO E INCLUSÃO */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
                 <h1 style={{ color: '#fff', fontSize: '28px', fontWeight: '900', margin: 0 }}>BANDAS</h1>
                 <button onClick={fetchBands} style={styles.headerBtn}><RefreshCw size={16} className={loading ? "animate-spin" : ""}/> ATUALIZAR</button>
@@ -164,7 +167,6 @@ export const BandView = ({ session, styles }) => {
                 </div>
             </div>
 
-            {/* LISTAGEM DE CARDS */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
                 {bands.map(b => (
                     <div key={b.id} style={{ ...styles.settingsCard, maxWidth: 'none', background: '#1c1c1e', border: '1px solid #333' }}>
@@ -182,7 +184,7 @@ export const BandView = ({ session, styles }) => {
                         </div>
                         <div style={{ padding: '15px 20px', borderTop: '1px solid #222', display: 'flex', gap: '10px', background: '#161618' }}>
                             <button onClick={() => setShowRepertoire(b)} style={{ ...styles.headerBtn, flex: 1, color: '#FFD700' }}><Music size={14}/> REPERTÓRIO</button>
-                            <button style={{ ...styles.headerBtn, flex: 1, color: '#fff' }}><Layout size={14}/> SHOWS</button>
+                            <button onClick={() => setShowBandShows(b)} style={{ ...styles.headerBtn, flex: 1, color: '#fff' }}><Layout size={14}/> SHOWS</button>
                         </div>
                     </div>
                 ))}
@@ -231,7 +233,7 @@ export const BandView = ({ session, styles }) => {
                 </div>
             )}
 
-            {/* MODAL DE CONFIGURAÇÕES (UPLOAD E MEMBROS) */}
+            {/* MODAL DE CONFIGURAÇÕES */}
             {showSettings && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '550px', borderRadius: '28px', border: '1px solid #444', overflow: 'hidden' }}>
@@ -240,8 +242,6 @@ export const BandView = ({ session, styles }) => {
                             <X onClick={() => setShowSettings(null)} style={{ cursor: 'pointer' }} color="#888" />
                         </div>
                         <div style={{ padding: '25px', display: 'flex', flexDirection: 'column', gap: '15px', maxHeight: '70vh', overflowY: 'auto' }}>
-                            
-                            {/* Upload de Logo */}
                             <div style={{ display: 'flex', gap: '20px', alignItems: 'center', background: '#111', padding: '15px', borderRadius: '18px', border: '1px solid #333' }}>
                                 <div style={{ width: '100px', height: '100px', borderRadius: '12px', background: '#000', border: '1px solid #444', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     {editLogo ? <img src={editLogo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImageIcon size={30} color="#222" />}
@@ -249,22 +249,17 @@ export const BandView = ({ session, styles }) => {
                                 <div style={{ flex: 1 }}>
                                     <label style={{ color: '#666', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>LOGO DA BANDA (UPLOAD)</label>
                                     <label style={{ ...styles.primaryButton, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '11px', padding: '8px 12px' }}>
-                                        <Upload size={14} /> SELECIONAR IMAGEM
+                                        <Plus size={14} /> SELECIONAR IMAGEM
                                         <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
                                     </label>
                                 </div>
                             </div>
-
                             <label style={{ color: '#666', fontSize: '10px', fontWeight: 'bold' }}>NOME DA BANDA</label>
                             <input style={styles.inputField} value={editName} onChange={e => setEditName(e.target.value)} />
-                            
                             <label style={{ color: '#666', fontSize: '10px', fontWeight: 'bold' }}>DATA DE CRIAÇÃO DA BANDA</label>
                             <input type="date" style={styles.inputField} value={editDate} onChange={e => setEditDate(e.target.value)} />
-                            
                             <label style={{ color: '#666', fontSize: '10px', fontWeight: 'bold' }}>OBSERVAÇÕES</label>
                             <textarea style={{ ...styles.inputField, height: '80px' }} value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Observações..." />
-                            
-                            {/* Listagem de Integrantes */}
                             <div>
                                 <label style={{ color: '#666', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>INTEGRANTES CADASTRADOS</label>
                                 <div style={{ background: '#111', borderRadius: '15px', border: '1px solid #222' }}>
@@ -289,6 +284,19 @@ export const BandView = ({ session, styles }) => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* NOVO MODAL DE AGENDA DE SHOWS */}
+            {showBandShows && (
+                <BandShowManager 
+                    band={showBandShows} 
+                    styles={styles}
+                    onClose={() => setShowBandShows(null)} 
+                    onSelectShow={(show) => {
+                        onSelectShow(show); 
+                        setShowBandShows(null);
+                    }}
+                />
             )}
         </div>
     );
