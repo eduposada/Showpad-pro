@@ -41,7 +41,7 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
     const next = parseInt(lBpm, 10) + val;
     if (next >= 40 && next <= 250) {
         setLBpm(next);
-        save(next); // Salva imediatamente com o valor correto
+        save(next); 
     }
   };
 
@@ -51,14 +51,35 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
     save();
   };
 
+  // Estilo específico para os inputs amarelos do Setlist
+  const yellowInputStyle = {
+    ...styles.artistInput,
+    color: '#FFD700',
+    fontSize: '15px', // 1 ponto acima do padrão de 14px
+    fontWeight: 'bold',
+    filter: 'brightness(1.2)' // Garante que o ícone do calendário também brilhe
+  };
+
   if (item.type === 'setlist') {
     return (
         <div style={styles.mainEditor}>
             <div style={styles.editorHeader}>
                 <input style={styles.hInput} value={lT} onChange={e=>setLT(e.target.value)} onBlur={save} placeholder="Título do Show" />
-                <div style={{display:'flex', gap:'10px'}}>
-                    <input style={{...styles.artistInput, color:'#888'}} value={lLoc} onChange={e=>setLLoc(e.target.value)} onBlur={save} placeholder="Local" />
-                    <input style={{...styles.artistInput, color:'#888'}} value={lTim} onChange={e=>setLTim(e.target.value)} onBlur={save} placeholder="Horário" />
+                <div style={{display:'flex', gap:'15px', alignItems: 'center'}}>
+                    <input 
+                        style={yellowInputStyle} 
+                        value={lLoc} 
+                        onChange={e=>setLLoc(e.target.value)} 
+                        onBlur={save} 
+                        placeholder="Local" 
+                    />
+                    <input 
+                        type="datetime-local"
+                        style={{...yellowInputStyle, width: 'auto', appearance: 'none'}} 
+                        value={lTim} 
+                        onChange={e=>setLTim(e.target.value)} 
+                        onBlur={save} 
+                    />
                 </div>
             </div>
             
@@ -78,7 +99,7 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
                         <div key={i} style={{display:'flex', justifyContent:'space-between', padding:'8px', borderBottom:'1px solid #222'}}>
                             <div style={{display:'flex', flexDirection:'column'}}>
                                 <span style={{fontSize:'13px'}}>{s.title}</span>
-                                <small style={{color:'#FFD700', fontSize:'10px'}}>BPM: {s.bpm || "---"}</small>
+                                <small style={{color: '#FFD700', fontSize:'10px'}}>BPM: {s.bpm || "---"}</small>
                             </div>
                             <div style={{display:'flex', gap:'5px'}}>
                                 <button onClick={async ()=>{const n=[...item.data.songs]; if(i>0){[n[i],n[i-1]]=[n[i-1],n[i]]; await db.setlists.update(item.data.id,{songs:n}); refresh();}}} style={{background:'none', border:'none', color:'#888'}}><ArrowUp size={14}/></button>
@@ -108,6 +129,7 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
 
   return (
     <div style={styles.mainEditor}>
+      {/* O editor de músicas permanece o padrão para manter a distinção visual */}
       <div style={styles.editorHeader}>
         <input style={styles.hInput} value={lT} onChange={e=>setLT(e.target.value)} onBlur={save} placeholder="Título da Música" />
         <input style={styles.artistInput} value={lA} onChange={e=>setLA(e.target.value)} onBlur={save} placeholder="Artista / Banda" />
