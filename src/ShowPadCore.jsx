@@ -8,7 +8,6 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
 // BANCO DE DADOS LOCAL (DEXIE)
-// Versão 13: Adicionado 'band_songs' para Biblioteca Mestra (Muitos-para-Muitos)
 export const db = new Dexie('ShowPadProWeb');
 db.version(13).stores({ 
     songs: '++id, title, artist, creator_id', 
@@ -17,26 +16,50 @@ db.version(13).stores({
     band_songs: '++id, [band_id+song_id], band_id, song_id, custom_tone' 
 });
 
-// LÓGICA MUSICAL (TRANSPOSIÇÃO)
+// LÓGICA MUSICAL (TRANSPOSIÇÃO) - CORREÇÃO v7.0 (Suporte a Baixos Invertidos)
 export const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+// Regex aprimorado para capturar o acorde e o baixo após a barra separadamente
 export const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
-export const shiftNote = (n, s) => {
-    const f = { "Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#" };
-    const rM = n.match(/^[A-G][#b]?/); if (!rM) return n;
-    const r = rM[0], suf = n.substring(r.length), norm = f[r] || r;
-    let idx = scale.indexOf(norm.toUpperCase()); if (idx === -1) return n;
-    let newIdx = (idx + s) % 12; if (newIdx < 0) newIdx += 12;
-    return scale[newIdx] + suf;
+export const shiftNote = (chord, semitones) => {
+    const flatsToSharps = { "Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#" };
+
+    // Função interna para transpor uma única nota (ex: C# ou F)
+    const transposeSingle = (n) => {
+        const rootMatch = n.match(/^[A-G][#b]?/);
+        if (!rootMatch) return n;
+        const root = rootMatch[0];
+        const suffix = n.substring(root.length);
+        const normalized = flatsToSharps[root] || root;
+        let idx = scale.indexOf(normalized.toUpperCase());
+        if (idx === -1) return n;
+        let newIdx = (idx + semitones) % 12;
+        if (newIdx < 0) newIdx += 12;
+        return scale[newIdx] + suffix;
+    };
+
+    // Se o acorde tiver uma barra (baixo invertido), dividimos e transpomos ambos
+    if (chord.includes('/')) {
+        const [upper, lower] = chord.split('/');
+        return transposeSingle(upper) + '/' + transposeSingle(lower);
+    }
+
+    return transposeSingle(chord);
 };
 
-export const transposeContent = (c, s) => {
-    if (!c) return "";
-    return c.split('\n').map(l => {
-        if (l.toLowerCase().indexOf("tom") !== -1) return l.replace(/([A-G][#b]?)/g, (m) => shiftNote(m, s));
-        const m = l.match(chordRegex);
-        if (m && m.length > 0 && m.length >= l.trim().split(/\s+/).length * 0.4) return l.replace(chordRegex, (match) => shiftNote(match, s));
-        return l;
+export const transposeContent = (content, semitones) => {
+    if (!content || semitones === 0) return content;
+    return content.split('\n').map(line => {
+        // Se a linha contém a palavra "Tom", transpõe as notas nela
+        if (line.toLowerCase().indexOf("tom") !== -1) {
+            return line.replace(/([A-G][#b]?)/g, (m) => shiftNote(m, semitones));
+        }
+        // Se a linha for identificada como uma linha de cifras
+        const chords = line.match(chordRegex);
+        if (chords && chords.length > 0 && chords.length >= line.trim().split(/\s+/).length * 0.4) {
+            return line.replace(chordRegex, (match) => shiftNote(match, semitones));
+        }
+        return line;
     }).join('\n');
 };
 
@@ -76,23 +99,19 @@ export const triggerDL = (data, filename) => {
 // FUNÇÃO DE EXCLUSÃO COMPLETA DE BANDA (CASCATA)
 export const deleteBandComplete = async (bandId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
-    
     const { error } = await supabase.from('bands').delete().eq('id', bandId);
     if (error) throw error;
-
     await db.transaction('rw', db.my_bands, db.band_songs, db.setlists, async () => {
         await db.my_bands.delete(bandId);
         await db.band_songs.where('band_id').equals(bandId).delete();
         await db.setlists.where('band_id').equals(bandId).delete();
     });
-
     return { success: true };
 };
 
 // SINCRONIA: PUSH
 export const pushToCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
-    
     const localSongs = await db.songs.toArray();
     if (localSongs.length > 0) {
         const songsPayload = localSongs.map(s => ({ 
@@ -105,7 +124,6 @@ export const pushToCloud = async (userId) => {
         }));
         await supabase.from('songs').upsert(songsPayload, { onConflict: 'title,artist,creator_id' });
     }
-    
     const localSetlists = await db.setlists.toArray();
     if (localSetlists.length > 0) {
         const setlistsPayload = localSetlists.map(sl => ({
@@ -120,19 +138,16 @@ export const pushToCloud = async (userId) => {
         }));
         await supabase.from('setlists').upsert(setlistsPayload, { onConflict: 'title,creator_id' });
     }
-
     const localRel = await db.band_songs.toArray();
     if (localRel.length > 0) {
         await supabase.from('band_songs').upsert(localRel.map(r => ({...r, id: undefined})));
     }
-
     return { success: true };
 };
 
 // SINCRONIA: PULL
 export const pullFromCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
-    
     const { data: cSongs } = await supabase.from('songs').select('*').eq('creator_id', userId);
     if (cSongs) {
         for (let s of cSongs) {
@@ -142,7 +157,6 @@ export const pullFromCloud = async (userId) => {
             else await db.songs.update(ex.id, cleanSong);
         }
     }
-    
     const { data: cSetlists } = await supabase.from('setlists').select('*').eq('creator_id', userId);
     if (cSetlists) {
         for (let sl of cSetlists) {
@@ -152,13 +166,11 @@ export const pullFromCloud = async (userId) => {
             else await db.setlists.update(ex.id, cleanSetlist);
         }
     }
-
     const { data: cRel } = await supabase.from('band_songs').select('*');
     if (cRel) {
         for (let rel of cRel) {
             await db.band_songs.put(rel);
         }
     }
-
     return { success: true };
 };

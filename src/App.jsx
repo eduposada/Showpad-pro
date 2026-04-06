@@ -49,8 +49,6 @@ export default function App() {
   // FILTRO DE SEGURANÇA E LIMPEZA DE SOLO (v6.9 - Ghostbuster)
   const checkSoloBandV3 = async (user) => {
     if (!user) return;
-    
-    // 1. FAXINA: Remove qualquer banda solo que NÃO seja V3 do banco local
     try {
         const legacySolos = await db.my_bands.filter(b => b.is_solo && b.invite_code !== 'SOLO_V3').toArray();
         if (legacySolos.length > 0) {
@@ -59,30 +57,22 @@ export default function App() {
         }
     } catch (e) { console.warn("Erro na faxina de solos."); }
 
-    // 2. VERIFICAÇÃO V3
     const existing = await db.my_bands.where('invite_code').equals('SOLO_V3').first();
-    
     if (!existing) {
-        console.log("⚓ Iniciando nascimento da Banda Solo V3...");
         const soloName = `${user.user_metadata?.full_name?.toUpperCase() || "MEU"} - SOLO`;
-
         try {
             const { data: newBand, error: bErr } = await supabase.from('bands').insert([{ 
                 name: soloName, 
                 invite_code: 'SOLO_V3', 
                 owner_id: user.id 
             }]).select().single();
-            
             if (bErr) throw bErr;
-
             const { error: mErr } = await supabase.from('band_members').insert([{ 
                 band_id: newBand.id, 
                 profile_id: user.id, 
                 role: 'admin' 
             }]);
-
             if (mErr) throw mErr;
-
             const soloData = { ...newBand, role: 'admin', is_solo: true };
             await db.my_bands.put(soloData);
             refreshData();
@@ -105,20 +95,16 @@ export default function App() {
     try {
         const s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
-        
-        // FILTRO RADICAL v6.9: Remove duplicatas e bandas Solo "piratas"
         const allBands = await db.my_bands.toArray(); 
         const filteredBands = allBands.filter((band, index, self) => {
             const isLegacySolo = band.is_solo && band.invite_code !== 'SOLO_V3';
             const isDuplicate = self.findIndex(b => b.id === band.id) !== index;
-            
             if (isLegacySolo || isDuplicate) {
-                db.my_bands.delete(band.id); // Deleta do local na hora
+                db.my_bands.delete(band.id);
                 return false;
             }
             return true;
         });
-        
         s.sort((a,b) => {
             const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
             const valB = (sortBy === 'artist' ? b.artist : b.title) || "";
@@ -127,7 +113,6 @@ export default function App() {
         setSongs(s); 
         setSetlists(sl);
         setBands(filteredBands); 
-
         if (selectedItem) {
             const id = selectedItem.data.id;
             const upd = (selectedItem.type === 'song') ? s.find(x => x.id === id) : sl.find(x => x.id === id);
@@ -153,7 +138,6 @@ export default function App() {
       creator_id: session.user.id,
       bpm: 120
     };
-
     const id = await (isSetlist ? db.setlists.add(obj) : db.songs.add(obj));
     await refreshData();
     const savedItem = await (isSetlist ? db.setlists.get(id) : db.songs.get(id));
@@ -185,31 +169,34 @@ export default function App() {
     setIsScraping(false);
   };
 
+  // INICIALIZAÇÃO MIDI ROBUSTA (v7.0 - Com Reset de 500ms para iPad)
   const initMidi = () => {
-    WebMidi.enable({ sysex: true }).then(() => {
-      const updateMidi = () => {
-        const ins = WebMidi.inputs;
-        setAllInputs(ins.map(i => i.name));
-        setMidiStatus(ins.length > 0 ? "ready" : "nodevice");
-        ins.forEach(input => {
-          input.removeListener();
-          input.addListener("midimessage", e => {
-            const st = e.data[0], d1 = e.data[1], d2 = e.data[2];
-            if ((st >= 144 && st <= 159 && d2 > 0) || (st >= 176 && st <= 191)) {
-              const sig = (st >= 144 && st <= 159 ? "note" : "cc") + "-" + d1;
-              setMidiFlash(true); setLastSignalUI(sig); 
-              setTimeout(() => { setMidiFlash(false); setLastSignalUI(""); }, 1000);
-              if (midiLearningRef.current) { localStorage.setItem("midi-" + midiLearningRef.current, sig); setMidiLearning(null); return; }
-              if (sig === localStorage.getItem('midi-up')) scrollPage(-1);
-              if (sig === localStorage.getItem('midi-down')) scrollPage(1);
-            }
+    setTimeout(() => {
+      WebMidi.enable({ sysex: true }).then(() => {
+        const updateMidi = () => {
+          const ins = WebMidi.inputs;
+          setAllInputs(ins.map(i => i.name));
+          setMidiStatus(ins.length > 0 ? "ready" : "nodevice");
+          ins.forEach(input => {
+            input.removeListener();
+            input.addListener("midimessage", e => {
+              const st = e.data[0], d1 = e.data[1], d2 = e.data[2];
+              if ((st >= 144 && st <= 159 && d2 > 0) || (st >= 176 && st <= 191)) {
+                const sig = (st >= 144 && st <= 159 ? "note" : "cc") + "-" + d1;
+                setMidiFlash(true); setLastSignalUI(sig); 
+                setTimeout(() => { setMidiFlash(false); setLastSignalUI(""); }, 1000);
+                if (midiLearningRef.current) { localStorage.setItem("midi-" + midiLearningRef.current, sig); setMidiLearning(null); return; }
+                if (sig === localStorage.getItem('midi-up')) scrollPage(-1);
+                if (sig === localStorage.getItem('midi-down')) scrollPage(1);
+              }
+            });
           });
-        });
-      };
-      updateMidi();
-      WebMidi.addListener("connected", updateMidi);
-      WebMidi.addListener("disconnected", updateMidi);
-    }).catch(() => setMidiStatus("blocked"));
+        };
+        updateMidi();
+        WebMidi.addListener("connected", updateMidi);
+        WebMidi.addListener("disconnected", updateMidi);
+      }).catch(() => setMidiStatus("blocked"));
+    }, 500);
   };
 
   const scrollPage = (d) => { if (showScrollRef.current) showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * d, behavior: 'smooth' }); };
@@ -230,6 +217,29 @@ export default function App() {
     reader.readAsText(e.target.files[0]);
   };
 
+  // ESTILO DO BOTÃO MIDI "BOLHA" (v7.0)
+  const getMidiStyle = () => {
+    const isReady = midiStatus === 'ready';
+    return {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      padding: '4px 10px',
+      borderRadius: '20px',
+      fontSize: '10px',
+      fontWeight: '800',
+      transition: 'all 0.3s ease',
+      cursor: 'default',
+      boxShadow: midiFlash ? '0 0 15px #4cd964' : 'inset 0 -2px 4px rgba(0,0,0,0.3)',
+      border: '1px solid rgba(255,255,255,0.1)',
+      background: isReady 
+        ? 'radial-gradient(circle at 30% 30%, #4cd964, #28a745)' 
+        : 'radial-gradient(circle at 30% 30%, #8e8e93, #3a3a3c)',
+      color: '#fff',
+      transform: midiFlash ? 'scale(1.1)' : 'scale(1)'
+    };
+  };
+
   if (!session) return <AuthView styles={styles} />;
 
   return (
@@ -238,8 +248,10 @@ export default function App() {
         <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
           <Music color="#007aff" />
           <h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
-          <div style={midiFlash ? styles.midiBadgeActive : (midiStatus === 'ready' ? styles.midiBadgeOn : styles.midiBadgeOff)}>
-            <Zap size={10}/> {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}
+          
+          <div style={getMidiStyle()}>
+            <Zap size={10} fill={midiStatus === 'ready' ? "#fff" : "none"}/> 
+            {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}
           </div>
         </div>
         <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
@@ -263,7 +275,6 @@ export default function App() {
           <div style={styles.listArea}>
             {['library', 'setlists'].includes(view) ? (view === 'library' ? songs : setlists).map(item => {
               const band = item.band_id ? bands.find(b => b.id === item.band_id) : null;
-              
               return (
                 <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}
                      onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
