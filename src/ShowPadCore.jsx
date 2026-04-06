@@ -8,12 +8,13 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
 // BANCO DE DADOS LOCAL (DEXIE)
-// Versão 12: Adicionado 'is_solo' para proteção da banda padrão
+// Versão 13: Adicionado 'band_songs' para Biblioteca Mestra (Muitos-para-Muitos)
 export const db = new Dexie('ShowPadProWeb');
-db.version(12).stores({ 
-    songs: '++id, title, artist, creator_id, band_id', 
+db.version(13).stores({ 
+    songs: '++id, title, artist, creator_id', // Removido band_id fixo
     setlists: '++id, title, location, time, members, notes, creator_id, band_id',
-    my_bands: 'id, name, invite_code, role, is_solo' 
+    my_bands: 'id, name, invite_code, role, is_solo',
+    band_songs: '++id, [band_id+song_id], band_id, song_id, custom_tone' // Tabela de Ligação
 });
 
 // LÓGICA MUSICAL (TRANSPOSIÇÃO)
@@ -39,7 +40,7 @@ export const transposeContent = (c, s) => {
     }).join('\n');
 };
 
-// FORMATAÇÃO VISUAL (CIFRAS EM AMARELO)
+// FORMATAÇÃO VISUAL
 export const formatChordsVisual = (text) => {
     if (!text) return null;
     return text.split('\n').map((line, i) => {
@@ -60,7 +61,6 @@ export const formatChordsVisual = (text) => {
     });
 };
 
-// DOWNLOAD DE BACKUP
 export const triggerDL = (data, filename) => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -73,7 +73,7 @@ export const triggerDL = (data, filename) => {
     URL.revokeObjectURL(url);
 };
 
-// SINCRONIA: PUSH (LOCAL -> CLOUD)
+// SINCRONIA: PUSH (Blindado e com Suporte a Band_Songs)
 export const pushToCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
     
@@ -85,8 +85,7 @@ export const pushToCloud = async (userId) => {
             content: String(s.content || ""), 
             notes: String(s.notes || ""),
             bpm: Math.round(Number(s.bpm || 120)),
-            creator_id: userId,
-            band_id: s.band_id || null
+            creator_id: userId
         }));
         await supabase.from('songs').upsert(songsPayload, { onConflict: 'title,artist,creator_id' });
     }
@@ -105,13 +104,21 @@ export const pushToCloud = async (userId) => {
         }));
         await supabase.from('setlists').upsert(setlistsPayload, { onConflict: 'title,creator_id' });
     }
+
+    // Backup das conexões de bandas (Mestra)
+    const localRel = await db.band_songs.toArray();
+    if (localRel.length > 0) {
+        await supabase.from('band_songs').upsert(localRel.map(r => ({...r, id: undefined})));
+    }
+
     return { success: true };
 };
 
-// SINCRONIA: PULL (CLOUD -> LOCAL)
+// SINCRONIA: PULL (Blindado contra perda de dados local)
 export const pullFromCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
     
+    // Puxar Músicas
     const { data: cSongs } = await supabase.from('songs').select('*').eq('creator_id', userId);
     if (cSongs) {
         for (let s of cSongs) {
@@ -122,6 +129,7 @@ export const pullFromCloud = async (userId) => {
         }
     }
     
+    // Puxar Setlists
     const { data: cSetlists } = await supabase.from('setlists').select('*').eq('creator_id', userId);
     if (cSetlists) {
         for (let sl of cSetlists) {
@@ -131,5 +139,15 @@ export const pullFromCloud = async (userId) => {
             else await db.setlists.update(ex.id, cleanSetlist);
         }
     }
+
+    // Puxar Conexões de Banda (Novidade Opção B)
+    const { data: cRel } = await supabase.from('band_songs').select('*');
+    if (cRel) {
+        for (let rel of cRel) {
+            // Usa o index composto [band_id+song_id] para evitar duplicatas locais
+            await db.band_songs.put(rel);
+        }
+    }
+
     return { success: true };
 };

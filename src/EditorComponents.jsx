@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, ArrowUp, ArrowDown, Plus, X, Download, Share2, CheckCircle2, Monitor, User, Music, ChevronUp, ChevronDown } from 'lucide-react';
+import { Trash2, ArrowUp, ArrowDown, Plus, X, Monitor, Music, ChevronUp, ChevronDown } from 'lucide-react';
 import { db, transposeContent } from './ShowPadCore';
 
-export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, styles }) => {
+export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, refresh, styles }) => {
   const [lC, setLC] = useState(item.data.content || "");
   const [lT, setLT] = useState(item.data.title || "");
   const [lA, setLA] = useState(item.data.artist || "");
@@ -12,6 +12,9 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
   const [lNot, setLNot] = useState(item.data.notes || "");
   const [lBpm, setLBpm] = useState(parseInt(item.data.bpm, 10) || 120);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  
+  // Estado para armazenar quais músicas pertencem a esta banda (Opção B)
+  const [bandRepertoireIds, setBandRepertoireIds] = useState([]);
 
   useEffect(() => { 
     setConfirmDelete(false); 
@@ -23,7 +26,17 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
     setLMem(item.data.members || "");
     setLNot(item.data.notes || "");
     setLBpm(parseInt(item.data.bpm, 10) || 120);
+    
+    // Carrega o repertório vinculado à banda deste show
+    if (item.type === 'setlist' && item.data.band_id) {
+        loadBandRepertoire();
+    }
   }, [item.data.id]);
+
+  const loadBandRepertoire = async () => {
+    const relations = await db.band_songs.where('band_id').equals(item.data.band_id).toArray();
+    setBandRepertoireIds(relations.map(r => r.song_id));
+  };
 
   const save = async (overideBpm) => {
     const isSong = item.type === 'song';
@@ -51,61 +64,56 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
     save();
   };
 
-  // ESTILO CORRIGIDO: Sem filtros que bagunçam o alinhamento
   const yellowInputStyle = {
     ...styles.artistInput,
     color: '#FFD700',
     fontSize: '15px',
     fontWeight: 'bold',
-    colorScheme: 'dark' // FAZ O ÍCONE FICAR BRANCO/CLARO AUTOMATICAMENTE
+    colorScheme: 'dark'
   };
 
   if (item.type === 'setlist') {
+    const band = item.data.band_id ? bands.find(b => b.id === item.data.band_id) : null;
+    
+    // FILTRO DE REPERTÓRIO: Agora usa o estado alimentado pela tabela band_songs
+    const filteredSongs = (band && !band.is_solo) 
+        ? songs.filter(s => bandRepertoireIds.includes(s.id)) 
+        : songs;
+
     return (
         <div style={styles.mainEditor}>
-            <div style={styles.editorHeader}>
-                <input style={styles.hInput} value={lT} onChange={e=>setLT(e.target.value)} onBlur={save} placeholder="Título do Show" />
+            <div style={{...styles.editorHeader, borderLeft: band ? '6px solid #ff9500' : 'none'}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                    <input style={styles.hInput} value={lT} onChange={e=>setLT(e.target.value)} onBlur={save} placeholder="Título do Show" />
+                    {band && (
+                        <div style={{display:'flex', alignItems:'center', gap:'10px', background:'#000', padding:'5px 12px', borderRadius:'20px', border:'1px solid #333'}}>
+                            {band.logo_url ? (
+                                <img src={band.logo_url} style={{width:'20px', height:'20px', borderRadius:'50%', objectFit:'cover'}} alt="Logo" />
+                            ) : (
+                                <Music size={14} color="#ff9500" />
+                            )}
+                            <span style={{color:'#ff9500', fontSize:'10px', fontWeight:'bold'}}>{band.name}</span>
+                        </div>
+                    )}
+                </div>
                 <div style={{display:'flex', gap:'15px', alignItems: 'center'}}>
-                    <input 
-                        style={yellowInputStyle} 
-                        value={lLoc} 
-                        onChange={e=>setLLoc(e.target.value)} 
-                        onBlur={save} 
-                        placeholder="Local" 
-                    />
-                    <input 
-                        type="datetime-local"
-                        style={{...yellowInputStyle, width: 'auto'}} 
-                        value={lTim} 
-                        onChange={e=>setLTim(e.target.value)} 
-                        onBlur={save} 
-                    />
+                    <input style={yellowInputStyle} value={lLoc} onChange={e=>setLLoc(e.target.value)} onBlur={save} placeholder="Local" />
+                    <input type="datetime-local" style={{...yellowInputStyle, width: 'auto'}} value={lTim} onChange={e=>setLTim(e.target.value)} onBlur={save} />
                 </div>
             </div>
             
-            <textarea 
-                style={{...styles.notesTextArea, marginBottom:'10px'}} 
-                value={lNot} 
-                onChange={e=>setLNot(e.target.value)} 
-                onBlur={save} 
-                placeholder="Observações do show, cronograma, lembretes..."
-                rows={2}
-            />
+            <textarea style={{...styles.notesTextArea, marginBottom:'10px'}} value={lNot} onChange={e=>setLNot(e.target.value)} onBlur={save} placeholder="Observações do show..." rows={2} />
 
             <div style={styles.setlistSplit}>
                 <div style={styles.setlistHalf}>
                     <h3 style={{color:'#888', fontSize:'12px', marginBottom:'10px'}}>Músicas no Show</h3>
                     {item.data.songs?.map((s, i) => {
                         const liveSong = songs.find(original => original.id === s.id);
-                        const currentBpm = liveSong ? liveSong.bpm : s.bpm;
-
                         return (
                             <div key={i} style={{display:'flex', justifyContent:'space-between', padding:'8px', borderBottom:'1px solid #222'}}>
                                 <div style={{display:'flex', flexDirection:'column'}}>
                                     <span style={{fontSize:'13px'}}>{s.title}</span>
-                                    <small style={{color: '#FFD700', fontSize:'10px', fontWeight: 'bold'}}>
-                                        BPM: {currentBpm || "---"}
-                                    </small>
+                                    <small style={{color: '#FFD700', fontSize:'10px', fontWeight: 'bold'}}>BPM: {liveSong ? liveSong.bpm : s.bpm || "---"}</small>
                                 </div>
                                 <div style={{display:'flex', gap:'5px'}}>
                                     <button onClick={async ()=>{const n=[...item.data.songs]; if(i>0){[n[i],n[i-1]]=[n[i-1],n[i]]; await db.setlists.update(item.data.id,{songs:n}); refresh();}}} style={{background:'none', border:'none', color:'#888'}}><ArrowUp size={14}/></button>
@@ -117,8 +125,10 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
                     })}
                 </div>
                 <div style={{...styles.setlistHalf, background:'#111'}}>
-                    <h3 style={{color:'#888', fontSize:'12px', marginBottom:'10px'}}>Biblioteca</h3>
-                    {songs.map(s => (
+                    <h3 style={{color: band ? '#ff9500' : '#888', fontSize:'12px', marginBottom:'10px'}}>
+                        {band && !band.is_solo ? `Repertório: ${band.name}` : "Biblioteca Geral"}
+                    </h3>
+                    {filteredSongs.map(s => (
                         <div key={s.id} style={{padding:'8px', borderBottom:'1px solid #222', cursor:'pointer', display:'flex', justifyContent:'space-between'}} onClick={async ()=>{const n=[...(item.data.songs||[]), s]; await db.setlists.update(item.data.id,{songs:n}); refresh();}}>
                             <span style={{fontSize:'13px'}}>{s.title}</span>
                             <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
@@ -163,22 +173,8 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
         </div>
       </div>
 
-      <textarea 
-        style={styles.notesTextArea} 
-        value={lNot} 
-        onChange={e=>setLNot(e.target.value)} 
-        onBlur={save} 
-        placeholder="Observações, timbres, convenções..."
-        rows={3}
-      />
-
-      <textarea 
-        style={styles.mainTextArea} 
-        value={lC} 
-        onChange={e=>setLC(e.target.value)} 
-        onBlur={save}
-        placeholder="Cole sua cifra aqui..."
-      />
+      <textarea style={styles.notesTextArea} value={lNot} onChange={e=>setLNot(e.target.value)} onBlur={save} placeholder="Observações..." rows={3} />
+      <textarea style={styles.mainTextArea} value={lC} onChange={e=>setLC(e.target.value)} onBlur={save} placeholder="Cifra..." />
 
       {confirmDelete && (
         <div style={styles.settingsOverlay}>

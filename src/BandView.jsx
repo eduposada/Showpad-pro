@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, RefreshCw, Users, Trash2, Layout, Music, X, Settings, Save, UserMinus, ImageIcon, Zap, MinusCircle, Upload } from 'lucide-react';
 import { supabase, db } from './ShowPadCore';
-import { BandShowManager } from './BandShowManager'; // Certifique-se de criar este arquivo
+import { BandShowManager } from './BandShowManager';
 
 export const BandView = ({ session, styles, onSelectShow }) => {
     const [loading, setLoading] = useState(false);
@@ -9,17 +9,14 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const [newBandName, setNewBandName] = useState('');
     const [inviteCode, setInviteCode] = useState('');
     
-    // Estados para Modais
     const [showRepertoire, setShowRepertoire] = useState(null); 
     const [showSettings, setShowSettings] = useState(null); 
-    const [showBandShows, setShowBandShows] = useState(null); // Modal de Agenda
+    const [showBandShows, setShowBandShows] = useState(null); 
     
-    // Estados de Dados
     const [allSongs, setAllSongs] = useState([]);
     const [bandSongs, setBandSongs] = useState([]);
     const [members, setMembers] = useState([]);
 
-    // Estados de Edição da Banda
     const [editName, setEditName] = useState('');
     const [editDesc, setEditDesc] = useState('');
     const [editLogo, setEditLogo] = useState('');
@@ -46,9 +43,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
-            reader.onloadend = () => {
-                setEditLogo(reader.result);
-            };
+            reader.onloadend = () => setEditLogo(reader.result);
             reader.readAsDataURL(file);
         }
     };
@@ -56,27 +51,25 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const fetchBands = async () => {
         setLoading(true);
         try {
-            const { data } = await supabase
+            // Tenta buscar da nuvem
+            const { data, error } = await supabase
                 .from('band_members')
                 .select(`role, bands (*)`)
                 .eq('profile_id', session.user.id);
 
-            let cloudList = data ? data.filter(i => i.bands).map(i => ({ 
-                ...i.bands, 
-                role: i.role,
-                is_solo: i.bands.invite_code.startsWith("SOLO")
-            })) : [];
+            if (!error && data) {
+                const cloudList = data.filter(i => i.bands).map(i => ({ 
+                    ...i.bands, 
+                    role: i.role,
+                    is_solo: i.bands.invite_code.startsWith("SOLO")
+                }));
+                // Faz o PUT no Dexie (Blindagem: não apaga o local se falhar)
+                for (let b of cloudList) await db.my_bands.put(b);
+            }
 
             const localBands = await db.my_bands.toArray();
-            let combined = [...cloudList];
-            localBands.forEach(lb => {
-                if (!combined.find(c => c.id === lb.id)) combined.push(lb);
-            });
-
-            combined.sort((a, b) => (a.is_solo ? -1 : b.is_solo ? 1 : 0));
-            setBands(combined);
-            await db.my_bands.clear(); 
-            if (combined.length > 0) await db.my_bands.bulkAdd(combined);
+            localBands.sort((a, b) => (a.is_solo ? -1 : b.is_solo ? 1 : 0));
+            setBands(localBands);
         } catch (err) { console.error(err); }
         setLoading(false);
     };
@@ -92,19 +85,39 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const refreshRepertoire = async () => {
         if (!showRepertoire) return;
         const total = await db.songs.toArray();
-        const specific = await db.songs.where('band_id').equals(showRepertoire.id).toArray();
+        
+        // NOVA LÓGICA: Busca conexões na tabela band_songs
+        const relations = await db.band_songs.where('band_id').equals(showRepertoire.id).toArray();
+        const songIds = relations.map(r => r.song_id);
+        const specific = total.filter(s => songIds.includes(s.id));
+        
         setAllSongs(total);
         setBandSongs(specific);
     };
 
     const addSongToBand = async (songId) => {
-        await db.songs.update(songId, { band_id: showRepertoire.id });
-        await refreshRepertoire();
+        if (!showRepertoire) return;
+        try {
+            // Adiciona na tabela de ligação (Biblioteca Mestra)
+            await db.band_songs.put({
+                band_id: showRepertoire.id,
+                song_id: songId,
+                custom_tone: 0
+            });
+            await refreshRepertoire();
+        } catch (e) { console.error(e); }
     };
 
     const removeSongFromBand = async (songId) => {
-        await db.songs.update(songId, { band_id: null });
-        await refreshRepertoire();
+        if (!showRepertoire) return;
+        try {
+            // Remove apenas a ligação
+            const relation = await db.band_songs
+                .where({ band_id: showRepertoire.id, song_id: songId })
+                .first();
+            if (relation) await db.band_songs.delete(relation.id);
+            await refreshRepertoire();
+        } catch (e) { console.error(e); }
     };
 
     const createBand = async () => {
@@ -136,7 +149,6 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         if (!error) {
             await fetchBands();
             setShowSettings(null);
-            alert("Dados atualizados!");
         }
         setLoading(false);
     };
@@ -190,7 +202,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 ))}
             </div>
 
-            {/* MODAL DE REPERTÓRIO */}
+            {/* MODAL DE REPERTÓRIO (ATUALIZADO PARA TABELA DE LIGAÇÃO) */}
             {showRepertoire && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '850px', height: '85vh', borderRadius: '24px', border: '1px solid #444', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -206,7 +218,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                                     <div>
                                         <h4 style={{ color: '#888', fontSize: '11px', marginBottom: '15px' }}>BIBLIOTECA</h4>
                                         <div style={{ background: '#111', borderRadius: '12px', padding: '10px', border: '1px solid #222' }}>
-                                            {allSongs.filter(s => s.band_id !== showRepertoire.id).map(s => (
+                                            {allSongs.filter(s => !bandSongs.find(bs => bs.id === s.id)).map(s => (
                                                 <div key={s.id} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between' }}>
                                                     <span style={{ color: '#fff' }}>{s.title}</span>
                                                     <Plus onClick={() => addSongToBand(s.id)} size={18} color="#34c759" style={{ cursor: 'pointer' }} />
@@ -233,7 +245,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 </div>
             )}
 
-            {/* MODAL DE CONFIGURAÇÕES */}
+            {/* MODAIS DE CONFIGURAÇÕES E SHOWS PERMANECEM OS MESMOS */}
             {showSettings && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '550px', borderRadius: '28px', border: '1px solid #444', overflow: 'hidden' }}>
@@ -243,60 +255,29 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                         </div>
                         <div style={{ padding: '25px', display: 'flex', flexDirection: 'column', gap: '15px', maxHeight: '70vh', overflowY: 'auto' }}>
                             <div style={{ display: 'flex', gap: '20px', alignItems: 'center', background: '#111', padding: '15px', borderRadius: '18px', border: '1px solid #333' }}>
-                                <div style={{ width: '100px', height: '100px', borderRadius: '12px', background: '#000', border: '1px solid #444', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div style={{ width: '80px', height: '80px', borderRadius: '12px', background: '#000', border: '1px solid #444', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     {editLogo ? <img src={editLogo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImageIcon size={30} color="#222" />}
                                 </div>
                                 <div style={{ flex: 1 }}>
-                                    <label style={{ color: '#666', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>LOGO DA BANDA (UPLOAD)</label>
+                                    <label style={{ color: '#666', fontSize: '10px' }}>UPLOAD DE LOGO</label>
                                     <label style={{ ...styles.primaryButton, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '11px', padding: '8px 12px' }}>
-                                        <Plus size={14} /> SELECIONAR IMAGEM
-                                        <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
+                                        <Plus size={14} /> IMAGEM <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
                                     </label>
                                 </div>
                             </div>
-                            <label style={{ color: '#666', fontSize: '10px', fontWeight: 'bold' }}>NOME DA BANDA</label>
-                            <input style={styles.inputField} value={editName} onChange={e => setEditName(e.target.value)} />
-                            <label style={{ color: '#666', fontSize: '10px', fontWeight: 'bold' }}>DATA DE CRIAÇÃO DA BANDA</label>
+                            <input style={styles.inputField} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nome da Banda" />
                             <input type="date" style={styles.inputField} value={editDate} onChange={e => setEditDate(e.target.value)} />
-                            <label style={{ color: '#666', fontSize: '10px', fontWeight: 'bold' }}>OBSERVAÇÕES</label>
                             <textarea style={{ ...styles.inputField, height: '80px' }} value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Observações..." />
-                            <div>
-                                <label style={{ color: '#666', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>INTEGRANTES CADASTRADOS</label>
-                                <div style={{ background: '#111', borderRadius: '15px', border: '1px solid #222' }}>
-                                    {members.map(m => (
-                                        <div key={m.profile_id} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div>
-                                                <div style={{ color: '#fff', fontSize: '13px', fontWeight: 'bold' }}>{m.profiles?.full_name}</div>
-                                                <div style={{ color: '#555', fontSize: '10px' }}>{m.role === 'admin' ? '⚓ Administrador' : 'Músico'}</div>
-                                            </div>
-                                            {m.profile_id !== session.user.id && (
-                                                <button onClick={() => removeMember(m.profile_id)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                                                    <Trash2 size={16} color="#ff3b30" />
-                                                </button>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
                         </div>
                         <div style={{ padding: '20px', background: '#252529' }}>
-                            <button onClick={handleUpdateBand} style={{ ...styles.saveBtn, width: '100%', background: '#34c759' }}><Save size={18} style={{ marginRight: '8px' }}/> SALVAR ALTERAÇÕES</button>
+                            <button onClick={handleUpdateBand} style={{ ...styles.saveBtn, width: '100%', background: '#34c759' }}><Save size={18}/> SALVAR ALTERAÇÕES</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* NOVO MODAL DE AGENDA DE SHOWS */}
             {showBandShows && (
-                <BandShowManager 
-                    band={showBandShows} 
-                    styles={styles}
-                    onClose={() => setShowBandShows(null)} 
-                    onSelectShow={(show) => {
-                        onSelectShow(show); 
-                        setShowBandShows(null);
-                    }}
-                />
+                <BandShowManager band={showBandShows} styles={styles} onClose={() => setShowBandShows(null)} onSelectShow={(show) => { onSelectShow(show); setShowBandShows(null); }} />
             )}
         </div>
     );

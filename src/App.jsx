@@ -18,6 +18,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [songs, setSongs] = useState([]);
   const [setlists, setSetlists] = useState([]);
+  const [bands, setBands] = useState([]); // Agora carregamos as bandas globalmente
   const [selectedItem, setSelectedItem] = useState(null);
   
   const [showMode, setShowMode] = useState(false);
@@ -45,7 +46,6 @@ export default function App() {
     }
   }, []);
 
-  // Lógica de Nascimento da Banda Solo
   const checkSoloBand = async (user) => {
     if (!user) return;
     const soloId = `SOLO-${user.id.substring(0,8)}`;
@@ -53,28 +53,11 @@ export default function App() {
     
     if (!existing) {
         const soloName = `${user.user_metadata?.full_name?.toUpperCase() || "MEU"} - SOLO`;
-        const soloData = {
-            id: soloId,
-            name: soloName,
-            invite_code: "SOLO",
-            role: 'admin',
-            is_solo: true 
-        };
-
+        const soloData = { id: soloId, name: soloName, invite_code: "SOLO", role: 'admin', is_solo: true };
         await db.my_bands.put(soloData);
-
         try {
-            await supabase.from('bands').upsert({
-                id: soloId,
-                name: soloName,
-                invite_code: `SOLO-${user.id.substring(0,5)}`,
-                owner_id: user.id
-            });
-            await supabase.from('band_members').upsert({
-                band_id: soloId,
-                profile_id: user.id,
-                role: 'admin'
-            });
+            await supabase.from('bands').upsert({ id: soloId, name: soloName, invite_code: `SOLO-${user.id.substring(0,5)}`, owner_id: user.id });
+            await supabase.from('band_members').upsert({ band_id: soloId, profile_id: user.id, role: 'admin' });
         } catch(e) { console.warn("Sync Solo Band failed."); }
     }
   };
@@ -94,13 +77,16 @@ export default function App() {
     try {
         const s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
+        const b = await db.my_bands.toArray(); // Sincroniza a lista de bandas localmente
+        
         s.sort((a,b) => {
             const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
             const valB = (sortBy === 'artist' ? b.artist : b.title) || "";
             return valA.toLowerCase().localeCompare(valB.toLowerCase());
         });
         setSongs(s); 
-        setSetlists(sl); 
+        setSetlists(sl);
+        setBands(b); 
         if (selectedItem) {
             const id = selectedItem.data.id;
             const upd = (selectedItem.type === 'song') ? s.find(x => x.id === id) : sl.find(x => x.id === id);
@@ -133,35 +119,28 @@ export default function App() {
     setSelectedItem({ type: isSetlist ? 'setlist' : 'song', data: savedItem });
   };
 
-  // FUNÇÃO DE PONTE PARA BANDAS: Abre o show direto no editor
   const openBandShow = (show) => {
     setSelectedItem({ type: 'setlist', data: show });
-    setView('setlists'); // Alterna para o editor de setlists
+    setView('setlists'); 
   };
 
   const checkServer = () => {
     if (window.location.hostname === "localhost") {
-      fetch('http://localhost:3001/ping')
-        .then(r => setIsServerOnline(r.ok))
-        .catch(() => setIsServerOnline(false));
-    } else {
-      setIsServerOnline(false);
-    }
+      fetch('http://localhost:3001/ping').then(r => setIsServerOnline(r.ok)).catch(() => setIsServerOnline(false));
+    } else { setIsServerOnline(false); }
   };
 
   const handleCloudPush = async () => {
     if (!session) return;
     setIsScraping(true);
-    try { await pushToCloud(session.user.id); alert("Backup salvo!"); } 
-    catch (e) { alert("Erro ao subir: " + e.message); }
+    try { await pushToCloud(session.user.id); alert("Backup salvo!"); } catch (e) { alert("Erro: " + e.message); }
     setIsScraping(false);
   };
 
   const handleCloudPull = async () => {
     if (!session) return;
     setIsScraping(true);
-    try { await pullFromCloud(session.user.id); await refreshData(); alert("Sincronizado!"); } 
-    catch (e) { alert("Erro ao baixar: " + e.message); }
+    try { await pullFromCloud(session.user.id); await refreshData(); alert("Sincronizado!"); } catch (e) { alert("Erro: " + e.message); }
     setIsScraping(false);
   };
 
@@ -177,14 +156,9 @@ export default function App() {
             const st = e.data[0], d1 = e.data[1], d2 = e.data[2];
             if ((st >= 144 && st <= 159 && d2 > 0) || (st >= 176 && st <= 191)) {
               const sig = (st >= 144 && st <= 159 ? "note" : "cc") + "-" + d1;
-              setMidiFlash(true); 
-              setLastSignalUI(sig); 
+              setMidiFlash(true); setLastSignalUI(sig); 
               setTimeout(() => { setMidiFlash(false); setLastSignalUI(""); }, 1000);
-              if (midiLearningRef.current) { 
-                localStorage.setItem("midi-" + midiLearningRef.current, sig); 
-                setMidiLearning(null); 
-                return; 
-              }
+              if (midiLearningRef.current) { localStorage.setItem("midi-" + midiLearningRef.current, sig); setMidiLearning(null); return; }
               if (sig === localStorage.getItem('midi-up')) scrollPage(-1);
               if (sig === localStorage.getItem('midi-down')) scrollPage(1);
             }
@@ -194,9 +168,7 @@ export default function App() {
       updateMidi();
       WebMidi.addListener("connected", updateMidi);
       WebMidi.addListener("disconnected", updateMidi);
-    }).catch(err => {
-      setMidiStatus("blocked");
-    });
+    }).catch(() => setMidiStatus("blocked"));
   };
 
   const scrollPage = (d) => { if (showScrollRef.current) showScrollRef.current.scrollBy({ top: (window.innerHeight * 0.45) * d, behavior: 'smooth' }); };
@@ -207,15 +179,9 @@ export default function App() {
       try {
         const d = JSON.parse(ev.target.result);
         if (targetMode === 'library' && d.songs) {
-          for (let s of d.songs) {
-            if (!(await db.songs.where({title: s.title, artist: s.artist}).first())) {
-              await db.songs.add({ ...s, id: undefined, creator_id: session.user.id });
-            }
-          }
+          for (let s of d.songs) { if (!(await db.songs.where({title: s.title, artist: s.artist}).first())) await db.songs.add({ ...s, id: undefined, creator_id: session.user.id }); }
         } else if (targetMode === 'setlists' && d.setlists) {
-             for (let sl of d.setlists) {
-                await db.setlists.add({ ...sl, id: undefined, creator_id: session.user.id });
-             }
+             for (let sl of d.setlists) await db.setlists.add({ ...sl, id: undefined, creator_id: session.user.id });
         }
         refreshData(); alert("Importado!");
       } catch (err) { alert("Erro JSON."); }
@@ -254,19 +220,25 @@ export default function App() {
           </div>
 
           <div style={styles.listArea}>
-            {['library', 'setlists'].includes(view) ? (view === 'library' ? songs : setlists).map(item => (
-              <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}
-                   onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
-                <div style={{flex:1, overflow:'hidden'}}>
-                    <strong style={{color:'#fff', display:'block'}}>{item.title}</strong>
-                    <small style={styles.artistYellow}>{item.artist || item.location || "---"}</small>
+            {['library', 'setlists'].includes(view) ? (view === 'library' ? songs : setlists).map(item => {
+              // Busca o objeto da banda para exibir o nome em laranja
+              const band = item.band_id ? bands.find(b => b.id === item.band_id) : null;
+              
+              return (
+                <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}
+                     onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
+                  <div style={{flex:1, overflow:'hidden'}}>
+                      <strong style={{color:'#fff', display:'block'}}>{item.title}</strong>
+                      {band && <span style={styles.bandTagOrange}>{band.name}</span>}
+                      <small style={styles.artistYellow}>{item.artist || item.location || "---"}</small>
+                  </div>
+                  <div style={{display:'flex', gap:'6px'}}>
+                      <div style={{cursor:'pointer'}} onClick={(e) => { e.stopPropagation(); setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={20} color="#007aff"/></div>
+                      <div style={{cursor:'pointer'}} onClick={async (e) => { e.stopPropagation(); if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={20} color="#444"/></div>
+                  </div>
                 </div>
-                <div style={{display:'flex', gap:'6px'}}>
-                    <div style={{cursor:'pointer'}} onClick={(e) => { e.stopPropagation(); setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={20} color="#007aff"/></div>
-                    <div style={{cursor:'pointer'}} onClick={async (e) => { e.stopPropagation(); if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={20} color="#444"/></div>
-                </div>
-              </div>
-            )) : <div style={{padding:'20px', color:'#888', fontSize:'11px', textAlign:'center'}}>Menu Ativo no Painel Central.</div>}
+              )
+            }) : <div style={{padding:'20px', color:'#888', fontSize:'11px', textAlign:'center'}}>Menu Ativo no Painel Central.</div>}
           </div>
 
           <div style={styles.sidebarFooter}>
@@ -279,7 +251,7 @@ export default function App() {
         <div style={styles.mainEditor}>
           {view === 'garimpo' ? <GarimpoView isServerOnline={isServerOnline} styles={styles} refresh={refreshData} session={session} />
           : view === 'bands' ? <BandView session={session} styles={styles} onSelectShow={openBandShow} />
-          : selectedItem ? <MainEditor key={selectedItem.data.id} item={selectedItem} songs={songs} triggerDL={triggerDL} onClose={()=>setSelectedItem(null)} onShow={()=>setShowMode(true)} refresh={refreshData} styles={styles} />
+          : selectedItem ? <MainEditor key={selectedItem.data.id} item={selectedItem} songs={songs} bands={bands} triggerDL={triggerDL} onClose={()=>setSelectedItem(null)} onShow={()=>setShowMode(true)} refresh={refreshData} styles={styles} />
           : <div style={styles.empty}>
               <Music size={120} color="#111" />
               <h1 style={{fontSize:'40px', fontWeight:'900', color:'#111', margin:0}}>SHOWPAD PRO</h1>
