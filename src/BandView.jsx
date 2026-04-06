@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, UserPlus, RefreshCw, Users, Trash2, Layout, Music, Copy, CheckCircle } from 'lucide-react';
+import { Plus, UserPlus, RefreshCw, Users, Trash2, Layout, Music, Copy, CheckCircle, X, Zap } from 'lucide-react';
 import { supabase, db } from './ShowPadCore';
 
 export const BandView = ({ session, styles }) => {
@@ -9,40 +9,57 @@ export const BandView = ({ session, styles }) => {
     const [inviteCode, setInviteCode] = useState('');
     const [copied, setCopied] = useState(false);
 
-    useEffect(() => { fetchBands(); }, []);
+    // Estados para o Modal de Repertório
+    const [showRepertoire, setShowRepertoire] = useState(null); 
+    const [allSongs, setAllSongs] = useState([]);
+
+    useEffect(() => { 
+        fetchBands(); 
+        loadSongs();
+    }, []);
+
+    const loadSongs = async () => {
+        const s = await db.songs.toArray();
+        setAllSongs(s);
+    };
 
     const fetchBands = async () => {
         setLoading(true);
         try {
+            // 1. Busca no Supabase
             const { data, error } = await supabase
                 .from('band_members')
-                .select(`
-                    role, 
-                    bands (
-                        id, 
-                        name, 
-                        invite_code
-                    )
-                `)
+                .select(`role, bands (id, name, invite_code)`)
                 .eq('profile_id', session.user.id);
 
-            if (error) throw error;
-
+            let cloudList = [];
             if (data) {
-                const list = data
-                    .filter(i => i.bands) // Garante que a banda existe
-                    .map(i => ({ 
-                        id: i.bands.id, 
-                        name: i.bands.name, 
-                        invite_code: i.bands.invite_code, 
-                        role: i.role 
-                    }));
-                setBands(list);
-                await db.my_bands.clear(); 
-                await db.my_bands.bulkAdd(list);
+                cloudList = data.filter(i => i.bands).map(i => ({ 
+                    id: i.bands.id, 
+                    name: i.bands.name, 
+                    invite_code: i.bands.invite_code, 
+                    role: i.role,
+                    is_solo: i.bands.invite_code.startsWith("SOLO")
+                }));
             }
+
+            // 2. Busca no Dexie (Garante a Banda Solo local)
+            const localBands = await db.my_bands.toArray();
+            
+            // 3. Merge inteligente
+            const combined = [...cloudList];
+            localBands.forEach(lb => {
+                if (!combined.find(c => c.id === lb.id)) combined.push(lb);
+            });
+
+            setBands(combined);
+            
+            // Atualiza o cache local
+            await db.my_bands.clear(); 
+            if (combined.length > 0) await db.my_bands.bulkAdd(combined);
+            
         } catch (err) { 
-            console.error("Erro ao buscar bandas:", err); 
+            console.error("Erro na faina de busca:", err); 
         }
         setLoading(false);
     };
@@ -52,71 +69,44 @@ export const BandView = ({ session, styles }) => {
         setLoading(true);
         try {
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-            
-            // Tenta criar a banda. Se der erro de 'invite_code', o catch vai pegar.
-            const { data: band, error: bandError } = await supabase
+            const { data: band, error } = await supabase
                 .from('bands')
-                .insert([{ 
-                    name: newBandName, 
-                    owner_id: session.user.id, 
-                    invite_code: code 
-                }])
-                .select()
-                .single();
-
-            if (bandError) {
-                if (bandError.message.includes('invite_code')) {
-                    throw new Error("A coluna 'invite_code' não existe na tabela 'bands' do Supabase. Verifique o banco de dados.");
-                }
-                throw bandError;
-            }
+                .insert([{ name: newBandName, owner_id: session.user.id, invite_code: code }])
+                .select().single();
 
             if (band) {
-                const { error: memberError } = await supabase
-                    .from('band_members')
-                    .insert([{ band_id: band.id, profile_id: session.user.id, role: 'admin' }]);
-                
-                if (memberError) throw memberError;
-
+                await supabase.from('band_members').insert([{ 
+                    band_id: band.id, 
+                    profile_id: session.user.id, 
+                    role: 'admin' 
+                }]);
                 setNewBandName(''); 
-                await fetchBands();
-                alert(`Banda "${band.name}" criada com sucesso!`);
+                fetchBands();
             }
-        } catch (err) {
-            alert("Erro na Operação: " + err.message);
-        }
+        } catch (err) { alert("Erro ao criar: " + err.message); }
         setLoading(false);
     };
 
-    const joinBand = async () => {
-        if (!inviteCode) return;
+    const handleDeleteBand = async (band) => {
+        if (!confirm(`⚓ ATENÇÃO COMANDANTE: Deseja realmente excluir a banda "${band.name}"?`)) return;
+        
         setLoading(true);
         try {
-            const cleanCode = inviteCode.trim().toUpperCase();
-            const { data: band, error: searchError } = await supabase
+            // Ordem de demolição na Nuvem (Supabase)
+            const { error } = await supabase
                 .from('bands')
-                .select('id, name')
-                .eq('invite_code', cleanCode)
-                .single();
+                .delete()
+                .eq('id', band.id);
 
-            if (searchError || !band) {
-                alert("Código de convite não encontrado.");
-            } else {
-                const { error: joinError } = await supabase
-                    .from('band_members')
-                    .insert([{ band_id: band.id, profile_id: session.user.id, role: 'member' }]);
-                
-                if (joinError) {
-                    if (joinError.code === "23505") alert("Você já faz parte desta banda!");
-                    else throw joinError;
-                } else {
-                    alert(`Bem-vindo à banda ${band.name}!`);
-                    setInviteCode('');
-                    fetchBands();
-                }
-            }
+            if (error) throw error;
+
+            // Limpeza no Porto Local (Dexie)
+            await db.my_bands.delete(band.id);
+
+            await fetchBands();
+            alert("Banda enviada para o fundo do mar!");
         } catch (err) {
-            console.error(err);
+            alert("Falha na exclusão: " + err.message);
         }
         setLoading(false);
     };
@@ -129,105 +119,147 @@ export const BandView = ({ session, styles }) => {
 
     return (
         <div style={styles.garimpoPanel}>
-            {/* CABEÇALHO */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: '1px solid #333', paddingBottom: '20px' }}>
+            {/* HEADER NAVAL */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
                 <div>
                     <h1 style={{ color: '#fff', fontSize: '28px', fontWeight: '900', margin: 0 }}>BANDAS</h1>
-                    <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>Gestão de formações e códigos de acesso.</p>
+                    <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>Gestão de guarnições e repertórios.</p>
                 </div>
                 <button 
                     onClick={fetchBands} 
-                    style={{ background: '#1c1c1e', border: '1px solid #444', borderRadius: '12px', padding: '12px', color: '#007aff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    style={{ ...styles.headerBtn, padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
-                    <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
-                    <span style={{ fontSize: '12px', fontWeight: 'bold' }}>SINCRONIZAR</span>
+                    <RefreshCw size={16} className={loading ? "animate-spin" : ""}/> 
+                    {loading ? "SINCRONIZANDO..." : "ATUALIZAR"}
                 </button>
             </div>
             
+            {/* PAINEL DE COMANDO (CRIAR/ENTRAR) */}
             <div style={{ display: 'flex', gap: '20px', marginBottom: '40px' }}>
-                {/* CRIAR BANDA */}
-                <div style={{ flex: 1, background: '#1c1c1e', padding: '25px', borderRadius: '15px', border: '1px solid #333' }}>
-                    <h3 style={{ color: '#007aff', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Plus size={14}/> Criar Nova Banda
-                    </h3>
-                    <input 
-                        style={styles.inputField} 
-                        value={newBandName} 
-                        onChange={e => setNewBandName(e.target.value)} 
-                        placeholder="Nome da Banda" 
-                    />
-                    <button 
-                        style={{ ...styles.primaryButton, marginTop: '15px' }} 
-                        onClick={createBand}
-                        disabled={loading}
-                    >
-                        {loading ? "CRIANDO..." : "CADASTRAR"}
-                    </button>
+                <div style={{ flex: 1, background: '#1c1c1e', padding: '20px', borderRadius: '15px', border: '1px solid #333' }}>
+                    <h4 style={{ color: '#007aff', fontSize: '10px', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>Nova Banda</h4>
+                    <input style={styles.inputField} value={newBandName} onChange={e => setNewBandName(e.target.value)} placeholder="Nome da Banda" />
+                    <button style={{ ...styles.primaryButton, marginTop: '10px' }} onClick={createBand}>CADASTRAR</button>
                 </div>
-
-                {/* ENTRAR EM BANDA */}
-                <div style={{ flex: 1, background: '#111', padding: '25px', borderRadius: '15px', border: '1px solid #333' }}>
-                    <h3 style={{ color: '#34c759', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <UserPlus size={14}/> Código de Convite
-                    </h3>
-                    <input 
-                        style={styles.inputField} 
-                        value={inviteCode} 
-                        onChange={e => setInviteCode(e.target.value.toUpperCase())} 
-                        placeholder="Ex: XH892A" 
-                    />
-                    <button 
-                        style={{ ...styles.primaryButton, backgroundColor: '#34c759', marginTop: '15px' }} 
-                        onClick={joinBand}
-                        disabled={loading}
-                    >
-                        {loading ? "BUSCANDO..." : "ENTRAR"}
-                    </button>
+                <div style={{ flex: 1, background: '#111', padding: '20px', borderRadius: '15px', border: '1px solid #333' }}>
+                    <h4 style={{ color: '#34c759', fontSize: '10px', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>Código de Convite</h4>
+                    <input style={styles.inputField} value={inviteCode} onChange={e => setInviteCode(e.target.value.toUpperCase())} placeholder="Ex: AX72P" />
+                    <button style={{ ...styles.primaryButton, backgroundColor: '#34c759', marginTop: '10px' }}>ENTRAR</button>
                 </div>
             </div>
 
-            <h3 style={{ marginBottom: '20px', fontSize: '14px', color: '#888', fontWeight: 'bold', textTransform: 'uppercase' }}>
-                Formações
-            </h3>
-            
+            {/* LISTAGEM DE CARDS */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
-                {bands.length === 0 ? (
-                    <div style={{ padding: '60px', textAlign: 'center', color: '#444', gridColumn: '1/-1', border: '2px dashed #222', borderRadius: '20px' }}>
-                        <Users size={48} style={{ marginBottom: '15px', opacity: 0.2 }} />
-                        <p>Nenhuma banda encontrada no seu perfil.</p>
-                    </div>
-                ) : (
-                    bands.map(b => (
-                        <div key={b.id} style={{ ...styles.settingsCard, maxWidth: 'none', border: '1px solid #333', background: '#1c1c1e' }}>
-                            <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div>
-                                    <h2 style={{ color: '#FFD700', margin: 0, fontSize: '22px', fontWeight: '900' }}>{b.name}</h2>
-                                    <span style={{ color: b.role === 'admin' ? '#007aff' : '#888', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '5px' }}>
-                                        <Users size={12}/> {b.role === 'admin' ? 'Administrador' : 'Membro'}
-                                    </span>
-                                </div>
+                {bands.map(b => (
+                    <div key={b.id} style={{ ...styles.settingsCard, maxWidth: 'none', border: '1px solid #333', background: '#1c1c1e', position: 'relative' }}>
+                        <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                                <h2 style={{ color: '#FFD700', margin: 0, fontSize: '20px', fontWeight: '900' }}>{b.name}</h2>
+                                <span style={{ color: b.role === 'admin' ? '#007aff' : '#888', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '4px' }}>
+                                    <Users size={12}/> {b.role === 'admin' ? '⚓ LÍDER' : 'MÚSICO'}
+                                </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                                 <div 
                                     onClick={() => copyToClipboard(b.invite_code)}
-                                    style={{ background: '#000', padding: '10px 15px', borderRadius: '10px', border: '1px solid #333', cursor: 'pointer', textAlign: 'center', minWidth: '80px' }}
+                                    style={{ background: '#000', padding: '5px 10px', borderRadius: '6px', border: '1px solid #333', cursor: 'pointer', textAlign: 'center' }}
                                 >
-                                    <small style={{ color: '#666', display: 'block', fontSize: '8px', fontWeight: 'bold' }}>CÓDIGO</small>
-                                    <strong style={{ color: '#fff', fontFamily: 'monospace', fontSize: '16px' }}>{b.invite_code || "---"}</strong>
-                                    {copied && <div style={{ fontSize: '8px', color: '#34c759', marginTop: '2px' }}>COPIADO</div>}
+                                    <small style={{ color: '#555', display: 'block', fontSize: '8px' }}>CONVITE</small>
+                                    <code style={{ color: '#fff', fontSize: '14px' }}>{b.invite_code}</code>
                                 </div>
-                            </div>
-                            
-                            <div style={{ padding: '15px 20px', borderTop: '1px solid #222', display: 'flex', gap: '10px', background: '#161618' }}>
-                                <button style={{ ...styles.headerBtn, flex: 1, color: '#FFD700', border: '1px solid #444' }}>
-                                    <Music size={14}/> REPERTÓRIO
-                                </button>
-                                <button style={{ ...styles.headerBtn, flex: 1, color: '#fff', border: '1px solid #444' }}>
-                                    <Layout size={14}/> SHOWS
-                                </button>
+                                {!b.is_solo && b.role === 'admin' && (
+                                    <button 
+                                        onClick={() => handleDeleteBand(b)}
+                                        style={{ background: 'none', border: 'none', color: '#ff3b30', cursor: 'pointer', padding: '5px' }}
+                                    >
+                                        <Trash2 size={20} />
+                                    </button>
+                                )}
                             </div>
                         </div>
-                    ))
-                )}
+                        
+                        <div style={{ padding: '15px 20px', borderTop: '1px solid #222', display: 'flex', gap: '10px', background: '#161618' }}>
+                            <button 
+                                onClick={() => setShowRepertoire(b)}
+                                style={{ ...styles.headerBtn, flex: 1, color: '#FFD700', border: '1px solid #444' }}
+                            >
+                                <Music size={14}/> REPERTÓRIO
+                            </button>
+                            <button style={{ ...styles.headerBtn, flex: 1, color: '#fff', border: '1px solid #444' }}>
+                                <Layout size={14}/> SHOWS
+                            </button>
+                        </div>
+                    </div>
+                ))}
             </div>
+
+            {/* MODAL DE REPERTÓRIO (INTERFACE DE SELEÇÃO) */}
+            {showRepertoire && (
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                    <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '850px', height: '85vh', borderRadius: '24px', display: 'flex', flexDirection: 'column', border: '1px solid #444', overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
+                        
+                        <div style={{ padding: '25px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#252529' }}>
+                            <div>
+                                <h2 style={{ color: '#FFD700', margin: 0, fontSize: '22px' }}>Gestão de Repertório</h2>
+                                <p style={{ color: '#888', fontSize: '12px', margin: 0 }}>Banda: {showRepertoire.name}</p>
+                            </div>
+                            <button 
+                                onClick={() => setShowRepertoire(null)} 
+                                style={{ background: '#ff3b30', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                            >
+                                <X size={20} color="#fff" />
+                            </button>
+                        </div>
+                        
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '30px' }}>
+                            {showRepertoire.is_solo ? (
+                                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#888' }}>
+                                    <div style={{ background: '#222', width: '80px', height: '80px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                                        <Zap size={40} color="#FFD700" />
+                                    </div>
+                                    <h3 style={{ color: '#fff' }}>Modo Solo Ativo</h3>
+                                    <p style={{ maxWidth: '400px', margin: '0 auto', lineHeight: '1.6' }}>
+                                        Neste modo, o ShowPad Pro disponibiliza automaticamente <strong>toda a sua biblioteca global</strong> para criação de shows. Não é necessário selecionar músicas individualmente.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', height: '100%' }}>
+                                    {/* COLUNA ESQUERDA: BIBLIOTECA */}
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <h4 style={{ color: '#888', fontSize: '11px', fontWeight: 'bold', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>📚 Sua Biblioteca</h4>
+                                        <div style={{ flex: 1, background: '#111', borderRadius: '12px', padding: '10px', border: '1px solid #222', overflowY: 'auto' }}>
+                                            {allSongs.map(s => (
+                                                <div key={s.id} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <div>
+                                                        <div style={{ color: '#fff', fontSize: '13px', fontWeight: 'bold' }}>{s.title}</div>
+                                                        <div style={{ color: '#666', fontSize: '10px' }}>{s.artist}</div>
+                                                    </div>
+                                                    <button style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                                                        <Plus size={18} color="#34c759" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* COLUNA DIREITA: REPERTÓRIO DA BANDA */}
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <h4 style={{ color: '#FFD700', fontSize: '11px', fontWeight: 'bold', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>🎸 Repertório da Banda</h4>
+                                        <div style={{ flex: 1, background: '#000', borderRadius: '12px', padding: '10px', border: '1px solid #FFD70033', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                            <Music size={32} color="#222" style={{ marginBottom: '10px' }} />
+                                            <p style={{ color: '#444', fontSize: '12px', textAlign: 'center' }}>Adicione músicas da biblioteca <br/> para compor o repertório desta banda.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div style={{ padding: '20px', background: '#252529', borderTop: '1px solid #333', textAlign: 'right' }}>
+                            <button onClick={() => setShowRepertoire(null)} style={styles.saveBtn}>CONCLUIR</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
