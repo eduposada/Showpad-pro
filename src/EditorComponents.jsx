@@ -51,13 +51,13 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
     save();
   };
 
-  // Estilo específico para os inputs amarelos do Setlist
+  // ESTILO CORRIGIDO: Sem filtros que bagunçam o alinhamento
   const yellowInputStyle = {
     ...styles.artistInput,
     color: '#FFD700',
-    fontSize: '15px', // 1 ponto acima do padrão de 14px
+    fontSize: '15px',
     fontWeight: 'bold',
-    filter: 'brightness(1.2)' // Garante que o ícone do calendário também brilhe
+    colorScheme: 'dark' // FAZ O ÍCONE FICAR BRANCO/CLARO AUTOMATICAMENTE
   };
 
   if (item.type === 'setlist') {
@@ -75,7 +75,7 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
                     />
                     <input 
                         type="datetime-local"
-                        style={{...yellowInputStyle, width: 'auto', appearance: 'none'}} 
+                        style={{...yellowInputStyle, width: 'auto'}} 
                         value={lTim} 
                         onChange={e=>setLTim(e.target.value)} 
                         onBlur={save} 
@@ -95,26 +95,36 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
             <div style={styles.setlistSplit}>
                 <div style={styles.setlistHalf}>
                     <h3 style={{color:'#888', fontSize:'12px', marginBottom:'10px'}}>Músicas no Show</h3>
-                    {item.data.songs?.map((s, i) => (
-                        <div key={i} style={{display:'flex', justifyContent:'space-between', padding:'8px', borderBottom:'1px solid #222'}}>
-                            <div style={{display:'flex', flexDirection:'column'}}>
-                                <span style={{fontSize:'13px'}}>{s.title}</span>
-                                <small style={{color: '#FFD700', fontSize:'10px'}}>BPM: {s.bpm || "---"}</small>
+                    {item.data.songs?.map((s, i) => {
+                        const liveSong = songs.find(original => original.id === s.id);
+                        const currentBpm = liveSong ? liveSong.bpm : s.bpm;
+
+                        return (
+                            <div key={i} style={{display:'flex', justifyContent:'space-between', padding:'8px', borderBottom:'1px solid #222'}}>
+                                <div style={{display:'flex', flexDirection:'column'}}>
+                                    <span style={{fontSize:'13px'}}>{s.title}</span>
+                                    <small style={{color: '#FFD700', fontSize:'10px', fontWeight: 'bold'}}>
+                                        BPM: {currentBpm || "---"}
+                                    </small>
+                                </div>
+                                <div style={{display:'flex', gap:'5px'}}>
+                                    <button onClick={async ()=>{const n=[...item.data.songs]; if(i>0){[n[i],n[i-1]]=[n[i-1],n[i]]; await db.setlists.update(item.data.id,{songs:n}); refresh();}}} style={{background:'none', border:'none', color:'#888'}}><ArrowUp size={14}/></button>
+                                    <button onClick={async ()=>{const n=[...item.data.songs]; if(i<n.length-1){[n[i],n[i+1]]=[n[i+1],n[i]]; await db.setlists.update(item.data.id,{songs:n}); refresh();}}} style={{background:'none', border:'none', color:'#888'}}><ArrowDown size={14}/></button>
+                                    <button onClick={async ()=>{const n=[...item.data.songs]; n.splice(i,1); await db.setlists.update(item.data.id,{songs:n}); refresh();}} style={{background:'none', border:'none', color:'#ff3b30'}}><Trash2 size={14}/></button>
+                                </div>
                             </div>
-                            <div style={{display:'flex', gap:'5px'}}>
-                                <button onClick={async ()=>{const n=[...item.data.songs]; if(i>0){[n[i],n[i-1]]=[n[i-1],n[i]]; await db.setlists.update(item.data.id,{songs:n}); refresh();}}} style={{background:'none', border:'none', color:'#888'}}><ArrowUp size={14}/></button>
-                                <button onClick={async ()=>{const n=[...item.data.songs]; if(i<n.length-1){[n[i],n[i+1]]=[n[i+1],n[i]]; await db.setlists.update(item.data.id,{songs:n}); refresh();}}} style={{background:'none', border:'none', color:'#888'}}><ArrowDown size={14}/></button>
-                                <button onClick={async ()=>{const n=[...item.data.songs]; n.splice(i,1); await db.setlists.update(item.data.id,{songs:n}); refresh();}} style={{background:'none', border:'none', color:'#ff3b30'}}><Trash2 size={14}/></button>
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
                 <div style={{...styles.setlistHalf, background:'#111'}}>
                     <h3 style={{color:'#888', fontSize:'12px', marginBottom:'10px'}}>Biblioteca</h3>
                     {songs.map(s => (
                         <div key={s.id} style={{padding:'8px', borderBottom:'1px solid #222', cursor:'pointer', display:'flex', justifyContent:'space-between'}} onClick={async ()=>{const n=[...(item.data.songs||[]), s]; await db.setlists.update(item.data.id,{songs:n}); refresh();}}>
                             <span style={{fontSize:'13px'}}>{s.title}</span>
-                            <Plus size={14} color="#34c759"/>
+                            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                                <small style={{color: '#666', fontSize: '10px'}}>BPM: {s.bpm || "---"}</small>
+                                <Plus size={14} color="#34c759"/>
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -129,7 +139,6 @@ export const MainEditor = ({ item, songs, triggerDL, onClose, onShow, refresh, s
 
   return (
     <div style={styles.mainEditor}>
-      {/* O editor de músicas permanece o padrão para manter a distinção visual */}
       <div style={styles.editorHeader}>
         <input style={styles.hInput} value={lT} onChange={e=>setLT(e.target.value)} onBlur={save} placeholder="Título da Música" />
         <input style={styles.artistInput} value={lA} onChange={e=>setLA(e.target.value)} onBlur={save} placeholder="Artista / Banda" />
