@@ -46,60 +46,56 @@ export default function App() {
     }
   }, []);
 
-  // LIMPA-TRILHOS AUTOMÁTICO
-  const fixSoloBandMemory = async () => {
-    try {
-        const solo = await db.my_bands.where('is_solo').equals(true).first();
-        if (solo && solo.logo_url && solo.logo_url.length > 500000) {
-            console.log("Detectado logo pesado na banda Solo. Limpando memória...");
-            await db.my_bands.update(solo.id, { logo_url: null });
-            refreshData();
-        }
-    } catch (e) { console.warn("Erro no fix de memória."); }
-  };
-
-  // RESET DE IDENTIDADE SOLO V2 (v6.5.2)
-  const checkSoloBand = async (user) => {
+  // NASCIMENTO SEGURO DA BANDA SOLO V3 (v6.7 - UUID Nativo)
+  const checkSoloBandV3 = async (user) => {
     if (!user) return;
     
-    // Mudamos para SOLO_V2 para forçar um registro limpo no Supabase e no Dexie
-    const soloId = `SOLO_V2-${user.id.substring(0,8)}`;
-    const existing = await db.my_bands.get(soloId);
+    // Verificamos no Dexie se já temos uma banda com o código SOLO_V3
+    const existing = await db.my_bands.where('invite_code').equals('SOLO_V3').first();
     
     if (!existing) {
-        console.log("Criando nova Identidade Solo v2 (Limpa)...");
+        console.log("⚓ Iniciando nascimento da Banda Solo V3 (UUID Nativo)...");
         const soloName = `${user.user_metadata?.full_name?.toUpperCase() || "MEU"} - SOLO`;
-        const soloData = { id: soloId, name: soloName, invite_code: "SOLO_V2", role: 'admin', is_solo: true };
-        
-        // 1. Grava no Dexie local
-        await db.my_bands.put(soloData);
-        
-        // 2. Grava no Supabase
-        try {
-            const { error: bErr } = await supabase.from('bands').upsert({ 
-                id: soloId, 
-                name: soloName, 
-                invite_code: `SOLO_V2-${user.id.substring(0,5)}`, 
-                owner_id: user.id 
-            });
-            if (bErr) console.error("Erro ao criar banda no Supabase:", bErr);
 
-            const { error: mErr } = await supabase.from('band_members').upsert({ 
-                band_id: soloId, 
+        try {
+            // 1. Inserimos no Supabase SEM forçar o ID (deixando o banco gerar o UUID)
+            const { data: newBand, error: bErr } = await supabase.from('bands').insert([{ 
+                name: soloName, 
+                invite_code: 'SOLO_V3', 
+                owner_id: user.id 
+            }]).select().single();
+            
+            if (bErr) throw bErr;
+
+            // 2. Vinculamos o usuário como admin usando o ID gerado pelo Supabase
+            const { error: mErr } = await supabase.from('band_members').insert([{ 
+                band_id: newBand.id, 
                 profile_id: user.id, 
                 role: 'admin' 
-            });
-            if (mErr) console.error("Erro ao vincular membro no Supabase:", mErr);
+            }]);
+
+            if (mErr) throw mErr;
+
+            // 3. Salvamos no Dexie local com o ID real e a flag is_solo
+            const soloData = { 
+                ...newBand,
+                role: 'admin', 
+                is_solo: true 
+            };
             
-            console.log("Banda Solo v2 sincronizada!");
-        } catch(e) { console.warn("Sincronização falhou, mas local está ok."); }
+            await db.my_bands.put(soloData);
+            console.log("✅ Banda Solo V3 criada com sucesso com UUID oficial!");
+            refreshData();
+
+        } catch(e) { 
+            console.error("❌ Falha no nascimento da Solo V3:", e.message);
+        }
     }
-    fixSoloBandMemory();
   };
 
   useEffect(() => { 
     if (session) { 
-        checkSoloBand(session.user);
+        checkSoloBandV3(session.user);
         refreshData(); 
         initMidi(); 
         checkServer(); 
