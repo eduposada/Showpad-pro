@@ -8,11 +8,13 @@ export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl,
 
 export const db = new Dexie('ShowPadProWeb');
 
-// ATUALIZADO PARA VERSÃO 12: Padronizando 'bands' e garantindo campos de BPM e Notes
-db.version(12).stores({ 
+// VERSÃO 13: Tabelas para mensagens e convites locais (cache)
+db.version(13).stores({ 
     songs: '++id, title, artist, creator_id, band_id', 
-    setlists: '++id, name, title, band_id, creator_id', // Adicionado 'name' que usamos no novo BandsView
-    bands: '++id, name, is_solo, creator_id' // Nome padronizado para 'bands'
+    setlists: '++id, name, title, band_id, creator_id',
+    bands: '++id, name, is_solo, creator_id',
+    messages: '++id, band_id, created_at',
+    invites: '++id, band_id, email, status'
 });
 
 export const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -37,31 +39,43 @@ export const transposeContent = (c, s) => {
     }).join('\n');
 };
 
-export const formatChordsVisual = (text) => {
-    if (!text) return null;
-    return text.split('\n').map((line, i) => {
-        const m = line.match(chordRegex);
-        const isC = m && m.length > 0 && m.length >= line.trim().split(/\s+/).length * 0.4;
-        return (
-            <div key={i} style={{ color: isC ? '#FFD700' : '#FFFFFF', fontWeight: isC ? 'bold' : 'normal', minHeight: '1.2em', whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: '1.8' }}>{line || ' '}</div>
-        );
-    });
+// --- FUNÇÕES DE COLABORAÇÃO (CHAT E CONVITES) ---
+export const sendBandMessage = async (bandId, userId, userName, content) => {
+    if (!supabase) return;
+    await supabase.from('band_messages').insert([{
+        band_id: bandId,
+        sender_id: userId,
+        sender_name: userName,
+        content: content
+    }]);
 };
 
-export const triggerDL = (data, filename) => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename || 'ShowPad_Full_Backup.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+export const inviteMember = async (bandId, email, inviterId) => {
+    if (!supabase) return;
+    return await supabase.from('band_invites').insert([{
+        band_id: bandId,
+        email: email,
+        invited_by: inviterId,
+        status: 'pending'
+    }]);
 };
 
+// --- SINCRONIA E BACKUP ---
 export const pushToCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
+    
+    // 1. Bandas
+    const localBands = await db.bands.toArray();
+    if (localBands.length > 0) {
+        const bandsPayload = localBands.map(b => ({
+            name: b.name,
+            is_solo: b.is_solo || false,
+            creator_id: userId
+        }));
+        await supabase.from('bands').upsert(bandsPayload, { onConflict: 'name,creator_id' });
+    }
+
+    // 2. Músicas
     const localSongs = await db.songs.toArray();
     if (localSongs.length > 0) {
         const songsPayload = localSongs.map(s => ({ 
@@ -76,6 +90,7 @@ export const pushToCloud = async (userId) => {
         await supabase.from('songs').upsert(songsPayload, { onConflict: 'title,artist,creator_id' });
     }
 
+    // 3. Setlists
     const localSetlists = await db.setlists.toArray();
     if (localSetlists.length > 0) {
         const setlistsPayload = localSetlists.map(sl => ({
@@ -93,8 +108,30 @@ export const pushToCloud = async (userId) => {
     return { success: true };
 };
 
+export const triggerDL = (data, filename) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'ShowPad_Full_Backup.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+};
+
 export const pullFromCloud = async (userId) => {
     if (!supabase) throw new Error("Supabase não configurado.");
+    
+    // Puxar Bandas Primeiro
+    const { data: cBands } = await supabase.from('bands').select('*').or(`creator_id.eq.${userId},members.cs.{"${userId}"}`);
+    if (cBands) {
+        for (let b of cBands) {
+            const ex = await db.bands.where({name: b.name}).first();
+            if (!ex) await db.bands.add(b);
+        }
+    }
+
     const { data: cSongs } = await supabase.from('songs').select('*').eq('creator_id', userId);
     if (cSongs) {
         for (let s of cSongs) {

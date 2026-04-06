@@ -1,170 +1,152 @@
-import React, { useState, useEffect } from 'react';
-import { Users, Plus, Music, ListMusic, Trash2 } from 'lucide-react';
-import { db } from './ShowPadCore';
+import React, { useState, useEffect, useRef } from 'react';
+import { Users, Plus, ListMusic, Trash2, Send, MessageSquare, X, Mail } from 'lucide-react';
+import { db, supabase, sendBandMessage, inviteMember } from './ShowPadCore';
 
 export const BandsView = ({ styles, session, onOpenSetlist }) => {
     const [bands, setBands] = useState([]);
+    const [selectedBand, setSelectedBand] = useState(null);
     const [setlists, setSetlists] = useState([]);
     const [newBandName, setNewBandName] = useState("");
+    const [chatOpen, setChatOpen] = useState(false);
+    const [messages, setMessages] = useState([]);
+    const [msgInput, setMsgInput] = useState("");
+    const chatEndRef = useRef(null);
 
+    useEffect(() => { loadData(); }, [session]);
+
+    // Escuta mensagens em Tempo Real (Realtime)
     useEffect(() => {
-        loadData();
-    }, [session]);
+        if (!selectedBand || !supabase) return;
+
+        const channel = supabase
+            .channel(`band_chat_${selectedBand.id}`)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'band_messages', filter: `band_id=eq.${selectedBand.id}` }, 
+                payload => {
+                    setMessages(prev => [...prev, payload.new]);
+                }
+            )
+            .subscribe();
+
+        loadMessages(selectedBand.id);
+        return () => supabase.removeChannel(channel);
+    }, [selectedBand]);
+
+    useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
     const loadData = async () => {
         if (!session) return;
-        
-        // 1. Carregar Bandas
-        let b = await db.bands.toArray();
-        
-        // 2. Verificar/Criar Banda Solo de forma blindada
-        const soloName = `${session.user.user_metadata?.full_name || 'Edu'} (Solo)`;
-        const existingSolo = b.find(x => x.is_solo === true || x.is_solo === 1);
-        
-        if (!existingSolo) {
-            await db.bands.add({ 
-                name: soloName, 
-                is_solo: true, 
-                members: [session.user.email],
-                creator_id: session.user.id 
-            });
-            b = await db.bands.toArray();
-        }
-        
+        const b = await db.bands.toArray();
         setBands(b);
-
-        // 3. Carregar Setlists
-        const s = await db.setlists.toArray();
-        setSetlists(s);
+        setSetlists(await db.setlists.toArray());
     };
 
-    const addBand = async () => {
-        if (!newBandName) return;
-        await db.bands.add({
-            name: newBandName,
-            is_solo: false,
-            members: [session.user.email],
-            creator_id: session.user.id
-        });
-        setNewBandName("");
-        loadData();
+    const loadMessages = async (bandId) => {
+        const { data } = await supabase.from('band_messages').select('*').eq('band_id', bandId).order('created_at', { ascending: true });
+        if (data) setMessages(data);
     };
 
-    const deleteBand = async (bandId) => {
-        if (confirm("Deseja apagar esta banda e todos os seus setlists? As músicas individuais não serão apagadas.")) {
-            // Limpa setlists da banda
-            const relatedSetlists = await db.setlists.where({ band_id: bandId }).toArray();
-            for (let sl of relatedSetlists) {
-                await db.setlists.delete(sl.id);
-            }
-            // Apaga a banda
-            await db.bands.delete(bandId);
-            loadData();
-        }
+    const handleSendMessage = async () => {
+        if (!msgInput.trim() || !selectedBand) return;
+        await sendBandMessage(selectedBand.id, session.user.id, session.user.user_metadata.full_name || "Músico", msgInput);
+        setMsgInput("");
     };
 
-    const deleteSetlist = async (e, slId) => {
-        e.stopPropagation();
-        if (confirm("Apagar este setlist?")) {
-            await db.setlists.delete(slId);
-            loadData();
+    const handleInvite = async () => {
+        const email = prompt("Digite o e-mail do músico para convidar:");
+        if (email && selectedBand) {
+            await inviteMember(selectedBand.id, email, session.user.id);
+            alert("Convite enviado!");
         }
     };
 
     return (
-        <div style={{ padding: '30px', backgroundColor: '#000', height: '100%', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-                <h1 style={{ color: '#fff', margin: 0 }}>Minhas Bandas</h1>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                    <input 
-                        style={{ ...styles.inputField, width: '200px', height: '40px' }} 
-                        placeholder="Nome da nova banda..." 
-                        value={newBandName}
-                        onChange={e => setNewBandName(e.target.value)}
-                    />
-                    <button style={{ ...styles.addBtn, width: '120px' }} onClick={addBand}>
-                        <Plus size={18} /> NOVA BANDA
-                    </button>
+        <div style={{ display: 'flex', height: '100%', backgroundColor: '#000' }}>
+            <div style={{ flex: 1, padding: '30px', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+                    <h1 style={{ color: '#fff', margin: 0 }}>Minhas Bandas</h1>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <input 
+                            style={{ ...styles.inputField, width: '200px', height: '40px' }} 
+                            placeholder="Nome da banda..." 
+                            value={newBandName}
+                            onChange={e => setNewBandName(e.target.value)}
+                        />
+                        <button style={{ ...styles.addBtn, width: '120px' }} onClick={async () => {
+                            await db.bands.add({ name: newBandName, is_solo: false, creator_id: session.user.id });
+                            setNewBandName(""); loadData();
+                        }}>
+                            <Plus size={18} /> NOVA BANDA
+                        </button>
+                    </div>
                 </div>
-            </div>
 
-            <div style={styles.bandGrid}>
-                {bands.map(band => (
-                    <div key={band.id} style={styles.bandCard}>
-                        <div style={styles.bandHeader}>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={styles.bandGrid}>
+                    {bands.map(band => (
+                        <div 
+                            key={band.id} 
+                            style={{...styles.bandCard, border: selectedBand?.id === band.id ? '2px solid #007aff' : '1px solid #333'}}
+                            onClick={() => setSelectedBand(band)}
+                        >
+                            <div style={styles.bandHeader}>
                                 <h3 style={styles.bandName}>{band.name}</h3>
-                                <span style={band.is_solo ? styles.bandTagSolo : styles.bandTagGroup}>
-                                    {band.is_solo ? "MODO SOLO" : "GRUPO"}
-                                </span>
+                                <div style={{display:'flex', gap:'10px'}}>
+                                    <MessageSquare size={18} color="#888" onClick={() => setChatOpen(true)} style={{cursor:'pointer'}} />
+                                    {!band.is_solo && <Trash2 size={18} color="#444" style={{cursor:'pointer'}} />}
+                                </div>
                             </div>
-                            
-                            {/* LIXEIRA: Só aparece se não for a Banda Solo */}
-                            {!band.is_solo && (
-                                <Trash2 
-                                    size={18} 
-                                    color="#444" 
-                                    style={{ cursor: 'pointer' }} 
-                                    onClick={() => deleteBand(band.id)}
-                                />
-                            )}
-                        </div>
 
-                        <div style={{ borderTop: '1px solid #333', paddingTop: '15px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#007aff', fontSize: '12px', fontWeight: 'bold', marginBottom: '10px' }}>
-                                <ListMusic size={16} /> SETLISTS DA BANDA
+                            <div style={{marginTop:'15px'}}>
+                                <button onClick={handleInvite} style={{fontSize:'10px', background:'#2c2c2e', border:'none', color:'#007aff', padding:'5px 10px', borderRadius:'5px', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px'}}>
+                                    <Mail size={12}/> CONVIDAR INTEGRANTE
+                                </button>
                             </div>
 
                             <div style={styles.setlistList}>
-                                {setlists.filter(s => s.band_id === band.id).length === 0 ? (
-                                    <span style={{ fontSize: '11px', color: '#555' }}>Nenhum setlist criado.</span>
-                                ) : (
-                                    setlists.filter(s => s.band_id === band.id).map(sl => (
-                                        <div 
-                                            key={sl.id} 
-                                            style={styles.setlistItemMini}
-                                            onClick={() => onOpenSetlist(sl)}
-                                        >
-                                            <span>{sl.name}</span>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                <span style={{ fontSize: '10px', opacity: 0.5 }}>{sl.songs?.length || 0} músicas</span>
-                                                <Trash2 size={14} color="#555" onClick={(e) => deleteSetlist(e, sl.id)} />
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                                
-                                <button 
-                                    style={{ 
-                                        marginTop: '10px', 
-                                        background: 'none', 
-                                        border: '1px dashed #444', 
-                                        color: '#888', 
-                                        padding: '8px', 
-                                        borderRadius: '8px', 
-                                        fontSize: '11px', 
-                                        cursor: 'pointer' 
-                                    }}
-                                    onClick={async () => {
-                                        const name = prompt("Nome do Setlist:");
-                                        if (name) {
-                                            await db.setlists.add({
-                                                name,
-                                                band_id: band.id,
-                                                songs: [],
-                                                creator_id: session.user.id
-                                            });
-                                            loadData();
-                                        }
-                                    }}
-                                >
-                                    + NOVO SETLIST PARA ESTA BANDA
-                                </button>
+                                {setlists.filter(s => s.band_id === band.id).map(sl => (
+                                    <div key={sl.id} style={styles.setlistItemMini} onClick={() => onOpenSetlist(sl)}>
+                                        {sl.name || sl.title}
+                                    </div>
+                                ))}
                             </div>
                         </div>
-                    </div>
-                ))}
+                    ))}
+                </div>
             </div>
+
+            {/* DRAWER LATERAL DE CHAT */}
+            {selectedBand && chatOpen && (
+                <div style={{ width: '300px', backgroundColor: '#1c1c1e', borderLeft: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ padding: '15px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 'bold', fontSize: '12px' }}>CHAT: {selectedBand.name}</span>
+                        <X size={18} onClick={() => setChatOpen(false)} style={{ cursor: 'pointer' }} />
+                    </div>
+                    
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {messages.map(m => (
+                            <div key={m.id} style={{ alignSelf: m.sender_id === session.user.id ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+                                <small style={{ fontSize: '9px', color: '#888' }}>{m.sender_name}</small>
+                                <div style={{ backgroundColor: m.sender_id === session.user.id ? '#007aff' : '#333', padding: '8px 12px', borderRadius: '12px', fontSize: '13px' }}>
+                                    {m.content}
+                                </div>
+                            </div>
+                        ))}
+                        <div ref={chatEndRef} />
+                    </div>
+
+                    <div style={{ padding: '15px', borderTop: '1px solid #333', display: 'flex', gap: '5px' }}>
+                        <input 
+                            style={{ ...styles.inputField, height: '35px', fontSize: '12px' }} 
+                            placeholder="Mensagem..." 
+                            value={msgInput}
+                            onChange={e => setMsgInput(e.target.value)}
+                            onKeyPress={e => e.key === 'Enter' && handleSendMessage()}
+                        />
+                        <button onClick={handleSendMessage} style={{ background: '#007aff', border: 'none', borderRadius: '8px', padding: '0 10px', color: '#fff' }}>
+                            <Send size={16} />
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
