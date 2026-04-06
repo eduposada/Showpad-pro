@@ -46,7 +46,7 @@ export default function App() {
     }
   }, []);
 
-  // FILTRO DE SEGURANÇA E LIMPEZA DE SOLO (v6.8)
+  // FILTRO DE SEGURANÇA E LIMPEZA DE SOLO (v6.9 - Ghostbuster)
   const checkSoloBandV3 = async (user) => {
     if (!user) return;
     
@@ -55,12 +55,11 @@ export default function App() {
         const legacySolos = await db.my_bands.filter(b => b.is_solo && b.invite_code !== 'SOLO_V3').toArray();
         if (legacySolos.length > 0) {
             for (let ls of legacySolos) await db.my_bands.delete(ls.id);
-            console.log("🧹 Faxina v6.8: Bandas solo obsoletas removidas.");
+            console.log("🧹 Faxina v6.9: Bandas solo obsoletas removidas.");
         }
     } catch (e) { console.warn("Erro na faxina de solos."); }
 
     // 2. VERIFICAÇÃO V3
-    const soloId = `SOLO_V3-${user.id.substring(0,8)}`;
     const existing = await db.my_bands.where('invite_code').equals('SOLO_V3').first();
     
     if (!existing) {
@@ -107,9 +106,18 @@ export default function App() {
         const s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
         
-        // FILTRO DE EXIBIÇÃO: Só deixa passar as bandas normais ou a Solo V3 oficial
-        let b = await db.my_bands.toArray(); 
-        b = b.filter(band => !band.is_solo || band.invite_code === 'SOLO_V3');
+        // FILTRO RADICAL v6.9: Remove duplicatas e bandas Solo "piratas"
+        const allBands = await db.my_bands.toArray(); 
+        const filteredBands = allBands.filter((band, index, self) => {
+            const isLegacySolo = band.is_solo && band.invite_code !== 'SOLO_V3';
+            const isDuplicate = self.findIndex(b => b.id === band.id) !== index;
+            
+            if (isLegacySolo || isDuplicate) {
+                db.my_bands.delete(band.id); // Deleta do local na hora
+                return false;
+            }
+            return true;
+        });
         
         s.sort((a,b) => {
             const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
@@ -118,7 +126,8 @@ export default function App() {
         });
         setSongs(s); 
         setSetlists(sl);
-        setBands(b); 
+        setBands(filteredBands); 
+
         if (selectedItem) {
             const id = selectedItem.data.id;
             const upd = (selectedItem.type === 'song') ? s.find(x => x.id === id) : sl.find(x => x.id === id);
