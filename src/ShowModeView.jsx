@@ -4,6 +4,8 @@ import { formatChordsVisual } from './ShowPadCore';
 
 export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose, showScrollRef, lastSignal, styles }) => {
     const [idx, setIdx] = useState(0), [dr, setDr] = useState(false);
+    const [btnPressed, setBtnPressed] = useState(null); // Para efeito visual do clique
+    
     const songsArr = (item && item.type === 'setlist') ? (item.data.songs || []) : (item ? [item.data] : []);
     const song = songsArr[idx];
 
@@ -12,9 +14,17 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
         backgroundColor: '#2c2c2e', border: '1px solid #444', borderRadius: '8px', color: '#fff', cursor: 'pointer'
     };
 
+    const handleNav = (dir) => {
+        const newIdx = idx + dir;
+        if (newIdx >= 0 && newIdx < songsArr.length) {
+            setIdx(newIdx);
+            if (showScrollRef.current) showScrollRef.current.scrollTop = 0;
+        }
+    };
+
     return (
         <div style={styles.showOverlay}>
-            {/* GAVETA LATERAL RÁPIDA E TRANSPARENTE */}
+            {/* GAVETA LATERAL */}
             <div style={{
                 ...styles.showDrawer,
                 transform: dr ? 'translateX(0)' : 'translateX(-100%)',
@@ -36,12 +46,9 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
                         </div>
                     ))}
                 </div>
-                <div style={{padding: '20px', borderTop: '1px solid #333', fontSize: '10px', color: '#444'}}>
-                    SHOWPAD PRO HUD v2.1
-                </div>
             </div>
 
-            {/* TOOLBAR */}
+            {/* TOOLBAR SUPERIOR (SEM PROX/ANT) */}
             <div style={{...styles.showToolbar, height: '100px', padding: '10px 20px'}}>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <button onClick={() => setDr(true)} style={{...controlBtnStyle, backgroundColor: dr ? '#007aff' : '#2c2c2e'}}>
@@ -52,36 +59,66 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
                     </button>
                 </div>
 
-                <div style={{ flex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                    <strong style={{ color: '#fff', fontSize: '36px', lineHeight: '1', display: 'block', textTransform: 'uppercase' }}>
+                <div style={{ flex: 1, textAlign: 'center' }}>
+                    <strong style={{ color: '#fff', fontSize: '32px', lineHeight: '1', display: 'block', textTransform: 'uppercase' }}>
                         {song ? song.title : "FIM DO SHOW"}
                     </strong>
-                    <span style={{ color: '#FFD700', fontSize: '18px', fontWeight: 'bold', marginTop: '4px' }}>
+                    <span style={{ color: '#FFD700', fontSize: '18px', fontWeight: 'bold' }}>
                         {song ? song.artist : ""}
                     </span>
                 </div>
 
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <div style={{ backgroundColor: '#000', border: '2px solid #007aff', borderRadius: '8px', padding: '5px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', marginRight: '10px' }}>
-                        <span style={{fontSize: '9px', color: '#007aff', fontWeight: 'bold'}}>BPM</span>
-                        <span style={{fontSize: '20px', color: '#007aff', fontWeight: 'bold', fontFamily: 'monospace'}}>{song?.bpm || "---"}</span>
+                    <div style={{ backgroundColor: '#000', border: '2px solid #007aff', borderRadius: '8px', padding: '5px 12px', textAlign:'center' }}>
+                        <span style={{fontSize: '9px', color: '#007aff', fontWeight: 'bold', display:'block'}}>BPM</span>
+                        <span style={{fontSize: '20px', color: '#007aff', fontWeight: 'bold'}}>{song?.bpm || "---"}</span>
                     </div>
-                    <button style={controlBtnStyle} onClick={() => setFontSize(f => f - 5)}><Type size={18} />-</button>
-                    <button style={controlBtnStyle} onClick={() => setFontSize(f => f + 5)}><Type size={18} />+</button>
-                    <button style={controlBtnStyle} onClick={() => scrollPage(-1)}><ChevronUp size={24} /></button>
-                    <button style={controlBtnStyle} onClick={() => scrollPage(1)}><ChevronDown size={24} /></button>
+                    <button style={controlBtnStyle} onClick={() => setFontSize(f => f - 5)}><Type size={16} />-</button>
+                    <button style={controlBtnStyle} onClick={() => setFontSize(f => f + 5)}><Type size={16} />+</button>
                 </div>
             </div>
 
+            {/* CONTEÚDO DA CIFRA */}
             <div ref={showScrollRef} style={{ ...styles.showContent, padding: '40px' }}>
                 {song && song.notes && (
-                    <div style={{ backgroundColor: 'rgba(255, 215, 0, 0.1)', borderLeft: '5px solid #FFD700', padding: '15px', marginBottom: '30px', borderRadius: '4px', color: '#FFD700', fontSize: '20px', whiteSpace: 'pre-wrap' }}>
+                    <div style={{ backgroundColor: 'rgba(255, 215, 0, 0.1)', borderLeft: '5px solid #FFD700', padding: '15px', marginBottom: '30px', color: '#FFD700', fontSize: '20px' }}>
                         <strong>OBSERVAÇÕES:</strong><br/>{song.notes}
                     </div>
                 )}
-                <div style={{ fontSize: fontSize + 'px', fontFamily: 'monospace', color: '#fff', whiteSpace: 'pre-wrap' }}>
+                <div style={{ fontSize: fontSize + 'px', fontFamily: 'monospace', color: '#fff', whiteSpace: 'pre-wrap', paddingBottom: '100px' }}>
                     {song ? formatChordsVisual(song.content) : "Obrigado!"}
                 </div>
+            </div>
+
+            {/* NOVO RODAPÉ DE NAVEGAÇÃO 50/50 3D */}
+            <div style={styles.showFooter}>
+                <button 
+                    onMouseDown={() => setBtnPressed('prev')}
+                    onMouseUp={() => setBtnPressed(null)}
+                    onClick={() => handleNav(-1)}
+                    style={{
+                        ...styles.navBtn3D,
+                        ...(btnPressed === 'prev' ? styles.navBtn3DActive : {}),
+                        opacity: idx === 0 ? 0.3 : 1
+                    }}
+                    disabled={idx === 0}
+                >
+                    <ChevronLeft size={30}/> ANTERIOR
+                </button>
+
+                <button 
+                    onMouseDown={() => setBtnPressed('next')}
+                    onMouseUp={() => setBtnPressed(null)}
+                    onClick={() => handleNav(1)}
+                    style={{
+                        ...styles.navBtn3D,
+                        ...(btnPressed === 'next' ? styles.navBtn3DActive : {}),
+                        opacity: idx === songsArr.length - 1 ? 0.3 : 1
+                    }}
+                    disabled={idx === songsArr.length - 1}
+                >
+                    PRÓXIMA <ChevronRight size={30}/>
+                </button>
             </div>
         </div>
     );

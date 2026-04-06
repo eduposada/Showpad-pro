@@ -58,21 +58,56 @@ export const styles = {
     bpmBtnSmall: { background: 'none', border: 'none', color: '#888', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2px' },
     notesTextArea: { width: '100%', backgroundColor: '#111', color: '#FFD700', border: '1px dashed #444', borderRadius: '6px', padding: '10px', fontSize: '12px', outline: 'none', resize: 'none', marginTop: '10px', boxSizing: 'border-box', fontFamily: 'sans-serif' },
 
-    // --- SHOW MODE SIDEBAR (GLASSMORPHISM AJUSTADO) ---
+    // --- SHOW MODE ---
     showOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 2000, display: 'flex', flexDirection: 'column' },
     showToolbar: { padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1c1c1e', borderBottom:'1px solid #333', height: '60px' },
     showContent: { flex: 1, overflowY: 'auto', padding: '30px', textAlign: 'left', backgroundColor: '#000', color:'#fff' },
     
     showDrawer: { 
         position: 'fixed', top: 0, left: 0, width: '300px', height: '100%', 
-        backgroundColor: 'rgba(28, 28, 30, 0.80)', // Transparência refinada
+        backgroundColor: 'rgba(28, 28, 30, 0.80)', 
         backdropFilter: 'blur(15px)', zIndex: 3000, display: 'flex', flexDirection: 'column', 
         borderRight: '1px solid #333', boxShadow: '10px 0 30px rgba(0,0,0,0.5)', 
-        transition: 'transform 0.2s ease-out' // Velocidade rápida
+        transition: 'transform 0.2s ease-out' 
     },
     drawerHeader: { padding: '20px', fontSize: '14px', fontWeight: 'bold', color: '#007aff', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     drawerItem: { padding: '15px 20px', borderBottom: '1px solid #222', cursor: 'pointer', color: '#888', fontSize: '14px', transition: 'all 0.2s' },
     drawerItemActive: { padding: '15px 20px', borderBottom: '1px solid #333', cursor: 'pointer', color: '#fff', backgroundColor: '#007aff22', borderLeft: '5px solid #007aff', fontSize: '14px', fontWeight: 'bold' },
+
+    // --- BOTÕES NAVEGAÇÃO 3D (FOOTER) ---
+    showFooter: { 
+        display: 'flex', 
+        width: '100%', 
+        height: '90px', 
+        backgroundColor: '#1c1c1e', 
+        borderTop: '1px solid #333',
+        padding: '12px',
+        gap: '12px',
+        boxSizing: 'border-box'
+    },
+    navBtn3D: {
+        flex: 1,
+        height: '100%',
+        backgroundColor: '#4a4a4c', 
+        border: 'none',
+        borderRadius: '15px',
+        color: '#fff',
+        fontSize: '18px',
+        fontWeight: '900',
+        textTransform: 'uppercase',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '10px',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2), 0 5px 0 #2c2c2e',
+        textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+        transition: 'all 0.1s active'
+    },
+    navBtn3DActive: {
+        transform: 'translateY(3px)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 0 #2c2c2e',
+    },
 
     // --- RESTANTE DOS ESTILOS ---
     settingsOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 5000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' },
