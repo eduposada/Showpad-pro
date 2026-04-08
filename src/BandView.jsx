@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, RefreshCw, Users, Trash2, Layout, Music, X, Settings, Save, UserMinus, ImageIcon, Zap, MinusCircle, Upload } from 'lucide-react';
+import { Plus, RefreshCw, Users, Trash2, Layout, Music, X, Settings, Save, UserMinus, ImageIcon, Zap, MinusCircle, Upload, Hash } from 'lucide-react';
 import { supabase, db, deleteBandComplete } from './ShowPadCore';
 import { BandShowManager } from './BandShowManager';
 
@@ -39,53 +39,27 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         }
     }, [showSettings]);
 
-    // OTIMIZAÇÃO DE IMAGEM V6.5: Processamento ultra-rápido
     const handleImageUpload = (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
-        setLoading(true); // Feedback visual imediato
-
+        setLoading(true);
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
             img.src = event.target.result;
-            
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                const SIZE = 200; // Tamanho fixo otimizado para logos
-                
-                let width = img.width;
-                let height = img.height;
-
-                // Cálculo de Crop Quadrado Centralizado
-                let sourceX = 0;
-                let sourceY = 0;
-                let sourceWidth = width;
-                let sourceHeight = height;
-
-                if (width > height) {
-                    sourceWidth = height;
-                    sourceX = (width - height) / 2;
-                } else {
-                    sourceHeight = width;
-                    sourceY = (height - width) / 2;
-                }
-
-                canvas.width = SIZE;
-                canvas.height = SIZE;
-                
+                const SIZE = 200;
+                let width = img.width, height = img.height;
+                let sx = 0, sy = 0, sw = width, sh = height;
+                if (width > height) { sw = height; sx = (width - height) / 2; }
+                else { sh = width; sy = (height - width) / 2; }
+                canvas.width = SIZE; canvas.height = SIZE;
                 const ctx = canvas.getContext('2d');
-                // Aplica suavização de imagem
                 ctx.imageSmoothingEnabled = true;
                 ctx.imageSmoothingQuality = 'high';
-                
-                ctx.drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, SIZE, SIZE);
-                
-                // Qualidade 0.6 é o "sweet spot" entre peso e visual
-                const dataurl = canvas.toDataURL('image/jpeg', 0.6);
-                
-                setEditLogo(dataurl);
+                ctx.drawImage(img, sx, sy, sw, sh, 0, 0, SIZE, SIZE);
+                setEditLogo(canvas.toDataURL('image/jpeg', 0.6));
                 setLoading(false);
             };
         };
@@ -106,6 +80,8 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                     role: i.role,
                     is_solo: i.bands.invite_code.startsWith("SOLO")
                 }));
+                // Limpeza local antes de atualizar
+                await db.my_bands.clear();
                 for (let b of cloudList) await db.my_bands.put(b);
             }
 
@@ -116,24 +92,52 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         setLoading(false);
     };
 
+    // FUNÇÃO PARA ENTRAR NA BANDA VIA CÓDIGO (v7.1)
+    const joinBandByCode = async () => {
+        if (!inviteCode || inviteCode.length < 3) return;
+        setLoading(true);
+        try {
+            // 1. Achar a banda pelo código
+            const { data: band, error: bErr } = await supabase
+                .from('bands')
+                .select('id, name')
+                .eq('invite_code', inviteCode.trim())
+                .single();
+            
+            if (bErr || !band) throw new Error("Código não encontrado.");
+
+            // 2. Tentar entrar como membro
+            const { error: mErr } = await supabase
+                .from('band_members')
+                .insert([{ band_id: band.id, profile_id: session.user.id, role: 'member' }]);
+            
+            if (mErr) {
+                if (mErr.message.includes("unique")) throw new Error("Você já faz parte desta banda!");
+                throw mErr;
+            }
+
+            alert(`Bem-vindo à banda ${band.name}!`);
+            setInviteCode('');
+            await fetchBands();
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleDeleteBand = async (band) => {
         if (band.is_solo) return; 
-        const msg = `ATENÇÃO: Deseja excluir a banda "${band.name}"?`;
-        if (window.confirm(msg)) {
+        if (window.confirm(`Excluir a banda "${band.name}"?`)) {
             setLoading(true);
-            try {
-                await deleteBandComplete(band.id);
-                await fetchBands();
-            } catch (err) { alert(err.message); }
+            try { await deleteBandComplete(band.id); await fetchBands(); } 
+            catch (err) { alert(err.message); }
             setLoading(false);
         }
     };
 
     const fetchMembers = async (bandId) => {
-        const { data } = await supabase
-            .from('band_members')
-            .select('profile_id, role, profiles(full_name, email)')
-            .eq('band_id', bandId);
+        const { data } = await supabase.from('band_members').select('profile_id, role, profiles(full_name, email)').eq('band_id', bandId);
         setMembers(data || []);
     };
 
@@ -142,84 +146,61 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         const total = await db.songs.toArray();
         const relations = await db.band_songs.where('band_id').equals(showRepertoire.id).toArray();
         const songIds = relations.map(r => r.song_id);
-        const specific = total.filter(s => songIds.includes(s.id));
         setAllSongs(total);
-        setBandSongs(specific);
+        setBandSongs(total.filter(s => songIds.includes(s.id)));
     };
 
     const addSongToBand = async (songId) => {
         if (!showRepertoire) return;
-        try {
-            await db.band_songs.put({ band_id: showRepertoire.id, song_id: songId, custom_tone: 0 });
-            await refreshRepertoire();
-        } catch (e) { console.error(e); }
+        await db.band_songs.put({ band_id: showRepertoire.id, song_id: songId, custom_tone: 0 });
+        refreshRepertoire();
     };
 
     const removeSongFromBand = async (songId) => {
         if (!showRepertoire) return;
-        try {
-            const rel = await db.band_songs.where({ band_id: showRepertoire.id, song_id: songId }).first();
-            if (rel) await db.band_songs.delete(rel.id);
-            await refreshRepertoire();
-        } catch (e) { console.error(e); }
+        const rel = await db.band_songs.where({ band_id: showRepertoire.id, song_id: songId }).first();
+        if (rel) await db.band_songs.delete(rel.id);
+        refreshRepertoire();
     };
 
     const createBand = async () => {
         if (!newBandName) return;
         setLoading(true);
-        try {
-            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-            const { data: band } = await supabase
-                .from('bands')
-                .insert([{ name: newBandName, owner_id: session.user.id, invite_code: code }])
-                .select().single();
-            if (band) {
-                await supabase.from('band_members').insert([{ band_id: band.id, profile_id: session.user.id, role: 'admin' }]);
-                setNewBandName(''); 
-                fetchBands();
-            }
-        } catch (err) { alert(err.message); }
+        const code = Math.random().toString(36).substring(2, 7).toUpperCase();
+        const { data: band } = await supabase.from('bands').insert([{ name: newBandName, owner_id: session.user.id, invite_code: code }]).select().single();
+        if (band) {
+            await supabase.from('band_members').insert([{ band_id: band.id, profile_id: session.user.id, role: 'admin' }]);
+            setNewBandName(''); fetchBands();
+        }
         setLoading(false);
     };
 
     const handleUpdateBand = async () => {
         setLoading(true);
-        const { error } = await supabase
-            .from('bands')
-            .update({ name: editName, description: editDesc, logo_url: editLogo, created_at: editDate })
-            .eq('id', showSettings.id);
-        if (!error) { await fetchBands(); setShowSettings(null); }
-        setLoading(false);
-    };
-
-    const removeMember = async (profileId) => {
-        if (!confirm("Remover este integrante?")) return;
-        await supabase.from('band_members').delete().eq('band_id', showSettings.id).eq('profile_id', profileId);
-        fetchMembers(showSettings.id);
+        await supabase.from('bands').update({ name: editName, description: editDesc, logo_url: editLogo, created_at: editDate }).eq('id', showSettings.id);
+        await fetchBands(); setShowSettings(null); setLoading(false);
     };
 
     return (
         <div style={styles.garimpoPanel}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
                 <h1 style={{ color: '#fff', fontSize: '28px', fontWeight: '900', margin: 0 }}>BANDAS</h1>
-                <button onClick={fetchBands} style={styles.headerBtn}><RefreshCw size={16} className={loading ? "animate-spin" : ""}/> ATUALIZAR</button>
+                <button onClick={fetchBands} style={styles.headerBtn}><RefreshCw size={16} className={loading ? "spin" : ""}/> ATUALIZAR</button>
             </div>
 
-            {/* Inclusão de Nova Banda */}
             <div style={{ display: 'flex', gap: '20px', marginBottom: '40px' }}>
                 <div style={{ flex: 1, background: '#1c1c1e', padding: '20px', borderRadius: '15px', border: '1px solid #333' }}>
                     <h4 style={{ color: '#007aff', fontSize: '10px', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>Nova Banda</h4>
                     <input style={styles.inputField} value={newBandName} onChange={e => setNewBandName(e.target.value)} placeholder="Nome da Banda" />
-                    <button style={{ ...styles.primaryButton, marginTop: '10px' }} onClick={createBand}>CADASTRAR</button>
+                    <button style={{ ...styles.primaryButton, marginTop: '10px' }} onClick={createBand} disabled={loading}>CADASTRAR</button>
                 </div>
                 <div style={{ flex: 1, background: '#111', padding: '20px', borderRadius: '15px', border: '1px solid #333' }}>
                     <h4 style={{ color: '#34c759', fontSize: '10px', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>Código de Convite</h4>
                     <input style={styles.inputField} value={inviteCode} onChange={e => setInviteCode(e.target.value.toUpperCase())} placeholder="Ex: AX72P" />
-                    <button style={{ ...styles.primaryButton, backgroundColor: '#34c759', marginTop: '10px' }}>ENTRAR</button>
+                    <button onClick={joinBandByCode} style={{ ...styles.primaryButton, backgroundColor: '#34c759', marginTop: '10px' }} disabled={loading}>ENTRAR</button>
                 </div>
             </div>
 
-            {/* Listagem de Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
                 {bands.map(b => (
                     <div key={b.id} style={{ ...styles.settingsCard, maxWidth: 'none', background: '#1c1c1e', border: '1px solid #333' }}>
@@ -229,13 +210,19 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                             </div>
                             <div style={{ flex: 1 }}>
                                 <h2 style={{ color: b.is_solo ? '#007aff' : '#FFD700', margin: 0, fontSize: '18px', fontWeight: '900' }}>{b.name}</h2>
-                                <span style={{ color: '#888', fontSize: '10px', fontWeight: 'bold' }}>{b.role?.toUpperCase()}</span>
+                                <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                                    <span style={{ color: '#888', fontSize: '10px', fontWeight: 'bold' }}>{b.role?.toUpperCase()}</span>
+                                    {!b.is_solo && b.role === 'admin' && (
+                                        <div style={{backgroundColor:'#222', padding:'2px 8px', borderRadius:'10px', display:'flex', alignItems:'center', gap:'4px'}}>
+                                            <Hash size={10} color="#34c759"/>
+                                            <span style={{color:'#34c759', fontSize:'11px', fontWeight:'900', letterSpacing:'1px'}}>{b.invite_code}</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                                 {!b.is_solo && b.role === 'admin' && (
-                                    <button onClick={() => handleDeleteBand(b)} style={{ background: 'none', border: 'none', color: '#ff3b30', cursor: 'pointer', opacity: 0.7 }}>
-                                        <Trash2 size={18} />
-                                    </button>
+                                    <button onClick={() => handleDeleteBand(b)} style={{ background: 'none', border: 'none', color: '#ff3b30', cursor: 'pointer', opacity: 0.7 }}><Trash2 size={18} /></button>
                                 )}
                                 {b.role === 'admin' && (
                                     <button onClick={() => setShowSettings(b)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}><Settings size={20} /></button>
@@ -250,17 +237,17 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 ))}
             </div>
 
-            {/* Modal de Repertório */}
+            {/* Modais de Repertório, Configurações e Shows seguem o padrão anterior... */}
             {showRepertoire && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '850px', height: '85vh', borderRadius: '24px', border: '1px solid #444', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                         <div style={{ padding: '25px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#252529' }}>
-                            <div><h2 style={{ color: '#FFD700', margin: 0 }}>Repertório: {showRepertoire.name}</h2></div>
+                            <h2 style={{ color: '#FFD700', margin: 0 }}>Repertório: {showRepertoire.name}</h2>
                             <X onClick={() => setShowRepertoire(null)} style={{ cursor: 'pointer' }} color="#fff" />
                         </div>
                         <div style={{ flex: 1, overflowY: 'auto', padding: '30px' }}>
                             {showRepertoire.is_solo ? (
-                                <div style={{ textAlign: 'center', padding: '60px', color: '#888' }}><Zap size={40} color="#FFD700" /><h3 style={{ color: '#fff' }}>Modo Solo Ativo</h3><p>Toda a sua biblioteca está disponível.</p></div>
+                                <div style={{ textAlign: 'center', padding: '60px', color: '#888' }}><Zap size={40} color="#FFD700" /><h3 style={{ color: '#fff' }}>Modo Solo Ativo</h3><p>Sua biblioteca está vinculada ao seu ID pessoal.</p></div>
                             ) : (
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
                                     <div>
@@ -292,8 +279,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                     </div>
                 </div>
             )}
-
-            {/* Modal de Configurações */}
+            
             {showSettings && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '550px', borderRadius: '28px', border: '1px solid #444', overflow: 'hidden' }}>
@@ -301,24 +287,12 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                             <h2 style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>EDITAR BANDA</h2>
                             <X onClick={() => setShowSettings(null)} style={{ cursor: 'pointer' }} color="#888" />
                         </div>
-                        <div style={{ padding: '25px', display: 'flex', flexDirection: 'column', gap: '15px', maxHeight: '70vh', overflowY: 'auto' }}>
-                            <div style={{ display: 'flex', gap: '20px', alignItems: 'center', background: '#111', padding: '15px', borderRadius: '18px', border: '1px solid #333' }}>
-                                <div style={{ width: '80px', height: '80px', borderRadius: '12px', background: '#000', border: '1px solid #444', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    {editLogo ? <img src={editLogo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImageIcon size={30} color="#222" />}
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ color: '#666', fontSize: '10px' }}>UPLOAD DE LOGO (Auto-Crop)</label>
-                                    <label style={{ ...styles.primaryButton, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '11px', padding: '8px 12px' }}>
-                                        <Plus size={14} /> IMAGEM <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
-                                    </label>
-                                </div>
-                            </div>
+                        <div style={{ padding: '25px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
                             <input style={styles.inputField} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nome da Banda" />
-                            <input type="date" style={styles.inputField} value={editDate} onChange={e => setEditDate(e.target.value)} />
                             <textarea style={{ ...styles.inputField, height: '80px' }} value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Observações..." />
                         </div>
                         <div style={{ padding: '20px', background: '#252529' }}>
-                            <button onClick={handleUpdateBand} style={{ ...styles.saveBtn, width: '100%', background: '#34c759' }}><Save size={18}/> SALVAR ALTERAÇÕES {loading && "..."}</button>
+                            <button onClick={handleUpdateBand} style={{ ...styles.saveBtn, width: '100%', background: '#34c759' }}><Save size={18}/> SALVAR ALTERAÇÕES</button>
                         </div>
                     </div>
                 </div>

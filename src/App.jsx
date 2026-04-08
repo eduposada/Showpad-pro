@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { WebMidi } from 'webmidi';
 import { 
   Plus, Music, Trash2, Save, Monitor, Settings, Zap, 
-  LogOut, SortAsc, UserRound, Cloud, RefreshCw 
+  LogOut, SortAsc, UserRound, Cloud, RefreshCw, User
 } from 'lucide-react';
 
 import { db, transposeContent, supabase, triggerDL, pushToCloud, pullFromCloud } from './ShowPadCore';
@@ -38,28 +38,35 @@ export default function App() {
   const midiLearningRef = useRef(null);
   const showScrollRef = useRef(null);
 
+  // PEGAR NOME DO USUÁRIO (Google ou Email)
+  const getUserDisplayName = () => {
+    if (!session?.user) return "Usuário";
+    const meta = session.user.user_metadata;
+    return meta?.full_name || meta?.name || session.user.email.split('@')[0];
+  };
+
   useEffect(() => {
     if (supabase) {
       supabase.auth.getSession().then((res) => { if (res.data) setSession(res.data.session); });
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+        setSession(s);
+        if (!s) {
+          // Limpa tudo ao deslogar
+          setSongs([]);
+          setSetlists([]);
+          setBands([]);
+          setSelectedItem(null);
+        }
+      });
       return () => subscription.unsubscribe();
     }
   }, []);
 
-  // FILTRO DE SEGURANÇA E LIMPEZA DE SOLO (v6.9 - Ghostbuster)
   const checkSoloBandV3 = async (user) => {
     if (!user) return;
-    try {
-        const legacySolos = await db.my_bands.filter(b => b.is_solo && b.invite_code !== 'SOLO_V3').toArray();
-        if (legacySolos.length > 0) {
-            for (let ls of legacySolos) await db.my_bands.delete(ls.id);
-            console.log("🧹 Faxina v6.9: Bandas solo obsoletas removidas.");
-        }
-    } catch (e) { console.warn("Erro na faxina de solos."); }
-
     const existing = await db.my_bands.where('invite_code').equals('SOLO_V3').first();
     if (!existing) {
-        const soloName = `${user.user_metadata?.full_name?.toUpperCase() || "MEU"} - SOLO`;
+        const soloName = `${getUserDisplayName().toUpperCase()} - SOLO`;
         try {
             const { data: newBand, error: bErr } = await supabase.from('bands').insert([{ 
                 name: soloName, 
@@ -76,7 +83,7 @@ export default function App() {
             const soloData = { ...newBand, role: 'admin', is_solo: true };
             await db.my_bands.put(soloData);
             refreshData();
-        } catch(e) { console.error("❌ Erro no nascimento da Solo V3:", e.message); }
+        } catch(e) { console.error("❌ Erro na Solo V3:", e.message); }
     }
   };
 
@@ -92,27 +99,25 @@ export default function App() {
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
 
   const refreshData = async () => { 
+    if (!session) return;
     try {
         const s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
+        
+        // SEGREGAR BANDAS: Apenas as que o usuário logado participa
         const allBands = await db.my_bands.toArray(); 
-        const filteredBands = allBands.filter((band, index, self) => {
-            const isLegacySolo = band.is_solo && band.invite_code !== 'SOLO_V3';
-            const isDuplicate = self.findIndex(b => b.id === band.id) !== index;
-            if (isLegacySolo || isDuplicate) {
-                db.my_bands.delete(band.id);
-                return false;
-            }
-            return true;
-        });
+        const filteredBands = allBands.filter(b => b.owner_id === session.user.id || b.role);
+
         s.sort((a,b) => {
             const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
             const valB = (sortBy === 'artist' ? b.artist : b.title) || "";
             return valA.toLowerCase().localeCompare(valB.toLowerCase());
         });
+        
         setSongs(s); 
         setSetlists(sl);
         setBands(filteredBands); 
+
         if (selectedItem) {
             const id = selectedItem.data.id;
             const upd = (selectedItem.type === 'song') ? s.find(x => x.id === id) : sl.find(x => x.id === id);
@@ -169,7 +174,6 @@ export default function App() {
     setIsScraping(false);
   };
 
-  // INICIALIZAÇÃO MIDI ROBUSTA (v7.0 - Com Reset de 500ms para iPad)
   const initMidi = () => {
     setTimeout(() => {
       WebMidi.enable({ sysex: true }).then(() => {
@@ -217,26 +221,15 @@ export default function App() {
     reader.readAsText(e.target.files[0]);
   };
 
-  // ESTILO DO BOTÃO MIDI "BOLHA" (v7.0)
   const getMidiStyle = () => {
     const isReady = midiStatus === 'ready';
     return {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      padding: '4px 10px',
-      borderRadius: '20px',
-      fontSize: '10px',
-      fontWeight: '800',
-      transition: 'all 0.3s ease',
-      cursor: 'default',
+      display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: '20px',
+      fontSize: '10px', fontWeight: '800', transition: 'all 0.3s ease', cursor: 'default',
       boxShadow: midiFlash ? '0 0 15px #4cd964' : 'inset 0 -2px 4px rgba(0,0,0,0.3)',
       border: '1px solid rgba(255,255,255,0.1)',
-      background: isReady 
-        ? 'radial-gradient(circle at 30% 30%, #4cd964, #28a745)' 
-        : 'radial-gradient(circle at 30% 30%, #8e8e93, #3a3a3c)',
-      color: '#fff',
-      transform: midiFlash ? 'scale(1.1)' : 'scale(1)'
+      background: isReady ? 'radial-gradient(circle at 30% 30%, #4cd964, #28a745)' : 'radial-gradient(circle at 30% 30%, #8e8e93, #3a3a3c)',
+      color: '#fff', transform: midiFlash ? 'scale(1.1)' : 'scale(1)'
     };
   };
 
@@ -254,12 +247,20 @@ export default function App() {
             {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}
           </div>
         </div>
-        <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
-            <button style={styles.headerBtn} onClick={handleCloudPush}><Cloud size={14}/> SUBIR</button>
-            <button style={styles.headerBtn} onClick={handleCloudPull}><RefreshCw size={14}/> BAIXAR</button>
-            <button style={styles.headerBtn} onClick={() => triggerDL({songs, setlists}, "Backup.json")}>BACKUP</button>
-            <button onClick={() => setShowSettings(true)} style={{background:'none', border:'none', cursor:'pointer', color:'#fff'}}><Settings size={22}/></button>
-            <button onClick={() => supabase.auth.signOut()} style={{background:'none', border:'none', cursor:'pointer', color:'#ff3b30'}}><LogOut size={20}/></button>
+
+        {/* HEADER DIREITO: USUÁRIO E AÇÕES */}
+        <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
+            <div style={{display:'flex', alignItems:'center', gap:'8px', backgroundColor:'rgba(255,255,255,0.05)', padding:'5px 12px', borderRadius:'15px', border:'1px solid rgba(255,255,255,0.1)'}}>
+              <User size={14} color="#007aff" />
+              <span style={{fontSize:'12px', fontWeight:'600', color:'#fff'}}>{getUserDisplayName()}</span>
+            </div>
+
+            <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
+              <button title="Backup na Nuvem" style={styles.headerBtn} onClick={handleCloudPush}><Cloud size={14}/></button>
+              <button title="Sincronizar Nuvem" style={styles.headerBtn} onClick={handleCloudPull}><RefreshCw size={14}/></button>
+              <button onClick={() => setShowSettings(true)} style={{background:'none', border:'none', cursor:'pointer', color:'#fff', padding:'5px'}}><Settings size={20}/></button>
+              <button onClick={() => supabase.auth.signOut()} style={{background:'none', border:'none', cursor:'pointer', color:'#ff3b30', padding:'5px'}}><LogOut size={20}/></button>
+            </div>
         </div>
       </header>
 
@@ -289,7 +290,7 @@ export default function App() {
                   </div>
                 </div>
               )
-            }) : <div style={{padding:'20px', color:'#888', fontSize:'11px', textAlign:'center'}}>Menu Ativo no Painel Central.</div>}
+            }) : <div style={{padding:'20px', color:'#888', fontSize:'11px', textAlign:'center'}}>Selecione uma opção no menu lateral.</div>}
           </div>
 
           <div style={styles.sidebarFooter}>
@@ -306,12 +307,12 @@ export default function App() {
           : <div style={styles.empty}>
               <Music size={120} color="#111" />
               <h1 style={{fontSize:'40px', fontWeight:'900', color:'#111', margin:0}}>SHOWPAD PRO</h1>
-              <p style={{color:'#333', fontWeight:'bold'}}>Selecione uma música para editar.</p>
+              <p style={{color:'#333', fontWeight:'bold'}}>Selecione uma música ou show.</p>
             </div>}
         </div>
       </div>
 
-      {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} onClose={()=>setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} styles={styles} />}
+      {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} onClose={()=>setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} styles={styles} midiStatus={midiStatus} />}
       {showSettings && <SettingsView onClose={()=>setShowSettings(false)} inputs={allInputs} setMidiLearning={setMidiLearning} midiLearning={midiLearning} midiStatus={midiStatus} handleImport={handleImport} styles={styles} />}
     </div>
   );

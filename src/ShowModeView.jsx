@@ -1,13 +1,21 @@
-import React, { useState } from 'react';
-import { ChevronLeft, PanelLeftOpen, Type, ChevronUp, ChevronDown, X, ChevronRight } from 'lucide-react';
-import { formatChordsVisual } from './ShowPadCore';
+import React, { useState, useEffect } from 'react';
+import { ChevronLeft, PanelLeftOpen, Type, ChevronUp, ChevronDown, X, ChevronRight, Zap, RefreshCw } from 'lucide-react';
+import { formatChordsVisual, transposeContent } from './ShowPadCore';
 
-export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose, showScrollRef, lastSignal, styles }) => {
+export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose, showScrollRef, lastSignal, styles, midiStatus }) => {
     const [idx, setIdx] = useState(0), [dr, setDr] = useState(false);
     const [btnPressed, setBtnPressed] = useState(null); 
     
+    // ESTADO DE TRANSPOSIÇÃO VOLÁTIL (v7.1)
+    const [tempTranspose, setTempTranspose] = useState(0);
+    
     const songsArr = (item && item.type === 'setlist') ? (item.data.songs || []) : (item ? [item.data] : []);
     const song = songsArr[idx];
+
+    // Resetar transposição ao trocar de música na setlist
+    useEffect(() => {
+        setTempTranspose(0);
+    }, [idx]);
 
     const controlBtnStyle = {
         width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -22,13 +30,28 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
         }
     };
 
+    // PROCESSAMENTO DA CIFRA COM TRANSPOSE TEMPORÁRIO
+    const getTransposedContent = () => {
+        if (!song) return "Obrigado!";
+        let text = song.content;
+        if (tempTranspose !== 0) {
+            text = transposeContent(text, tempTranspose);
+        }
+        return formatChordsVisual(text);
+    };
+
+    // ESTILO DO LED MIDI NO SHOW (v7.1)
+    const midiPulse = lastSignal !== "";
+    const midiOk = midiStatus === 'ready';
+
     return (
         <div style={styles.showOverlay}>
             {/* GAVETA LATERAL */}
             <div style={{
                 ...styles.showDrawer,
                 transform: dr ? 'translateX(0)' : 'translateX(-100%)',
-                visibility: dr ? 'visible' : 'hidden'
+                visibility: dr ? 'visible' : 'hidden',
+                zIndex: 2000
             }}>
                 <div style={styles.drawerHeader}>
                     SET LIST ATUAL 
@@ -49,7 +72,7 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
             </div>
 
             {/* TOOLBAR SUPERIOR */}
-            <div style={{...styles.showToolbar, height: '100px', padding: '10px 20px'}}>
+            <div style={{...styles.showToolbar, height: '110px', padding: '10px 20px'}}>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <button onClick={() => setDr(true)} style={{...controlBtnStyle, backgroundColor: dr ? '#007aff' : '#2c2c2e'}}>
                         <PanelLeftOpen />
@@ -57,24 +80,49 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
                     <button onClick={onClose} style={{...controlBtnStyle, width: 'auto', padding: '0 15px'}}>
                         <ChevronLeft /> Sair
                     </button>
+                    
+                    {/* INDICADOR MIDI BOLHA NO SHOW (v7.1) */}
+                    <div style={{
+                        width: '40px', height: '40px', borderRadius: '50%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: midiOk ? (midiPulse ? '#4cd964' : '#1e3a1e') : '#3a3a3c',
+                        boxShadow: midiPulse ? '0 0 15px #4cd964' : 'none',
+                        border: '2px solid rgba(255,255,255,0.1)',
+                        transition: 'all 0.1s ease'
+                    }}>
+                        <Zap size={20} color={midiOk ? (midiPulse ? '#fff' : '#4cd964') : '#888'} fill={midiPulse ? "#fff" : "none"} />
+                    </div>
                 </div>
 
                 <div style={{ flex: 1, textAlign: 'center' }}>
-                    <strong style={{ color: '#fff', fontSize: '32px', lineHeight: '1', display: 'block', textTransform: 'uppercase' }}>
+                    <strong style={{ color: '#fff', fontSize: '32px', lineHeight: '1.1', display: 'block', textTransform: 'uppercase' }}>
                         {song ? song.title : "FIM DO SHOW"}
                     </strong>
                     <span style={{ color: '#FFD700', fontSize: '18px', fontWeight: 'bold' }}>
-                        {song ? song.artist : ""}
+                        {song ? (tempTranspose !== 0 ? `${song.artist} (${tempTranspose > 0 ? '+' : ''}${tempTranspose} ST)` : song.artist) : ""}
                     </span>
                 </div>
 
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <div style={{ backgroundColor: '#000', border: '2px solid #007aff', borderRadius: '8px', padding: '5px 12px', textAlign:'center' }}>
-                        <span style={{fontSize: '9px', color: '#007aff', fontWeight: 'bold', display:'block'}}>BPM</span>
-                        <span style={{fontSize: '20px', color: '#007aff', fontWeight: 'bold'}}>{song?.bpm || "---"}</span>
+                    {/* CONTROLE DE TRANSPOSE TEMPORÁRIO (v7.1) */}
+                    <div style={{display:'flex', gap:'4px', backgroundColor:'rgba(0,0,0,0.3)', padding:'4px', borderRadius:'10px', border:'1px solid #444'}}>
+                        <button style={{...controlBtnStyle, height:'36px', width:'36px'}} onClick={() => setTempTranspose(t => t - 1)}>-1</button>
+                        <div style={{minWidth:'40px', textAlign:'center'}}>
+                            <span style={{fontSize:'9px', color:'#aaa', display:'block'}}>TOM</span>
+                            <span style={{fontSize:'16px', color:'#FFD700', fontWeight:'bold'}}>{tempTranspose > 0 ? '+' : ''}{tempTranspose}</span>
+                        </div>
+                        <button style={{...controlBtnStyle, height:'36px', width:'36px'}} onClick={() => setTempTranspose(t => t + 1)}>+1</button>
+                        {tempTranspose !== 0 && (
+                            <button style={{...controlBtnStyle, height:'36px', width:'36px', backgroundColor:'#ff3b30'}} onClick={() => setTempTranspose(0)}>
+                                <RefreshCw size={14} />
+                            </button>
+                        )}
                     </div>
-                    <button style={controlBtnStyle} onClick={() => setFontSize(f => f - 5)}><Type size={16} />-</button>
-                    <button style={controlBtnStyle} onClick={() => setFontSize(f => f + 5)}><Type size={16} />+</button>
+
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                        <button style={controlBtnStyle} onClick={() => setFontSize(f => f - 5)}><Type size={14} />-</button>
+                        <button style={controlBtnStyle} onClick={() => setFontSize(f => f + 5)}><Type size={14} />+</button>
+                    </div>
                 </div>
             </div>
 
@@ -85,8 +133,8 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
                         <strong>OBSERVAÇÕES:</strong><br/>{song.notes}
                     </div>
                 )}
-                <div style={{ fontSize: fontSize + 'px', fontFamily: 'monospace', color: '#fff', whiteSpace: 'pre-wrap', paddingBottom: '100px' }}>
-                    {song ? formatChordsVisual(song.content) : "Obrigado!"}
+                <div style={{ fontSize: fontSize + 'px', fontFamily: 'monospace', color: '#fff', whiteSpace: 'pre-wrap', paddingBottom: '150px' }}>
+                    {getTransposedContent()}
                 </div>
             </div>
 
