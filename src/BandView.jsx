@@ -80,7 +80,6 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                     role: i.role,
                     is_solo: i.bands.invite_code.startsWith("SOLO")
                 }));
-                // Limpeza local antes de atualizar
                 await db.my_bands.clear();
                 for (let b of cloudList) await db.my_bands.put(b);
             }
@@ -92,21 +91,24 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         setLoading(false);
     };
 
-    // FUNÇÃO PARA ENTRAR NA BANDA VIA CÓDIGO (v7.1)
+    // CORREÇÃO v7.1.2: Busca blindada e tratamento de strings
     const joinBandByCode = async () => {
-        if (!inviteCode || inviteCode.length < 3) return;
+        const cleanCode = inviteCode.trim().toUpperCase();
+        if (!cleanCode || cleanCode.length < 3) return;
+        
         setLoading(true);
         try {
-            // 1. Achar a banda pelo código
+            // 1. Busca no Supabase (Política de RLS deve estar em 'true')
             const { data: band, error: bErr } = await supabase
                 .from('bands')
                 .select('id, name')
-                .eq('invite_code', inviteCode.trim())
-                .single();
+                .eq('invite_code', cleanCode)
+                .maybeSingle(); // Não dispara erro se retornar vazio
             
-            if (bErr || !band) throw new Error("Código não encontrado.");
+            if (bErr) throw bErr;
+            if (!band) throw new Error("Código não encontrado. Verifique com o administrador da banda.");
 
-            // 2. Tentar entrar como membro
+            // 2. Tenta inserir o novo membro
             const { error: mErr } = await supabase
                 .from('band_members')
                 .insert([{ band_id: band.id, profile_id: session.user.id, role: 'member' }]);
@@ -237,7 +239,6 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 ))}
             </div>
 
-            {/* Modais de Repertório, Configurações e Shows seguem o padrão anterior... */}
             {showRepertoire && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '850px', height: '85vh', borderRadius: '24px', border: '1px solid #444', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
