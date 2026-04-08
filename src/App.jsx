@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { WebMidi } from 'webmidi';
 import { 
   Plus, Music, Trash2, Save, Monitor, Settings, Zap, 
-  LogOut, SortAsc, UserRound, Cloud, RefreshCw, User
+  LogOut, SortAsc, UserRound, Cloud, RefreshCw, User,
+  CloudUpload, CloudDownload // Ícones específicos para nuvem
 } from 'lucide-react';
 
 import { db, transposeContent, supabase, triggerDL, pushToCloud, pullFromCloud } from './ShowPadCore';
@@ -38,7 +39,6 @@ export default function App() {
   const midiLearningRef = useRef(null);
   const showScrollRef = useRef(null);
 
-  // PEGAR NOME DO USUÁRIO (Google ou Email)
   const getUserDisplayName = () => {
     if (!session?.user) return "Usuário";
     const meta = session.user.user_metadata;
@@ -51,7 +51,6 @@ export default function App() {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
         setSession(s);
         if (!s) {
-          // Limpa tudo ao deslogar
           setSongs([]);
           setSetlists([]);
           setBands([]);
@@ -103,8 +102,6 @@ export default function App() {
     try {
         const s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
-        
-        // SEGREGAR BANDAS: Apenas as que o usuário logado participa
         const allBands = await db.my_bands.toArray(); 
         const filteredBands = allBands.filter(b => b.owner_id === session.user.id || b.role);
 
@@ -129,19 +126,9 @@ export default function App() {
   const handleCreateNew = async () => {
     const isSetlist = view === 'setlists';
     const obj = isSetlist ? {
-      title: "Novo Show",
-      songs: [],
-      location: "",
-      time: "",
-      members: "",
-      notes: "",
-      creator_id: session.user.id
+      title: "Novo Show", songs: [], location: "", time: "", members: "", notes: "", creator_id: session.user.id
     } : {
-      title: "Nova Música",
-      artist: "Artista",
-      content: "",
-      creator_id: session.user.id,
-      bpm: 120
+      title: "Nova Música", artist: "Artista", content: "", creator_id: session.user.id, bpm: 120
     };
     const id = await (isSetlist ? db.setlists.add(obj) : db.songs.add(obj));
     await refreshData();
@@ -163,14 +150,14 @@ export default function App() {
   const handleCloudPush = async () => {
     if (!session) return;
     setIsScraping(true);
-    try { await pushToCloud(session.user.id); alert("Backup salvo!"); } catch (e) { alert("Erro: " + e.message); }
+    try { await pushToCloud(session.user.id); alert("Backup enviado com sucesso!"); } catch (e) { alert("Erro: " + e.message); }
     setIsScraping(false);
   };
 
   const handleCloudPull = async () => {
     if (!session) return;
     setIsScraping(true);
-    try { await pullFromCloud(session.user.id); await refreshData(); alert("Sincronizado!"); } catch (e) { alert("Erro: " + e.message); }
+    try { await pullFromCloud(session.user.id); await refreshData(); alert("Sincronização concluída!"); } catch (e) { alert("Erro: " + e.message); }
     setIsScraping(false);
   };
 
@@ -241,14 +228,12 @@ export default function App() {
         <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
           <Music color="#007aff" />
           <h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
-          
           <div style={getMidiStyle()}>
             <Zap size={10} fill={midiStatus === 'ready' ? "#fff" : "none"}/> 
             {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}
           </div>
         </div>
 
-        {/* HEADER DIREITO: USUÁRIO E AÇÕES */}
         <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
             <div style={{display:'flex', alignItems:'center', gap:'8px', backgroundColor:'rgba(255,255,255,0.05)', padding:'5px 12px', borderRadius:'15px', border:'1px solid rgba(255,255,255,0.1)'}}>
               <User size={14} color="#007aff" />
@@ -256,8 +241,32 @@ export default function App() {
             </div>
 
             <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
-              <button title="Backup na Nuvem" style={styles.headerBtn} onClick={handleCloudPush}><Cloud size={14}/></button>
-              <button title="Sincronizar Nuvem" style={styles.headerBtn} onClick={handleCloudPull}><RefreshCw size={14}/></button>
+              {/* BOTÃO UPLOAD COM NUVEM + SETA PARA CIMA */}
+              <button 
+                title="Backup na Nuvem" 
+                style={{...styles.headerBtn, display:'flex', gap:'6px', color:'#4cd964', borderColor:'#4cd96466'}} 
+                onClick={handleCloudPush}
+              >
+                <div style={{position:'relative', display:'flex', alignItems:'center'}}>
+                  <Cloud size={16}/>
+                  <Plus size={8} style={{position:'absolute', top:'-2px', right:'-4px'}} strokeWidth={4}/>
+                </div>
+                <span style={{fontSize:'9px', fontWeight:'900'}}>UPLOAD</span>
+              </button>
+
+              {/* BOTÃO DOWNLOAD COM NUVEM + SETA PARA BAIXO */}
+              <button 
+                title="Sincronizar Nuvem" 
+                style={{...styles.headerBtn, display:'flex', gap:'6px', color:'#007aff', borderColor:'#007aff66'}} 
+                onClick={handleCloudPull}
+              >
+                <div style={{position:'relative', display:'flex', alignItems:'center'}}>
+                  <Cloud size={16}/>
+                  <RefreshCw size={8} style={{position:'absolute', bottom:'-2px', right:'-4px'}} strokeWidth={4}/>
+                </div>
+                <span style={{fontSize:'9px', fontWeight:'900'}}>SYNC</span>
+              </button>
+
               <button onClick={() => setShowSettings(true)} style={{background:'none', border:'none', cursor:'pointer', color:'#fff', padding:'5px'}}><Settings size={20}/></button>
               <button onClick={() => supabase.auth.signOut()} style={{background:'none', border:'none', cursor:'pointer', color:'#ff3b30', padding:'5px'}}><LogOut size={20}/></button>
             </div>
@@ -290,7 +299,7 @@ export default function App() {
                   </div>
                 </div>
               )
-            }) : <div style={{padding:'20px', color:'#888', fontSize:'11px', textAlign:'center'}}>Selecione uma opção no menu lateral.</div>}
+            }) : <div style={{padding:'20px', color:'#888', fontSize:'11px', textAlign:'center'}}>Menu lateral ativo.</div>}
           </div>
 
           <div style={styles.sidebarFooter}>
@@ -307,7 +316,7 @@ export default function App() {
           : <div style={styles.empty}>
               <Music size={120} color="#111" />
               <h1 style={{fontSize:'40px', fontWeight:'900', color:'#111', margin:0}}>SHOWPAD PRO</h1>
-              <p style={{color:'#333', fontWeight:'bold'}}>Selecione uma música ou show.</p>
+              <p style={{color:'#333', fontWeight:'bold'}}>Selecione para editar.</p>
             </div>}
         </div>
       </div>
