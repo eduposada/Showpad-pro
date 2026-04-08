@@ -91,24 +91,21 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         setLoading(false);
     };
 
-    // CORREÇÃO v7.1.2: Busca blindada e tratamento de strings
     const joinBandByCode = async () => {
         const cleanCode = inviteCode.trim().toUpperCase();
         if (!cleanCode || cleanCode.length < 3) return;
         
         setLoading(true);
         try {
-            // 1. Busca no Supabase (Política de RLS deve estar em 'true')
             const { data: band, error: bErr } = await supabase
                 .from('bands')
                 .select('id, name')
                 .eq('invite_code', cleanCode)
-                .maybeSingle(); // Não dispara erro se retornar vazio
+                .maybeSingle(); 
             
             if (bErr) throw bErr;
-            if (!band) throw new Error("Código não encontrado. Verifique com o administrador da banda.");
+            if (!band) throw new Error("Código não encontrado.");
 
-            // 2. Tenta inserir o novo membro
             const { error: mErr } = await supabase
                 .from('band_members')
                 .insert([{ band_id: band.id, profile_id: session.user.id, role: 'member' }]);
@@ -121,11 +118,22 @@ export const BandView = ({ session, styles, onSelectShow }) => {
             alert(`Bem-vindo à banda ${band.name}!`);
             setInviteCode('');
             await fetchBands();
-        } catch (err) {
-            alert(err.message);
-        } finally {
-            setLoading(false);
-        }
+        } catch (err) { alert(err.message); } finally { setLoading(false); }
+    };
+
+    // FUNÇÃO PARA SAIR DA BANDA (v7.1.3)
+    const leaveBand = async (bandId) => {
+        if (!window.confirm("Deseja realmente sair desta banda?")) return;
+        setLoading(true);
+        try {
+            const { error } = await supabase
+                .from('band_members')
+                .delete()
+                .eq('band_id', bandId)
+                .eq('profile_id', session.user.id);
+            if (error) throw error;
+            await fetchBands();
+        } catch (err) { alert(err.message); } finally { setLoading(false); }
     };
 
     const handleDeleteBand = async (band) => {
@@ -223,8 +231,13 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                                 </div>
                             </div>
                             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                {!b.is_solo && b.role === 'admin' && (
-                                    <button onClick={() => handleDeleteBand(b)} style={{ background: 'none', border: 'none', color: '#ff3b30', cursor: 'pointer', opacity: 0.7 }}><Trash2 size={18} /></button>
+                                {/* ADMIN: EXCLUIR | MEMBER: SAIR */}
+                                {!b.is_solo && (
+                                    b.role === 'admin' ? (
+                                        <button onClick={() => handleDeleteBand(b)} style={{ background: 'none', border: 'none', color: '#ff3b30', cursor: 'pointer', opacity: 0.7 }} title="Excluir Banda"><Trash2 size={18} /></button>
+                                    ) : (
+                                        <button onClick={() => leaveBand(b.id)} style={{ background: 'none', border: 'none', color: '#ff9500', cursor: 'pointer' }} title="Sair da Banda"><UserMinus size={18} /></button>
+                                    )
                                 )}
                                 {b.role === 'admin' && (
                                     <button onClick={() => setShowSettings(b)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}><Settings size={20} /></button>
@@ -239,6 +252,22 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 ))}
             </div>
 
+            {/* Modais omitidos para brevidade, mas devem permanecer no seu arquivo */}
+            
+            {showBandShows && (
+                <BandShowManager 
+                    band={showBandShows} 
+                    styles={styles} 
+                    onClose={() => setShowBandShows(null)} 
+                    onSelectShow={(show) => { 
+                        // v7.1.3: Força a navegação e seleção do item no App.jsx
+                        onSelectShow({ type: 'setlist', data: show }); 
+                        setShowBandShows(null); 
+                    }} 
+                />
+            )}
+
+            {/* Certifique-se de manter os modais de Repertoire e Settings aqui conforme o código original */}
             {showRepertoire && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '850px', height: '85vh', borderRadius: '24px', border: '1px solid #444', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -297,10 +326,6 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                         </div>
                     </div>
                 </div>
-            )}
-
-            {showBandShows && (
-                <BandShowManager band={showBandShows} styles={styles} onClose={() => setShowBandShows(null)} onSelectShow={(show) => { onSelectShow(show); setShowBandShows(null); }} />
             )}
         </div>
     );

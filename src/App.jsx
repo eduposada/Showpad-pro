@@ -3,7 +3,7 @@ import { WebMidi } from 'webmidi';
 import { 
   Plus, Music, Trash2, Save, Monitor, Settings, Zap, 
   LogOut, SortAsc, UserRound, Cloud, RefreshCw, User,
-  CloudUpload, CloudDownload // Ícones específicos para nuvem
+  CloudUpload, CloudDownload 
 } from 'lucide-react';
 
 import { db, transposeContent, supabase, triggerDL, pushToCloud, pullFromCloud } from './ShowPadCore';
@@ -115,6 +115,7 @@ export default function App() {
         setSetlists(sl);
         setBands(filteredBands); 
 
+        // Sincroniza o item selecionado com os dados mais recentes do banco
         if (selectedItem) {
             const id = selectedItem.data.id;
             const upd = (selectedItem.type === 'song') ? s.find(x => x.id === id) : sl.find(x => x.id === id);
@@ -136,9 +137,11 @@ export default function App() {
     setSelectedItem({ type: isSetlist ? 'setlist' : 'song', data: savedItem });
   };
 
-  const openBandShow = (show) => {
-    setSelectedItem({ type: 'setlist', data: show });
-    setView('setlists'); 
+  // v7.1.3: CORREÇÃO DE FOCO NO EDITOR
+  const openBandShow = (item) => {
+    // Agora recebe o objeto formatado {type, data} do BandView
+    setSelectedItem(item);
+    setView('setlists'); // Navega para a aba de shows onde o item estará selecionado
   };
 
   const checkServer = () => {
@@ -241,7 +244,6 @@ export default function App() {
             </div>
 
             <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
-              {/* BOTÃO UPLOAD COM NUVEM + SETA PARA CIMA */}
               <button 
                 title="Backup na Nuvem" 
                 style={{...styles.headerBtn, display:'flex', gap:'6px', color:'#4cd964', borderColor:'#4cd96466'}} 
@@ -254,7 +256,6 @@ export default function App() {
                 <span style={{fontSize:'9px', fontWeight:'900'}}>UPLOAD</span>
               </button>
 
-              {/* BOTÃO DOWNLOAD COM NUVEM + SETA PARA BAIXO */}
               <button 
                 title="Sincronizar Nuvem" 
                 style={{...styles.headerBtn, display:'flex', gap:'6px', color:'#007aff', borderColor:'#007aff66'}} 
