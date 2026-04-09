@@ -3,7 +3,7 @@ import { WebMidi } from 'webmidi';
 import { 
   Plus, Music, Trash2, Save, Monitor, Settings, Zap, 
   LogOut, SortAsc, UserRound, Cloud, RefreshCw, User,
-  CloudUpload, CloudDownload 
+  CloudUpload, CloudDownload, Search, Filter, UserCircle
 } from 'lucide-react';
 
 import { db, transposeContent, supabase, triggerDL, pushToCloud, pullFromCloud } from './ShowPadCore';
@@ -27,6 +27,10 @@ export default function App() {
   const [view, setView] = useState('library'); 
   const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30);
   const [sortBy, setSortBy] = useState(localStorage.getItem('sortBy') || 'title');
+
+  // v7.2: Novos estados para Busca e Filtros
+  const [searchTerm, setSearchTerm] = useState("");
+  const [artistFilter, setArtistFilter] = useState("all");
 
   const [midiStatus, setMidiStatus] = useState("off");
   const [midiFlash, setMidiFlash] = useState(false);
@@ -61,18 +65,10 @@ export default function App() {
     }
   }, []);
 
-  /**
-   * v7.1.7: ESTRATÉGIA DNA ÚNICO
-   * Garante a criação ou recuperação da Banda Solo usando um ID vinculado ao usuário.
-   */
   const checkSoloBandV4 = async (user) => {
     if (!user || !supabase) return;
-    
-    // Geramos um convite único baseado no ID do usuário (DNA)
     const soloUniqueCode = `SOLO-${user.id.substring(0, 5).toUpperCase()}`;
-
     try {
-        // 1. Verificar primeiro no Supabase se já existe a banda solo deste usuário
         const { data: cloudSolo, error: searchErr } = await supabase
             .from('bands')
             .select('*')
@@ -83,12 +79,9 @@ export default function App() {
         if (searchErr) throw searchErr;
 
         if (cloudSolo) {
-            // Se já existe na nuvem, atualizamos o banco local (Dexie)
             const soloData = { ...cloudSolo, role: 'admin', is_solo: true };
             await db.my_bands.put(soloData);
-            console.log("✅ Banda SOLO recuperada via DNA.");
         } else {
-            // 2. Se não existe, criamos a banda solo "mestra" para o usuário
             const soloName = `${getUserDisplayName().toUpperCase()} (SOLO)`;
             const { data: newBand, error: bErr } = await supabase.from('bands').insert([{ 
                 name: soloName, 
@@ -98,23 +91,12 @@ export default function App() {
             }]).select().single();
 
             if (bErr) throw bErr;
-
-            // Criar vínculo de membro Admin na tabela de membros
-            const { error: mErr } = await supabase.from('band_members').insert([{ 
-                band_id: newBand.id, 
-                profile_id: user.id, 
-                role: 'admin' 
-            }]);
-            if (mErr) throw mErr;
-
+            await supabase.from('band_members').insert([{ band_id: newBand.id, profile_id: user.id, role: 'admin' }]);
             const soloData = { ...newBand, role: 'admin', is_solo: true };
             await db.my_bands.put(soloData);
-            console.log("✨ Nova Banda SOLO DNA gerada com sucesso.");
         }
         await refreshData();
-    } catch(e) { 
-        console.error("❌ Falha no nascimento da Banda Solo:", e.message); 
-    }
+    } catch(e) { console.error("Falha no nascimento:", e.message); }
   };
 
   useEffect(() => { 
@@ -124,19 +106,29 @@ export default function App() {
         initMidi(); 
         checkServer(); 
     }
-  }, [session, sortBy]);
+  }, [session, sortBy, searchTerm, artistFilter]); // v7.2: Recarrega ao filtrar
 
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
 
   const refreshData = async () => { 
     if (!session) return;
     try {
-        const s = await db.songs.toArray();
+        let s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
         const allBands = await db.my_bands.toArray(); 
-        
-        // Filtra apenas as bandas que pertencem ao usuário ou onde ele tem um papel definido
         const filteredBands = allBands.filter(b => b.owner_id === session.user.id || b.role);
+
+        // v7.2: Lógica de Filtro e Busca
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            s = s.filter(x => 
+                x.title.toLowerCase().includes(term) || 
+                (x.artist && x.artist.toLowerCase().includes(term))
+            );
+        }
+        if (artistFilter !== "all") {
+            s = s.filter(x => x.artist === artistFilter);
+        }
 
         s.sort((a,b) => {
             const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
@@ -253,6 +245,9 @@ export default function App() {
     };
   };
 
+  // v7.2: Lista de artistas únicos para o filtro
+  const uniqueArtists = Array.from(new Set(songs.map(s => s.artist).filter(Boolean))).sort();
+
   if (!session) return <AuthView styles={styles} />;
 
   return (
@@ -269,85 +264,109 @@ export default function App() {
 
         <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
             <div style={{display:'flex', alignItems:'center', gap:'8px', backgroundColor:'rgba(255,255,255,0.05)', padding:'5px 12px', borderRadius:'15px', border:'1px solid rgba(255,255,255,0.1)'}}>
-              <User size={14} color="#007aff" />
+              <UserCircle size={14} color="#007aff" />
               <span style={{fontSize:'12px', fontWeight:'600', color:'#fff'}}>{getUserDisplayName()}</span>
             </div>
 
             <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
-              <button 
-                title="Backup na Nuvem" 
-                style={{...styles.headerBtn, display:'flex', gap:'6px', color:'#4cd964', borderColor:'#4cd96466'}} 
-                onClick={handleCloudPush}
-              >
-                <div style={{position:'relative', display:'flex', alignItems:'center'}}>
-                  <Cloud size={16}/>
-                  <Plus size={8} style={{position:'absolute', top:'-2px', right:'-4px'}} strokeWidth={4}/>
-                </div>
-                <span style={{fontSize:'9px', fontWeight:'900'}}>UPLOAD</span>
-              </button>
-
-              <button 
-                title="Sincronizar Nuvem" 
-                style={{...styles.headerBtn, display:'flex', gap:'6px', color:'#007aff', borderColor:'#007aff66'}} 
-                onClick={handleCloudPull}
-              >
-                <div style={{position:'relative', display:'flex', alignItems:'center'}}>
-                  <Cloud size={16}/>
-                  <RefreshCw size={8} style={{position:'absolute', bottom:'-2px', right:'-4px'}} strokeWidth={4}/>
-                </div>
-                <span style={{fontSize:'9px', fontWeight:'900'}}>SYNC</span>
-              </button>
-
-              <button onClick={() => setShowSettings(true)} style={{background:'none', border:'none', cursor:'pointer', color:'#fff', padding:'5px'}}><Settings size={20}/></button>
-              <button onClick={() => supabase.auth.signOut()} style={{background:'none', border:'none', cursor:'pointer', color:'#ff3b30', padding:'5px'}}><LogOut size={20}/></button>
+              <button title="Backup" style={{...styles.headerBtn, color:'#4cd964', borderColor:'#4cd96466'}} onClick={handleCloudPush}><CloudUpload size={16}/></button>
+              <button title="Sync" style={{...styles.headerBtn, color:'#007aff', borderColor:'#007aff66'}} onClick={handleCloudPull}><CloudDownload size={16}/></button>
+              <button onClick={() => setShowSettings(true)} style={{background:'none', border:'none', cursor:'pointer', color:'#fff'}}><Settings size={20}/></button>
+              <button onClick={() => supabase.auth.signOut()} style={{background:'none', border:'none', cursor:'pointer', color:'#ff3b30'}}><LogOut size={20}/></button>
             </div>
         </div>
       </header>
 
       <div style={{ display:'flex', flex: 1, overflow:'hidden', width: '100%' }}>
-        <div style={styles.sidebar}>
+        <div style={{...styles.sidebar, background: '#000', borderRight: '1px solid #1c1c1e'}}>
           <div style={styles.navTabs}>
-            <button onClick={() => setView('library')} style={view === 'library' ? styles.activeTab : styles.tab}>MÚSICAS</button>
+            <button onClick={() => setView('library')} style={view === 'library' ? styles.activeTab : styles.tab}>LIBRARY</button>
             <button onClick={() => setView('setlists')} style={view === 'setlists' ? styles.activeTab : styles.tab}>SHOWS</button>
-            <button onClick={() => setView('bands')} style={view === 'bands' ? styles.activeTab : styles.tab}>BANDAS</button>
-            <button onClick={() => setView('garimpo')} style={view === 'garimpo' ? styles.activeTab : styles.tab}>GARIMPAR</button>
+            <button onClick={() => setView('bands')} style={view === 'bands' ? styles.activeTab : styles.tab}>BANDS</button>
+            <button onClick={() => setView('garimpo')} style={view === 'garimpo' ? styles.activeTab : styles.tab}>GARIMPO</button>
           </div>
+
+          {/* v7.2: Painel de Busca e Filtros na Sidebar */}
+          {['library', 'setlists'].includes(view) && (
+            <div style={{padding: '15px', borderBottom: '1px solid #1c1c1e', display: 'flex', flexDirection: 'column', gap: '10px'}}>
+              <div style={{position: 'relative', display: 'flex', alignItems: 'center'}}>
+                <Search size={14} color="#666" style={{position: 'absolute', left: '10px'}} />
+                <input 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar música ou artista..." 
+                  style={{...styles.inputField, paddingLeft: '30px', margin: 0, height: '35px', fontSize: '12px', background: '#1c1c1e'}}
+                />
+              </div>
+              
+              <div style={{display: 'flex', gap: '8px'}}>
+                <select 
+                  value={artistFilter}
+                  onChange={(e) => setArtistFilter(e.target.value)}
+                  style={{...styles.inputField, flex: 1, margin: 0, height: '35px', fontSize: '11px', background: '#1c1c1e', cursor: 'pointer'}}
+                >
+                  <option value="all">TODOS ARTISTAS</option>
+                  {uniqueArtists.map(a => <option key={a} value={a}>{a.toUpperCase()}</option>)}
+                </select>
+                
+                <button 
+                  onClick={() => {
+                    const next = sortBy === 'title' ? 'artist' : 'title';
+                    setSortBy(next);
+                    localStorage.setItem('sortBy', next);
+                  }}
+                  style={{...styles.headerBtn, padding: '0 10px', backgroundColor: '#1c1c1e'}}
+                >
+                  <SortAsc size={16} color={sortBy === 'artist' ? "#007aff" : "#fff"} />
+                </button>
+              </div>
+            </div>
+          )}
 
           <div style={styles.listArea}>
             {['library', 'setlists'].includes(view) ? (view === 'library' ? songs : setlists).map(item => {
               const band = item.band_id ? bands.find(b => b.id === item.band_id) : null;
               return (
-                <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}
+                <div key={item.id} style={{
+                    ...(selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem),
+                    borderLeft: selectedItem && selectedItem.data.id === item.id ? '4px solid #007aff' : '4px solid transparent',
+                    background: selectedItem && selectedItem.data.id === item.id ? '#1c1c1e' : 'transparent'
+                }}
                      onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
                   <div style={{flex:1, overflow:'hidden'}}>
-                      <strong style={{color:'#fff', display:'block'}}>{item.title}</strong>
-                      {band && <span style={styles.bandTagOrange}>{band.name}</span>}
-                      <small style={styles.artistYellow}>{item.artist || item.location || "---"}</small>
+                      <strong style={{color: selectedItem && selectedItem.data.id === item.id ? '#007aff' : '#fff', display:'block', fontSize: '14px'}}>{item.title}</strong>
+                      <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px'}}>
+                        <small style={{color: '#FFD700', fontWeight: 'bold', fontSize: '10px'}}>{item.artist || "DESCONHECIDO"}</small>
+                        {band && <span style={{...styles.bandTagOrange, fontSize: '9px', padding: '1px 5px'}}>{band.name}</span>}
+                      </div>
                   </div>
-                  <div style={{display:'flex', gap:'6px'}}>
-                      <div style={{cursor:'pointer'}} onClick={(e) => { e.stopPropagation(); setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={20} color="#007aff"/></div>
-                      <div style={{cursor:'pointer'}} onClick={async (e) => { e.stopPropagation(); if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={20} color="#444"/></div>
+                  <div style={{display:'flex', gap:'10px'}}>
+                      <button onClick={(e) => { e.stopPropagation(); setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }} style={{background: 'none', border: 'none', cursor: 'pointer'}}><Monitor size={18} color="#007aff"/></button>
+                      <button onClick={async (e) => { e.stopPropagation(); if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}} style={{background: 'none', border: 'none', cursor: 'pointer'}}><Trash2 size={18} color="#444"/></button>
                   </div>
                 </div>
               )
-            }) : <div style={{padding:'20px', color:'#888', fontSize:'11px', textAlign:'center'}}>Menu lateral ativo.</div>}
+            }) : <div style={{padding:'20px', color:'#888', fontSize:'11px', textAlign:'center', marginTop: '50px'}}>
+                  <Music size={40} style={{opacity: 0.1, marginBottom: '10px'}} />
+                  <p>MENU ATIVO</p>
+                </div>}
           </div>
 
           <div style={styles.sidebarFooter}>
             {['library', 'setlists'].includes(view) && (
-              <button onClick={handleCreateNew} style={styles.addBtn}>+ NOVO</button>
+              <button onClick={handleCreateNew} style={{...styles.addBtn, background: '#007aff', width: '100%', borderRadius: '12px'}}>+ NOVO</button>
             )}
           </div>
         </div>
 
-        <div style={styles.mainEditor}>
+        <div style={{...styles.mainEditor, background: '#000'}}>
           {view === 'garimpo' ? <GarimpoView isServerOnline={isServerOnline} styles={styles} refresh={refreshData} session={session} />
           : view === 'bands' ? <BandView session={session} styles={styles} onSelectShow={openBandShow} />
           : selectedItem ? <MainEditor key={selectedItem.data.id} item={selectedItem} songs={songs} bands={bands} triggerDL={triggerDL} onClose={()=>setSelectedItem(null)} onShow={()=>setShowMode(true)} refresh={refreshData} styles={styles} />
           : <div style={styles.empty}>
-              <Music size={120} color="#111" />
+              <Music size={120} color="#0a0a0a" />
               <h1 style={{fontSize:'40px', fontWeight:'900', color:'#111', margin:0}}>SHOWPAD PRO</h1>
-              <p style={{color:'#333', fontWeight:'bold'}}>Selecione para editar.</p>
+              <p style={{color:'#111', fontWeight:'bold'}}>Selecione para editar.</p>
             </div>}
         </div>
       </div>
