@@ -3,7 +3,8 @@ import { WebMidi } from 'webmidi';
 import { 
   Plus, Music, Trash2, Save, Monitor, Settings, Zap, 
   LogOut, SortAsc, UserRound, Cloud, RefreshCw, User,
-  CloudUpload, CloudDownload, Search, Filter, UserCircle
+  CloudUpload, CloudDownload, Search, Filter, UserCircle,
+  FilePlus, DownloadCloud, UploadCloud
 } from 'lucide-react';
 
 import { db, transposeContent, supabase, triggerDL, pushToCloud, pullFromCloud } from './ShowPadCore';
@@ -28,7 +29,6 @@ export default function App() {
   const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30);
   const [sortBy, setSortBy] = useState(localStorage.getItem('sortBy') || 'title');
 
-  // v7.2: Novos estados para Busca e Filtros
   const [searchTerm, setSearchTerm] = useState("");
   const [artistFilter, setArtistFilter] = useState("all");
 
@@ -42,6 +42,7 @@ export default function App() {
 
   const midiLearningRef = useRef(null);
   const showScrollRef = useRef(null);
+  const fileInputRef = useRef(null); // Ref para o seletor de arquivos
 
   const getUserDisplayName = () => {
     if (!session?.user) return "Usuário";
@@ -106,7 +107,7 @@ export default function App() {
         initMidi(); 
         checkServer(); 
     }
-  }, [session, sortBy, searchTerm, artistFilter]); // v7.2: Recarrega ao filtrar
+  }, [session, sortBy, searchTerm, artistFilter]);
 
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
 
@@ -118,7 +119,6 @@ export default function App() {
         const allBands = await db.my_bands.toArray(); 
         const filteredBands = allBands.filter(b => b.owner_id === session.user.id || b.role);
 
-        // v7.2: Lógica de Filtro e Busca
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             s = s.filter(x => 
@@ -159,6 +159,41 @@ export default function App() {
     await refreshData();
     const savedItem = await (isSetlist ? db.setlists.get(id) : db.songs.get(id));
     setSelectedItem({ type: isSetlist ? 'setlist' : 'song', data: savedItem });
+  };
+
+  // v7.2: Lógica de Importação Individual .showpad
+  const handleImportIndividual = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+        try {
+            const imported = JSON.parse(ev.target.result);
+            if (imported.type === "single_song" && imported.data) {
+                const s = imported.data;
+                const exists = await db.songs.where({title: s.title, artist: s.artist}).first();
+                if (exists) {
+                    if (!confirm("Esta música já existe. Deseja criar uma cópia?")) return;
+                }
+                const newId = await db.songs.add({ 
+                    ...s, 
+                    id: undefined, 
+                    creator_id: session.user.id 
+                });
+                await refreshData();
+                const added = await db.songs.get(newId);
+                setSelectedItem({ type: 'song', data: added });
+                alert(`Música "${s.title}" importada com sucesso!`);
+            } else {
+                alert("Este arquivo não parece ser uma música individual do ShowPad (.showpad)");
+            }
+        } catch (err) {
+            alert("Erro ao ler o arquivo .showpad");
+        }
+    };
+    reader.readAsText(file);
+    e.target.value = null; // Reseta o input
   };
 
   const openBandShow = (item) => {
@@ -245,7 +280,6 @@ export default function App() {
     };
   };
 
-  // v7.2: Lista de artistas únicos para o filtro
   const uniqueArtists = Array.from(new Set(songs.map(s => s.artist).filter(Boolean))).sort();
 
   if (!session) return <AuthView styles={styles} />;
@@ -286,7 +320,6 @@ export default function App() {
             <button onClick={() => setView('garimpo')} style={view === 'garimpo' ? styles.activeTab : styles.tab}>GARIMPO</button>
           </div>
 
-          {/* v7.2: Painel de Busca e Filtros na Sidebar */}
           {['library', 'setlists'].includes(view) && (
             <div style={{padding: '15px', borderBottom: '1px solid #1c1c1e', display: 'flex', flexDirection: 'column', gap: '10px'}}>
               <div style={{position: 'relative', display: 'flex', alignItems: 'center'}}>
@@ -354,7 +387,27 @@ export default function App() {
 
           <div style={styles.sidebarFooter}>
             {['library', 'setlists'].includes(view) && (
-              <button onClick={handleCreateNew} style={{...styles.addBtn, background: '#007aff', width: '100%', borderRadius: '12px'}}>+ NOVO</button>
+              <div style={{display: 'flex', gap: '10px', width: '100%'}}>
+                <button onClick={handleCreateNew} style={{...styles.addBtn, background: '#007aff', flex: 1, borderRadius: '12px'}}>+ NOVO</button>
+                {view === 'library' && (
+                  <>
+                    <input 
+                      type="file" 
+                      accept=".showpad" 
+                      style={{display: 'none'}} 
+                      ref={fileInputRef} 
+                      onChange={handleImportIndividual} 
+                    />
+                    <button 
+                      onClick={() => fileInputRef.current.click()} 
+                      style={{...styles.headerBtn, padding: '0 15px', backgroundColor: '#1c1c1e', borderColor: '#007aff44', color: '#007aff'}}
+                      title="Importar música .showpad"
+                    >
+                      <FilePlus size={20} />
+                    </button>
+                  </>
+                )}
+              </div>
             )}
           </div>
         </div>
