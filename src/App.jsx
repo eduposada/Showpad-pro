@@ -61,34 +61,65 @@ export default function App() {
     }
   }, []);
 
-  const checkSoloBandV3 = async (user) => {
-    if (!user) return;
-    const existing = await db.my_bands.where('invite_code').equals('SOLO_V3').first();
-    if (!existing) {
-        const soloName = `${getUserDisplayName().toUpperCase()} - SOLO`;
-        try {
+  /**
+   * v7.1.7: ESTRATÉGIA DNA ÚNICO
+   * Garante a criação ou recuperação da Banda Solo usando um ID vinculado ao usuário.
+   */
+  const checkSoloBandV4 = async (user) => {
+    if (!user || !supabase) return;
+    
+    // Geramos um convite único baseado no ID do usuário (DNA)
+    const soloUniqueCode = `SOLO-${user.id.substring(0, 5).toUpperCase()}`;
+
+    try {
+        // 1. Verificar primeiro no Supabase se já existe a banda solo deste usuário
+        const { data: cloudSolo, error: searchErr } = await supabase
+            .from('bands')
+            .select('*')
+            .eq('owner_id', user.id)
+            .eq('is_solo', true)
+            .maybeSingle();
+
+        if (searchErr) throw searchErr;
+
+        if (cloudSolo) {
+            // Se já existe na nuvem, atualizamos o banco local (Dexie)
+            const soloData = { ...cloudSolo, role: 'admin', is_solo: true };
+            await db.my_bands.put(soloData);
+            console.log("✅ Banda SOLO recuperada via DNA.");
+        } else {
+            // 2. Se não existe, criamos a banda solo "mestra" para o usuário
+            const soloName = `${getUserDisplayName().toUpperCase()} (SOLO)`;
             const { data: newBand, error: bErr } = await supabase.from('bands').insert([{ 
                 name: soloName, 
-                invite_code: 'SOLO_V3', 
-                owner_id: user.id 
+                invite_code: soloUniqueCode, 
+                owner_id: user.id,
+                is_solo: true 
             }]).select().single();
+
             if (bErr) throw bErr;
+
+            // Criar vínculo de membro Admin na tabela de membros
             const { error: mErr } = await supabase.from('band_members').insert([{ 
                 band_id: newBand.id, 
                 profile_id: user.id, 
                 role: 'admin' 
             }]);
             if (mErr) throw mErr;
+
             const soloData = { ...newBand, role: 'admin', is_solo: true };
             await db.my_bands.put(soloData);
-            refreshData();
-        } catch(e) { console.error("❌ Erro na Solo V3:", e.message); }
+            console.log("✨ Nova Banda SOLO DNA gerada com sucesso.");
+        }
+        await refreshData();
+    } catch(e) { 
+        console.error("❌ Falha no nascimento da Banda Solo:", e.message); 
     }
   };
 
   useEffect(() => { 
     if (session) { 
-        checkSoloBandV3(session.user);
+        checkSoloBandV4(session.user);
         refreshData(); 
         initMidi(); 
         checkServer(); 
@@ -103,6 +134,8 @@ export default function App() {
         const s = await db.songs.toArray();
         const sl = await db.setlists.toArray();
         const allBands = await db.my_bands.toArray(); 
+        
+        // Filtra apenas as bandas que pertencem ao usuário ou onde ele tem um papel definido
         const filteredBands = allBands.filter(b => b.owner_id === session.user.id || b.role);
 
         s.sort((a,b) => {
@@ -115,7 +148,6 @@ export default function App() {
         setSetlists(sl);
         setBands(filteredBands); 
 
-        // Sincroniza o item selecionado com os dados mais recentes do banco
         if (selectedItem) {
             const id = selectedItem.data.id;
             const upd = (selectedItem.type === 'song') ? s.find(x => x.id === id) : sl.find(x => x.id === id);
@@ -137,11 +169,9 @@ export default function App() {
     setSelectedItem({ type: isSetlist ? 'setlist' : 'song', data: savedItem });
   };
 
-  // v7.1.3: CORREÇÃO DE FOCO NO EDITOR
   const openBandShow = (item) => {
-    // Agora recebe o objeto formatado {type, data} do BandView
     setSelectedItem(item);
-    setView('setlists'); // Navega para a aba de shows onde o item estará selecionado
+    setView('setlists'); 
   };
 
   const checkServer = () => {

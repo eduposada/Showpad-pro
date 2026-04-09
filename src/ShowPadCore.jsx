@@ -60,18 +60,18 @@ export const formatChordsVisual = (text) => {
     });
 };
 
-// 🚀 v7.1.5: FUNÇÃO DE BROADCAST (ADMIN ENVIANDO)
+// 🚀 v7.1.7: FUNÇÃO DE BROADCAST (ADMIN ENVIANDO) - UNIFICADA
 export const broadcastBandChanges = async (bandId, userId) => {
     if (!supabase) return;
     
-    // 1. Pegar músicas da banda no Dexie
+    // 1. Pegar músicas vinculadas à banda no Dexie
     const relations = await db.band_songs.where('band_id').equals(bandId).toArray();
     const songIds = relations.map(r => r.song_id);
     const songs = await db.songs.where('id').anyOf(songIds).toArray();
 
-    // 2. Upload do Repertório Mestre
+    // 2. Upload para 'band_repertoire' (Biblioteca) e 'band_songs' (Vínculos)
     if (songs.length > 0) {
-        const payload = songs.map(s => ({
+        const repertoirePayload = songs.map(s => ({
             band_id: bandId,
             title: s.title,
             artist: s.artist,
@@ -79,7 +79,21 @@ export const broadcastBandChanges = async (bandId, userId) => {
             bpm: s.bpm || 120,
             last_updated_by: userId
         }));
-        await supabase.from('band_repertoire').upsert(payload, { onConflict: 'band_id,title,artist' });
+        
+        // Salva na biblioteca da banda
+        await supabase.from('band_repertoire').upsert(repertoirePayload, { onConflict: 'band_id,title,artist' });
+
+        // Salva os vínculos na tabela band_songs do Supabase
+        // Filtramos para enviar apenas se o ID da música for compatível (UUID)
+        const linksPayload = relations.map(r => ({
+            band_id: bandId,
+            song_id: r.song_id,
+            custom_tone: r.custom_tone || 0
+        })).filter(l => typeof l.song_id === 'string'); // Evita erro de IDs numéricos locais
+
+        if (linksPayload.length > 0) {
+            await supabase.from('band_songs').upsert(linksPayload, { onConflict: 'band_id,song_id' });
+        }
     }
 
     // 3. Upload dos Shows da Banda
@@ -98,37 +112,58 @@ export const broadcastBandChanges = async (bandId, userId) => {
         await supabase.from('setlists').upsert(showsPayload, { onConflict: 'title,band_id' });
     }
 
-    // 4. Disparar sinal de fumaça
+    // 4. Disparar sinal de fumaça para os membros
     await supabase.from('band_broadcasts').insert([{ band_id: bandId, sender_id: userId }]);
 };
 
-// 🚀 v7.1.5: FUNÇÃO DE CAPTURA (MEMBRO RECEBENDO)
+// 🚀 v7.1.7: FUNÇÃO DE CAPTURA (MEMBRO RECEBENDO) - REVISADA
 export const pullBandChanges = async (bandId) => {
     if (!supabase) return;
 
-    // 1. Baixar músicas do repertório da banda
+    // 1. Baixar as relações oficiais (band_songs)
+    const { data: remoteLinks } = await supabase.from('band_songs').select('*').eq('band_id', bandId);
+    
+    // 2. Baixar músicas do repertório da banda
     const { data: remoteSongs } = await supabase.from('band_repertoire').select('*').eq('band_id', bandId);
+    
     if (remoteSongs) {
         for (let rs of remoteSongs) {
             const ex = await db.songs.where({title: rs.title, artist: rs.artist}).first();
-            const songData = { title: rs.title, artist: rs.artist, content: rs.content, bpm: rs.bpm, creator_id: rs.last_updated_by };
-            let sId;
-            if (!ex) sId = await db.songs.add(songData);
-            else { sId = ex.id; await db.songs.update(ex.id, songData); }
+            const songData = { 
+                title: rs.title, 
+                artist: rs.artist, 
+                content: rs.content, 
+                bpm: rs.bpm, 
+                creator_id: rs.last_updated_by 
+            };
             
-            // Garantir relação local
-            await db.band_songs.put({ band_id: bandId, song_id: sId, custom_tone: 0 });
+            let currentSongId;
+            if (!ex) {
+                currentSongId = await db.songs.add(songData);
+            } else {
+                currentSongId = ex.id;
+                await db.songs.update(ex.id, songData);
+            }
+            
+            // Reconstruir o vínculo local baseado no que veio da nuvem
+            const link = remoteLinks?.find(l => l.song_id === rs.id); // Tenta achar o tom customizado se houver
+            await db.band_songs.put({ 
+                band_id: bandId, 
+                song_id: currentSongId, 
+                custom_tone: link ? link.custom_tone : 0 
+            });
         }
     }
 
-    // 2. Baixar shows da banda
+    // 3. Baixar shows da banda
     const { data: remoteShows } = await supabase.from('setlists').select('*').eq('band_id', bandId);
     if (remoteShows) {
         for (let rs of remoteShows) {
             const ex = await db.setlists.where({title: rs.title, band_id: bandId}).first();
-            const showData = { ...rs, id: undefined };
-            if (!ex) await db.setlists.add(showData);
-            else await db.setlists.update(ex.id, showData);
+            // Removemos o ID remoto para o Dexie gerar o local ou atualizar
+            const { id, ...showDataWithoutId } = rs; 
+            if (!ex) await db.setlists.add(showDataWithoutId);
+            else await db.setlists.update(ex.id, showDataWithoutId);
         }
     }
 };
