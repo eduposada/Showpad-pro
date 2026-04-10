@@ -36,20 +36,31 @@ O app é uma aplicação de alta performance focada em estabilidade de dados e f
 ## 4. Modelo de Dados (Supabase)
 
 ### Tabela `songs`
-- `id`: uuid (PK)
-- `title`, `artist`, `content` (text)
-- `bpm` (int), `creator_id` (uuid)
+- `id` (uuid, PK)
+- `title` (text) – nome da música
+- `artist` (text)
+- `content` (text) – cifra completa em texto
+- `bpm` (integer, opcional)
+- `creator_id` (uuid, FK → users.id)
 
 ### Tabela `setlists`
-- `id`: uuid (PK)
-- `title`, `location`, `time`, `notes` (text)
-- `songs` (jsonb) – Array de objetos das músicas selecionadas.
-- `creator_id`, `band_id` (uuid)
+- `id` (uuid, PK)
+- `title` (text)
+- `location` (text)
+- `time` (timestamptz ou text) – horário do show (confirmar tipo)
+- `notes` (text)
+- `songs` (jsonb) – array de objetos com metadados das músicas e ordem
+- `creator_id` (uuid, FK → users.id)
+- `band_id` (uuid, FK → bands.id)
 
 ### Tabela `bands`
-- `id`: uuid (PK)
-- `name`, `invite_code` (ex: SOLO_V3), `owner_id` (uuid)
-- `is_solo` (bool), `logo_url` (text), `description` (text)
+- `id` (uuid, PK)
+- `name` (text)
+- `invite_code` (text, único, ex.: SOLO_V3)
+- `owner_id` (uuid, FK → users.id)
+- `is_solo` (boolean)
+- `logo_url` (text, opcional)
+- `description` (text, opcional)
 
 ---
 
