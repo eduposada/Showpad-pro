@@ -1,6 +1,7 @@
 # LOG DE RECUPERAÇÃO - SHOWPAD PRO
-## [8.0-ESTAVEL] - 2026-04-09
-- Status: Motor de Garimpo funcional via Proxy (Corsproxy).
-- Status: Sistema de Backup Total (JSON) integrado no ShowPadCore.
-- Status: Identidade visual estabilizada (base v7.1.6).
-- Observação: Próximo passo é ajustar o padrão de texto (Case) e refinamentos visuais.
+## [8.1-ESTAVEL] - 2026-04-10
+- Garimpo (Fix): Captura de Artista blindada (HTML + URL Fallback).
+- Garimpo (Visual): Fila de importação com nomes visíveis (Música/Artista) e cores corrigidas.
+- Padronização: Fim do UpperCase forçado; preservação da grafia original do site.
+- Segurança: Backup Total (JSON) integrado no motor ShowPadCore.
+- UI: Botão de Colar (Clipboard) reintegrado no painel de captura.
