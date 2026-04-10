@@ -1,28 +1,7 @@
 export const styles = {
     // --- SISTEMA DE LOGIN (WIZARD) ---
-    wizard: { 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        width: '100vw', 
-        height: '100vh', 
-        background: 'radial-gradient(circle, #1c1c1e 0%, #000000 100%)', 
-        position: 'fixed', 
-        top: 0, 
-        left: 0, 
-        zIndex: 9999 
-    },
-    authCard: { 
-        backgroundColor: '#1c1c1e', 
-        borderRadius: '24px', 
-        width: '90%', 
-        maxWidth: '400px', 
-        padding: '40px', 
-        border: '1px solid #333', 
-        display: 'flex', 
-        flexDirection: 'column',
-        boxShadow: '0 20px 40px rgba(0,0,0,0.4)' 
-    },
+    wizard: { display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100vw', height: '100vh', background: 'radial-gradient(circle, #1c1c1e 0%, #000000 100%)', position: 'fixed', top: 0, left: 0, zIndex: 9999 },
+    authCard: { backgroundColor: '#1c1c1e', borderRadius: '24px', width: '90%', maxWidth: '400px', padding: '40px', border: '1px solid #333', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' },
     authTitle: { fontSize: '24px', fontWeight: '800', color: '#fff', textAlign: 'center', margin: '10px 0 5px 0', letterSpacing: '-0.5px', fontFamily: 'sans-serif' },
     authSubtitle: { fontSize: '13px', color: '#888', textAlign: 'center', marginBottom: '30px', fontFamily: 'sans-serif' },
     inputField: { width: '100%', height: '50px', backgroundColor: '#2c2c2e', border: '1px solid #444', borderRadius: '12px', color: '#fff', padding: '0 15px', fontSize: '16px', outline: 'none', boxSizing: 'border-box', fontFamily: 'sans-serif' },
@@ -64,53 +43,17 @@ export const styles = {
     showToolbar: { padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1c1c1e', borderBottom:'1px solid #333', height: '60px' },
     showContent: { flex: 1, overflowY: 'auto', padding: '30px', textAlign: 'left', backgroundColor: '#000', color:'#fff' },
     
-    showDrawer: { 
-        position: 'fixed', top: 0, left: 0, width: '300px', height: '100%', 
-        backgroundColor: 'rgba(28, 28, 30, 0.80)', 
-        backdropFilter: 'blur(15px)', zIndex: 3000, display: 'flex', flexDirection: 'column', 
-        borderRight: '1px solid #333', boxShadow: '10px 0 30px rgba(0,0,0,0.5)', 
-        transition: 'transform 0.2s ease-out' 
-    },
+    showDrawer: { position: 'fixed', top: 0, left: 0, width: '300px', height: '100%', backgroundColor: 'rgba(28, 28, 30, 0.80)', backdropFilter: 'blur(15px)', zIndex: 3000, display: 'flex', flexDirection: 'column', borderRight: '1px solid #333', boxShadow: '10px 0 30px rgba(0,0,0,0.5)', transition: 'transform 0.2s ease-out' },
     drawerHeader: { padding: '20px', fontSize: '14px', fontWeight: 'bold', color: '#007aff', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     drawerItem: { padding: '15px 20px', borderBottom: '1px solid #222', cursor: 'pointer', color: '#888', fontSize: '14px', transition: 'all 0.2s' },
     drawerItemActive: { padding: '15px 20px', borderBottom: '1px solid #333', cursor: 'pointer', color: '#fff', backgroundColor: '#007aff22', borderLeft: '5px solid #007aff', fontSize: '14px', fontWeight: 'bold' },
 
     // --- BOTÕES NAVEGAÇÃO 3D (FOOTER) ---
-    showFooter: { 
-        display: 'flex', 
-        width: '100%', 
-        height: '90px', 
-        backgroundColor: '#1c1c1e', 
-        borderTop: '1px solid #333',
-        padding: '12px',
-        gap: '12px',
-        boxSizing: 'border-box'
-    },
-    navBtn3D: {
-        flex: 1,
-        height: '100%',
-        backgroundColor: '#4a4a4c', 
-        border: 'none',
-        borderRadius: '15px',
-        color: '#fff',
-        fontSize: '18px',
-        fontWeight: '900',
-        textTransform: 'uppercase',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '10px',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2), 0 5px 0 #2c2c2e',
-        textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-        transition: 'all 0.1s active'
-    },
-    navBtn3DActive: {
-        transform: 'translateY(3px)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 0 #2c2c2e',
-    },
+    showFooter: { display: 'flex', width: '100%', height: '90px', backgroundColor: '#1c1c1e', borderTop: '1px solid #333', padding: '12px', gap: '12px', boxSizing: 'border-box' },
+    navBtn3D: { flex: 1, height: '100%', backgroundColor: '#4a4a4c', border: 'none', borderRadius: '15px', color: '#fff', fontSize: '18px', fontWeight: '900', textTransform: 'uppercase', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2), 0 5px 0 #2c2c2e', textShadow: '0 1px 2px rgba(0,0,0,0.5)' },
+    navBtn3DActive: { transform: 'translateY(3px)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 0 #2c2c2e' },
 
-    // --- RESTANTE DOS ESTILOS ---
+    empty: { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '10px' },
     settingsOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 5000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' },
     settingsCard: { backgroundColor: '#1c1c1e', borderRadius: '20px', width: '100%', maxWidth: '500px', border: '1px solid #333', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
     settingsHeader: { padding: '20px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#2c2c2e' },

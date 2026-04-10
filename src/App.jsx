@@ -61,17 +61,13 @@ export default function App() {
     }
   }, []);
 
-  // v8.1.1: AJUSTE PARA EVITAR DUPLICIDADE E MANTER O NOME ORIGINAL
   const checkSoloBandV3 = async (user) => {
     if (!user) return;
-    // Verifica primeiro no Dexie se já existe qualquer banda solo
     const existing = await db.my_bands.where('is_solo').equals(1).first();
     
     if (!existing) {
-        // Usa o nome natural (sem toUpperCase) conforme sua preferência atual
         const soloName = `${getUserDisplayName()} - SOLO`;
         try {
-            // Cria localmente com um ID único. O Sync cuidará de levar para a nuvem.
             const soloData = { 
                 id: crypto.randomUUID(),
                 name: soloName, 
@@ -150,21 +146,14 @@ export default function App() {
   const handleCloudPush = async () => {
     if (!session) return;
     setIsScraping(true);
-    try { 
-        await pushToCloud(session.user.id); 
-        alert("Sincronização de saída concluída!"); 
-    } catch (e) { alert("Erro: " + e.message); }
+    try { await pushToCloud(session.user.id); alert("Sincronização de saída concluída!"); } catch (e) { alert("Erro: " + e.message); }
     setIsScraping(false);
   };
 
   const handleCloudPull = async () => {
     if (!session) return;
     setIsScraping(true);
-    try { 
-        await pullFromCloud(session.user.id); 
-        await refreshData(); 
-        alert("Sincronização de entrada concluída!"); 
-    } catch (e) { alert("Erro: " + e.message); }
+    try { await pullFromCloud(session.user.id); await refreshData(); alert("Sincronização de entrada concluída!"); } catch (e) { alert("Erro: " + e.message); }
     setIsScraping(false);
   };
 
