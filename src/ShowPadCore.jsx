@@ -14,13 +14,12 @@ db.version(14).stores({
     band_songs: '++id, [band_id+song_id], band_id, song_id, custom_tone' 
 });
 
-// --- FUNÇÃO DE BACKUP TOTAL v7.3 ---
 export const runFullBackup = async () => {
     try {
         const songs = await db.songs.toArray();
         const setlists = await db.setlists.toArray();
         const my_bands = await db.my_bands.toArray();
-        const backup = { type: "FULL_BACKUP", version: "7.3", date: new Date().toISOString(), songs, setlists, my_bands };
+        const backup = { type: "FULL_BACKUP", version: "8.1", date: new Date().toISOString(), songs, setlists, my_bands };
         const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -29,7 +28,6 @@ export const runFullBackup = async () => {
     } catch (e) { alert("Erro no backup: " + e.message); }
 };
 
-// LÓGICA MUSICAL E VISUAL
 export const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 export const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
@@ -75,7 +73,6 @@ export const formatChordsVisual = (text) => {
     });
 };
 
-// FUNÇÕES DE BANDA E SYNC
 export const broadcastBandChanges = async (bandId, userId) => {
     if (!supabase) return;
     const relations = await db.band_songs.where('band_id').equals(bandId).toArray();
@@ -115,18 +112,48 @@ export const deleteBandComplete = async (bandId) => {
 
 export const pushToCloud = async (userId) => {
     if (!supabase) return;
-    const s = await db.songs.toArray();
-    if (s.length > 0) await supabase.from('songs').upsert(s.map(x => ({...x, id: undefined, creator_id: userId})), { onConflict: 'title,artist,creator_id' });
-    const sl = await db.setlists.toArray();
-    if (sl.length > 0) await supabase.from('setlists').upsert(sl.map(x => ({...x, id: undefined, creator_id: userId})), { onConflict: 'title,creator_id' });
+    try {
+        const s = await db.songs.toArray();
+        if (s.length > 0) {
+            const cleanSongs = s.map(({ id, ...rest }) => ({ ...rest, creator_id: userId }));
+            const { error } = await supabase.from('songs').upsert(cleanSongs, { onConflict: 'title,artist,creator_id' });
+            if (error) throw error;
+        }
+        const sl = await db.setlists.toArray();
+        if (sl.length > 0) {
+            const cleanSl = sl.map(({ id, ...rest }) => ({ ...rest, creator_id: userId }));
+            const { error } = await supabase.from('setlists').upsert(cleanSl, { onConflict: 'title,creator_id' });
+            if (error) throw error;
+        }
+        console.log("✅ Sync Out Ok");
+    } catch (e) { console.error("Push error:", e.message); }
 };
 
 export const pullFromCloud = async (userId) => {
     if (!supabase) return;
-    const { data: s } = await supabase.from('songs').select('*').eq('creator_id', userId);
-    if (s) for (let x of s) { const ex = await db.songs.where({title: x.title, artist: x.artist}).first(); if (!ex) await db.songs.add({...x, id: undefined}); }
-    const { data: sl } = await supabase.from('setlists').select('*').eq('creator_id', userId);
-    if (sl) for (let x of sl) { const ex = await db.setlists.where({title: x.title}).first(); if (!ex) await db.setlists.add({...x, id: undefined}); }
+    try {
+        const { data: s } = await supabase.from('songs').select('*').eq('creator_id', userId);
+        if (s) {
+            for (let item of s) {
+                const ex = await db.songs.where({title: item.title, artist: item.artist}).first();
+                if (!ex) {
+                    const { id, ...dataWithoutId } = item;
+                    await db.songs.add(dataWithoutId);
+                }
+            }
+        }
+        const { data: sl } = await supabase.from('setlists').select('*').eq('creator_id', userId);
+        if (sl) {
+            for (let item of sl) {
+                const ex = await db.setlists.where({title: item.title}).first();
+                if (!ex) {
+                    const { id, ...dataWithoutId } = item;
+                    await db.setlists.add(dataWithoutId);
+                }
+            }
+        }
+        console.log("✅ Sync In Ok");
+    } catch (e) { console.error("Pull error:", e.message); }
 };
 
 export const triggerDL = (data, filename) => {
