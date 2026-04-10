@@ -19,7 +19,7 @@ export const runFullBackup = async () => {
         const songs = await db.songs.toArray();
         const setlists = await db.setlists.toArray();
         const my_bands = await db.my_bands.toArray();
-        const backup = { type: "FULL_BACKUP", version: "8.1", date: new Date().toISOString(), songs, setlists, my_bands };
+        const backup = { type: "FULL_BACKUP", version: "8.1.1", date: new Date().toISOString(), songs, setlists, my_bands };
         const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -113,17 +113,23 @@ export const deleteBandComplete = async (bandId) => {
 export const pushToCloud = async (userId) => {
     if (!supabase) return;
     try {
+        // 1. Músicas
         const s = await db.songs.toArray();
         if (s.length > 0) {
             const cleanSongs = s.map(({ id, ...rest }) => ({ ...rest, creator_id: userId }));
-            const { error } = await supabase.from('songs').upsert(cleanSongs, { onConflict: 'title,artist,creator_id' });
-            if (error) throw error;
+            await supabase.from('songs').upsert(cleanSongs, { onConflict: 'title,artist,creator_id' });
         }
+        // 2. Setlists
         const sl = await db.setlists.toArray();
         if (sl.length > 0) {
             const cleanSl = sl.map(({ id, ...rest }) => ({ ...rest, creator_id: userId }));
-            const { error } = await supabase.from('setlists').upsert(cleanSl, { onConflict: 'title,creator_id' });
-            if (error) throw error;
+            await supabase.from('setlists').upsert(cleanSl, { onConflict: 'title,creator_id' });
+        }
+        // 3. Bandas (Nova Lógica)
+        const b = await db.my_bands.toArray();
+        if (b.length > 0) {
+            const cleanB = b.map(band => ({ ...band, creator_id: userId }));
+            await supabase.from('my_bands').upsert(cleanB, { onConflict: 'id' });
         }
         console.log("✅ Sync Out Ok");
     } catch (e) { console.error("Push error:", e.message); }
@@ -132,24 +138,38 @@ export const pushToCloud = async (userId) => {
 export const pullFromCloud = async (userId) => {
     if (!supabase) return;
     try {
+        // 1. Músicas
         const { data: s } = await supabase.from('songs').select('*').eq('creator_id', userId);
         if (s) {
             for (let item of s) {
                 const ex = await db.songs.where({title: item.title, artist: item.artist}).first();
-                if (!ex) {
-                    const { id, ...dataWithoutId } = item;
-                    await db.songs.add(dataWithoutId);
-                }
+                if (!ex) { const { id, ...dataWithoutId } = item; await db.songs.add(dataWithoutId); }
             }
         }
+        // 2. Setlists
         const { data: sl } = await supabase.from('setlists').select('*').eq('creator_id', userId);
         if (sl) {
             for (let item of sl) {
                 const ex = await db.setlists.where({title: item.title}).first();
-                if (!ex) {
-                    const { id, ...dataWithoutId } = item;
-                    await db.setlists.add(dataWithoutId);
+                if (!ex) { const { id, ...dataWithoutId } = item; await db.setlists.add(dataWithoutId); }
+            }
+        }
+        // 3. Bandas (Nova Lógica anti-duplicidade)
+        const { data: b } = await supabase.from('my_bands').select('*').eq('creator_id', userId);
+        if (b) {
+            for (let item of b) {
+                if (item.is_solo) {
+                    const hasSolo = await db.my_bands.where('is_solo').equals(1).first();
+                    if (hasSolo) {
+                        // Se já tem solo local, apenas garante que o ID bate com o da nuvem
+                        if (hasSolo.id !== item.id) {
+                            await db.my_bands.delete(hasSolo.id);
+                            await db.my_bands.put(item);
+                        }
+                        continue;
+                    }
                 }
+                await db.my_bands.put(item);
             }
         }
         console.log("✅ Sync In Ok");

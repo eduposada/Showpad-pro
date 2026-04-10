@@ -1,7 +1,7 @@
 # LOG DE RECUPERAÇÃO - SHOWPAD PRO
-## [8.1-ESTAVEL] - 2026-04-10
-- Sincronização (Supabase): Função pushToCloud corrigida. Agora remove IDs locais antes do upload, evitando conflitos de chave primária e erros 403.
-- Sincronização (Pull): Lógica de captura da nuvem blindada contra erros de declaração de variáveis (resolvida tela branca).
-- Garimpo: Motor de captura 100% funcional com preservação da grafia original (Case Sensitive) e fallback automático para a URL.
-- Backup: Sistema de exportação JSON independente da nuvem funcionando como redundância.
-- Status Geral: Sistema pronto para uso em produção e desenvolvimento local simultâneo.
+## [8.2-FINAL-STABLE] - 2026-04-10
+- Sincronização de Bandas: Integrada ao motor de Sync (Push/Pull).
+- Vacina Anti-Duplicidade: Lógica de verificação de banda SOLO por ID e flag is_solo, impedindo duplicatas entre Local e Nuvem.
+- Preservação de Mídia: Garantia de manutenção de metadados (como fotos de banda) durante a sincronização.
+- Garimpo v8: Captura fiel (Case Sensitive) com fallback de URL e interface de fila legível.
+- Refatoração App.jsx: Limpeza da lógica de criação de bandas para evitar requisições desnecessárias ao Supabase.

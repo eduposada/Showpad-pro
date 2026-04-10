@@ -61,25 +61,25 @@ export default function App() {
     }
   }, []);
 
+  // v8.1.1: AJUSTE PARA EVITAR DUPLICIDADE E MANTER O NOME ORIGINAL
   const checkSoloBandV3 = async (user) => {
     if (!user) return;
-    const existing = await db.my_bands.where('invite_code').equals('SOLO_V3').first();
+    // Verifica primeiro no Dexie se já existe qualquer banda solo
+    const existing = await db.my_bands.where('is_solo').equals(1).first();
+    
     if (!existing) {
-        const soloName = `${getUserDisplayName().toUpperCase()} - SOLO`;
+        // Usa o nome natural (sem toUpperCase) conforme sua preferência atual
+        const soloName = `${getUserDisplayName()} - SOLO`;
         try {
-            const { data: newBand, error: bErr } = await supabase.from('bands').insert([{ 
+            // Cria localmente com um ID único. O Sync cuidará de levar para a nuvem.
+            const soloData = { 
+                id: crypto.randomUUID(),
                 name: soloName, 
                 invite_code: 'SOLO_V3', 
-                owner_id: user.id 
-            }]).select().single();
-            if (bErr) throw bErr;
-            const { error: mErr } = await supabase.from('band_members').insert([{ 
-                band_id: newBand.id, 
-                profile_id: user.id, 
-                role: 'admin' 
-            }]);
-            if (mErr) throw mErr;
-            const soloData = { ...newBand, role: 'admin', is_solo: true };
+                owner_id: user.id,
+                role: 'admin', 
+                is_solo: true 
+            };
             await db.my_bands.put(soloData);
             refreshData();
         } catch(e) { console.error("❌ Erro na Solo V3:", e.message); }
@@ -115,7 +115,6 @@ export default function App() {
         setSetlists(sl);
         setBands(filteredBands); 
 
-        // Sincroniza o item selecionado com os dados mais recentes do banco
         if (selectedItem) {
             const id = selectedItem.data.id;
             const upd = (selectedItem.type === 'song') ? s.find(x => x.id === id) : sl.find(x => x.id === id);
@@ -137,11 +136,9 @@ export default function App() {
     setSelectedItem({ type: isSetlist ? 'setlist' : 'song', data: savedItem });
   };
 
-  // v7.1.3: CORREÇÃO DE FOCO NO EDITOR
   const openBandShow = (item) => {
-    // Agora recebe o objeto formatado {type, data} do BandView
     setSelectedItem(item);
-    setView('setlists'); // Navega para a aba de shows onde o item estará selecionado
+    setView('setlists'); 
   };
 
   const checkServer = () => {
@@ -153,14 +150,21 @@ export default function App() {
   const handleCloudPush = async () => {
     if (!session) return;
     setIsScraping(true);
-    try { await pushToCloud(session.user.id); alert("Backup enviado com sucesso!"); } catch (e) { alert("Erro: " + e.message); }
+    try { 
+        await pushToCloud(session.user.id); 
+        alert("Sincronização de saída concluída!"); 
+    } catch (e) { alert("Erro: " + e.message); }
     setIsScraping(false);
   };
 
   const handleCloudPull = async () => {
     if (!session) return;
     setIsScraping(true);
-    try { await pullFromCloud(session.user.id); await refreshData(); alert("Sincronização concluída!"); } catch (e) { alert("Erro: " + e.message); }
+    try { 
+        await pullFromCloud(session.user.id); 
+        await refreshData(); 
+        alert("Sincronização de entrada concluída!"); 
+    } catch (e) { alert("Erro: " + e.message); }
     setIsScraping(false);
   };
 
