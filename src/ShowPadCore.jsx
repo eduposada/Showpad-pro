@@ -14,7 +14,22 @@ db.version(14).stores({
     band_songs: '++id, [band_id+song_id], band_id, song_id, custom_tone' 
 });
 
-// LÓGICA MUSICAL
+// --- FUNÇÃO DE BACKUP TOTAL v7.3 ---
+export const runFullBackup = async () => {
+    try {
+        const songs = await db.songs.toArray();
+        const setlists = await db.setlists.toArray();
+        const my_bands = await db.my_bands.toArray();
+        const backup = { type: "FULL_BACKUP", version: "7.3", date: new Date().toISOString(), songs, setlists, my_bands };
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `SHOWPAD_BACKUP_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch (e) { alert("Erro no backup: " + e.message); }
+};
+
+// LÓGICA MUSICAL E VISUAL
 export const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 export const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
@@ -60,53 +75,21 @@ export const formatChordsVisual = (text) => {
     });
 };
 
-// 🚀 v7.1.5: FUNÇÃO DE BROADCAST (ADMIN ENVIANDO)
+// FUNÇÕES DE BANDA E SYNC
 export const broadcastBandChanges = async (bandId, userId) => {
     if (!supabase) return;
-    
-    // 1. Pegar músicas da banda no Dexie
     const relations = await db.band_songs.where('band_id').equals(bandId).toArray();
     const songIds = relations.map(r => r.song_id);
     const songs = await db.songs.where('id').anyOf(songIds).toArray();
-
-    // 2. Upload do Repertório Mestre
     if (songs.length > 0) {
-        const payload = songs.map(s => ({
-            band_id: bandId,
-            title: s.title,
-            artist: s.artist,
-            content: s.content,
-            bpm: s.bpm || 120,
-            last_updated_by: userId
-        }));
+        const payload = songs.map(s => ({ band_id: bandId, title: s.title, artist: s.artist, content: s.content, bpm: s.bpm || 120, last_updated_by: userId }));
         await supabase.from('band_repertoire').upsert(payload, { onConflict: 'band_id,title,artist' });
     }
-
-    // 3. Upload dos Shows da Banda
-    const shows = await db.setlists.where('band_id').equals(bandId).toArray();
-    if (shows.length > 0) {
-        const showsPayload = shows.map(sh => ({
-            title: sh.title,
-            location: sh.location,
-            time: sh.time,
-            members: sh.members,
-            notes: sh.notes,
-            creator_id: userId,
-            songs: sh.songs,
-            band_id: bandId
-        }));
-        await supabase.from('setlists').upsert(showsPayload, { onConflict: 'title,band_id' });
-    }
-
-    // 4. Disparar sinal de fumaça
     await supabase.from('band_broadcasts').insert([{ band_id: bandId, sender_id: userId }]);
 };
 
-// 🚀 v7.1.5: FUNÇÃO DE CAPTURA (MEMBRO RECEBENDO)
 export const pullBandChanges = async (bandId) => {
     if (!supabase) return;
-
-    // 1. Baixar músicas do repertório da banda
     const { data: remoteSongs } = await supabase.from('band_repertoire').select('*').eq('band_id', bandId);
     if (remoteSongs) {
         for (let rs of remoteSongs) {
@@ -115,30 +98,9 @@ export const pullBandChanges = async (bandId) => {
             let sId;
             if (!ex) sId = await db.songs.add(songData);
             else { sId = ex.id; await db.songs.update(ex.id, songData); }
-            
-            // Garantir relação local
             await db.band_songs.put({ band_id: bandId, song_id: sId, custom_tone: 0 });
         }
     }
-
-    // 2. Baixar shows da banda
-    const { data: remoteShows } = await supabase.from('setlists').select('*').eq('band_id', bandId);
-    if (remoteShows) {
-        for (let rs of remoteShows) {
-            const ex = await db.setlists.where({title: rs.title, band_id: bandId}).first();
-            const showData = { ...rs, id: undefined };
-            if (!ex) await db.setlists.add(showData);
-            else await db.setlists.update(ex.id, showData);
-        }
-    }
-};
-
-export const triggerDL = (data, filename) => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename || 'Backup.json';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 };
 
 export const deleteBandComplete = async (bandId) => {
@@ -165,4 +127,12 @@ export const pullFromCloud = async (userId) => {
     if (s) for (let x of s) { const ex = await db.songs.where({title: x.title, artist: x.artist}).first(); if (!ex) await db.songs.add({...x, id: undefined}); }
     const { data: sl } = await supabase.from('setlists').select('*').eq('creator_id', userId);
     if (sl) for (let x of sl) { const ex = await db.setlists.where({title: x.title}).first(); if (!ex) await db.setlists.add({...x, id: undefined}); }
+};
+
+export const triggerDL = (data, filename) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename || 'Backup.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 };
