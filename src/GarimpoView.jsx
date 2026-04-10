@@ -19,39 +19,56 @@ export const GarimpoView = ({ styles, refresh, session }) => {
 
         for (const url of garimpoQueue) {
             try {
-                const nomeMusica = url.split('/').filter(x => x).pop() || "música";
-                setStatus(`Extraindo: ${nomeMusica}...`);
+                const nomeMusicaStr = url.split('/').filter(x => x).pop() || "música";
+                setStatus(`Extraindo: ${nomeMusicaStr}...`);
                 
-                // Chamada para a Serverless Function na Vercel (Independente do Mac)
-                const response = await fetch('/api/scrape', { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ url: url }) 
-                });
+                const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+                if (!response.ok) throw new Error("Falha na conexão");
 
-                if (!response.ok) throw new Error("Falha na extração");
+                const html = await response.text();
 
-                const song = await response.json();
-                
-                if (song.title) {
-                    // Adicionando BPM padrão para evitar erros no Modo Show
-                    await db.songs.add({ 
-                        ...song, 
-                        notes: "", 
-                        bpm: 120,
-                        creator_id: session.user.id 
-                    });
+                // --- ESTRATÉGIA DE TÍTULO DA PÁGINA (Mais estável) ---
+                // O padrão costuma ser: "MÚSICA - ARTISTA - Cifra Club"
+                const titleTagMatch = html.match(/<title>([^<]+)<\/title>/i);
+                let title = "Nova Música";
+                let artist = "Artista";
+
+                if (titleTagMatch && titleTagMatch[1]) {
+                    let fullTitle = titleTagMatch[1].replace(/ - Cifra Club/gi, "").trim();
+                    if (fullTitle.includes('-')) {
+                        const parts = fullTitle.split(' - ');
+                        // Cifra Club costuma colocar MÚSICA - ARTISTA ou ARTISTA - MÚSICA dependendo da seção
+                        // Vamos tentar capturar os dois e limpar
+                        title = parts[0].trim();
+                        artist = parts[1] ? parts[1].trim() : "Artista";
+                    }
                 }
+
+                // Captura da Cifra (o bloco de texto principal)
+                const contentMatch = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
+
+                if (!contentMatch) throw new Error("Layout incompatível");
+
+                const song = {
+                    title: title,
+                    artist: artist,
+                    content: contentMatch[1].replace(/<[^>]*>/g, '').trim(),
+                    notes: "", 
+                    bpm: 120,
+                    creator_id: session.user.id 
+                };
+
+                await db.songs.add(song);
+
             } catch (err) { 
                 console.error("Erro no Garimpo:", err);
                 alert("Não foi possível extrair: " + url);
             }
         }
 
-        setIsScraping(true); // Manter o loader por um breve momento
         setStatus("✅ Concluído!"); 
         setGarimpoQueue([]); 
-        refresh(); // Sincroniza a lista lateral
+        refresh(); 
         
         setTimeout(() => {
             setIsScraping(false);
@@ -62,7 +79,7 @@ export const GarimpoView = ({ styles, refresh, session }) => {
     return (
         <div style={styles.garimpoPanel}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
-                <h2 style={{margin:0, color:'#007aff'}}>GARIMPO DE CIFRAS</h2>
+                <h2 style={{margin:0, color:'#007aff'}}>GARIMPO DE CIFRAS (v7.1.6-Stable)</h2>
                 <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
                     {isScraping && <Loader2 size={14} className="spin" color="#007aff" />}
                     <span style={{fontSize:'11px', color:'#888', fontWeight:'bold'}}>{status}</span>
@@ -70,7 +87,7 @@ export const GarimpoView = ({ styles, refresh, session }) => {
             </div>
 
             <p style={{fontSize:'12px', color:'#aaa', marginBottom:'15px'}}>
-                Cole abaixo links do Cifra Club. Você pode adicionar vários à fila antes de processar.
+                Extração baseada em metadados (mais estável). Cole os links e processe.
             </p>
 
             <div style={{display:'flex', gap:'10px', height:'45px', marginBottom:'20px'}}>
@@ -93,7 +110,7 @@ export const GarimpoView = ({ styles, refresh, session }) => {
                         try {
                             const text = await navigator.clipboard.readText();
                             setGarimpoInput(text);
-                        } catch (e) { alert("Permita o acesso à área de transferência."); }
+                        } catch (e) { alert("Permita o acesso."); }
                     }}
                 >
                     <ClipboardPaste size={18}/>
