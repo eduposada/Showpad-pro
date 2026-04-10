@@ -12,7 +12,9 @@ O app é uma aplicação de alta performance focada em estabilidade de dados e f
 
 ## 2. Principais Funcionalidades
 
-1. **Autenticação:** Login via Supabase Auth (Email/Senha).
+1. **Autenticação (Supabase Auth):**
+   - Login via Email/Senha.
+   - Login via Google OAuth (conta Google).
 2. **Gestão de Repertório:** Edição de cifras com transposição tonal dinâmica e detecção automática de acordes.
 3. **Shows (Setlists):** Criação de listas de músicas para apresentações com campos de notas, local e hora.
 4. **Gestão de Bandas:** Sistema de bandas para compartilhamento de repertório. Inclui suporte a uma "Banda Solo" automática por usuário.
@@ -72,6 +74,8 @@ O app é uma aplicação de alta performance focada em estabilidade de dados e f
 - `logo_url` (text, opcional)
 - `description` (text, opcional)
 
+*(Demais tabelas do Supabase podem ser adicionadas aqui conforme forem estabilizadas.)*
+
 ---
 
 ## 5. Estrutura de Pastas
@@ -85,9 +89,9 @@ O app é uma aplicação de alta performance focada em estabilidade de dados e f
   │   ├── ShowPadCore.js   # Lógica de banco (Dexie), sincronização e lógica musical
   │   ├── Styles.js        # Objeto central de estilos (única fonte de estilos)
   │   ├── features/        # Componentes de página por funcionalidade
-  │   │   ├── auth/        # Login, cadastro, recuperação de senha
+  │   │   ├── auth/        # Login (Email/Senha + Google), cadastro, logout
   │   │   ├── garimpo/     # Captura de músicas via URL
-  │   │   ├── bandas/      # Gestão de bandas e membros
+  │   │   ├── bandas/      # Gestão de bandas, membros e banda solo
   │   │   └── shows/       # Criação e gerenciamento de setlists
   │   └── components/      # Componentes reutilizáveis de UI (Editor, ShowMode, etc.)
 ```
@@ -96,17 +100,39 @@ O app é uma aplicação de alta performance focada em estabilidade de dados e f
 
 ## 6. Decisões Técnicas e Regras de Negócio
 
-- **Autorização:** Acesso a dados é filtrado via RLS (Row Level Security) no Supabase, com base em `creator_id` e `band_id`. Toda leitura e escrita deve respeitar esses vínculos.
+### 6.1 Autenticação e Criação de Banda Solo
+
+- **Métodos ativos:**
+  - Email/Senha via Supabase Auth.
+  - Google OAuth via Supabase Auth (conta Google).
+- **Primeiro login (Email ou Google):**
+  - Ao primeiro login de um usuário (independente do provedor), o sistema cria automaticamente uma **Banda Solo** associada ao seu `user.id` com `is_solo: true`.
+- **Logins subsequentes:**
+  - Antes de criar uma banda solo, o sistema verifica se já existe uma banda solo para aquele usuário.
+  - Se já existir, **não criar** outra (garantir uma única banda solo por usuário).
+  - Essa regra vale tanto para login via Email/Senha quanto via Google.
+- **Associação de dados:**
+  - Todos os dados de repertório e setlists são associados ao usuário autenticado (`creator_id`) e, quando relevante, à banda correspondente (`band_id`).
+
+### 6.2 Autorização
+
+- Acesso a dados é filtrado via RLS (Row Level Security) no Supabase, com base em `creator_id` e `band_id`.
+- Regras básicas:
+  - Usuário só pode acessar músicas, setlists e bandas onde ele é `creator_id`, membro ou `owner_id` (conforme regras específicas de cada tabela).
+- Toda leitura e escrita no Supabase deve respeitar esses vínculos.
+
+### 6.3 Regras Gerais de Negócio
+
 - **Case Sensitivity:** O motor de Garimpo preserva rigorosamente a grafia original do usuário (ex.: "Pink Floyd" não pode virar "PINK FLOYD" nem "pink floyd").
 - **Transposição:** Utiliza `chordRegex` e `scale` (array de 12 semitons) para shift de notas. Não misturar lógica de transposição com renderização de UI.
-- **Banda Solo:** O sistema garante exatamente uma banda solo por usuário (`is_solo: true`). Esta banda é criada automaticamente e nunca pode ser removida ou duplicada.
+- **Banda Solo:** O sistema garante exatamente uma banda solo por usuário (`is_solo: true`). Esta banda é criada automaticamente no primeiro login e nunca pode ser removida ou duplicada.
 
-### 6.1 Regras de Sincronização Dexie ↔ Supabase
+### 6.4 Regras de Sincronização Dexie ↔ Supabase
 
 - Dexie usa IDs numéricos locais apenas como chave interna de IndexedDB. Antes de enviar qualquer registro ao Supabase, o ID local é **removido** para permitir que o Supabase gere o UUID, evitando conflitos de chave primária.
 - A sincronização é bidirecional (Push/Pull), mas deve garantir:
   - Nenhum registro duplicado (especialmente bandas solo).
-  - Dados mais recentes nunca sobrescritos por dados mais antigos.
+  - Dados mais recentes nunca serem sobrescritos por dados mais antigos.
 - Regras de conflito:
   - Preferir o registro com `updated_at` mais recente quando disponível.
   - Em caso de conflito na banda solo: **sempre preservar a banda solo local existente** e ignorar a versão da nuvem.
