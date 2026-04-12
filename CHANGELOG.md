@@ -7,6 +7,7 @@ Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 ### Corrigido
 
 - Sync para a nuvem (`pushToCloud`): **deduplicação** antes do `upsert` de músicas, shows e bandas, evitando o erro do Postgres *«ON CONFLICT DO UPDATE command cannot affect row a second time»* quando o Dexie tem mais de uma linha com a mesma chave de conflito (ex.: mesmo título e artista).
+- Deploy na Vercel: removido `runtime: "nodejs20.x"` de `vercel.json` — a plataforma passou a exigir o formato de *runtime* como pacote npm (`…@versão`); para funções Node em `/api` o runtime padrão basta. Mantido `maxDuration`; `package.json` ganha `engines.node: "20.x"` para alinhar a versão Node do build e das funções.
 
 ## [8.4.4] - 2026-04-11
 

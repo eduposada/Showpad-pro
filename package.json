@@ -2,6 +2,9 @@
   "name": "showpad-web",
   "private": true,
   "version": "8.4.5",
+  "engines": {
+    "node": "20.x"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
