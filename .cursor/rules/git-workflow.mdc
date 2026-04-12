@@ -1,0 +1,16 @@
+---
+description: Git workflow — main, tags e evitar detached HEAD
+alwaysApply: true
+---
+
+# Git (ShowPad Pro)
+
+- **Branch de trabalho:** orientar o usuário a trabalhar na branch **`main`** como padrão.
+- **Tags:** nunca sugerir `git checkout <tag>` como forma de **trabalhar** no código (isso leva a *detached HEAD* e risco de perda de commits).
+- **Criar tags:** usar anotação e envio explícito:
+  - `git tag -a <nome> -m "descrição"`
+  - `git push origin --tags`
+- **Recuperar uma versão antiga para desenvolver:** sugerir `git checkout -b <nova-branch> <tag>` em vez de *checkout* direto na tag.
+- **Antes de operações Git mais complexas** (merge, rebase, reset, force push, etc.): lembrar de verificar o estado com `git status` e `git branch` (e, se útil, `git log --oneline -5`).
+
+Referência humana: `GIT_WORKFLOW.md` na raiz do repositório.

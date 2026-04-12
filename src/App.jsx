@@ -3,7 +3,7 @@ import { WebMidi } from 'webmidi';
 import { 
   Plus, Music, Trash2, Save, Monitor, Settings, Zap, 
   LogOut, SortAsc, UserRound, Cloud, RefreshCw, User,
-  CloudUpload, CloudDownload, Info
+  CloudUpload, CloudDownload, Info, Download
 } from 'lucide-react';
 
 import { db, transposeContent, supabase, triggerDL, pushToCloud, pullFromCloud } from './ShowPadCore';
@@ -41,6 +41,7 @@ export default function App() {
 
   const midiLearningRef = useRef(null);
   const showScrollRef = useRef(null);
+  const importSongFileRef = useRef(null);
 
   const getUserDisplayName = () => {
     if (!session?.user) return "Usuário";
@@ -207,6 +208,39 @@ export default function App() {
     reader.readAsText(e.target.files[0]);
   };
 
+  const handleExportShowpadSong = (song) => {
+    const blob = new Blob([JSON.stringify({ ...song }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const base = `${song.title || 'musica'}${song.artist ? ` - ${song.artist}` : ''}`.replace(/[/\\?%*:|"<>]/g, '-').slice(0, 120);
+    a.download = `${base}.showpad`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const handleImportShowpadSongFile = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f || !session) return;
+    try {
+      const data = JSON.parse(await f.text());
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        alert('Arquivo .showpad inválido.');
+        return;
+      }
+      if (data.title === undefined && data.content === undefined) {
+        alert('Arquivo .showpad inválido.');
+        return;
+      }
+      const { id: _omit, ...rest } = data;
+      await db.songs.add({ ...rest, creator_id: session.user.id });
+      await refreshData();
+      alert('Música importada.');
+    } catch {
+      alert('Erro ao importar o arquivo.');
+    }
+  };
+
   const getMidiStyle = () => {
     const isReady = midiStatus === 'ready';
     return {
@@ -317,8 +351,11 @@ export default function App() {
                       {band && <span style={styles.bandTagOrange}>{band.name}</span>}
                       <small style={styles.artistYellow}>{item.artist || item.location || "---"}</small>
                   </div>
-                  <div style={{display:'flex', gap:'6px'}}>
+                  <div style={{display:'flex', gap:'6px', alignItems:'center'}}>
                       <div style={{cursor:'pointer'}} onClick={(e) => { e.stopPropagation(); setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={20} color="#007aff"/></div>
+                      {view === 'library' && (
+                        <div style={{cursor:'pointer'}} title="Exportar .showpad" onClick={(e) => { e.stopPropagation(); handleExportShowpadSong(item); }}><Download size={20} color="#34c759"/></div>
+                      )}
                       <div style={{cursor:'pointer'}} onClick={async (e) => { e.stopPropagation(); if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={20} color="#444"/></div>
                   </div>
                 </div>
@@ -327,8 +364,17 @@ export default function App() {
           </div>
 
           <div style={styles.sidebarFooter}>
-            {['library', 'setlists'].includes(view) && (
-              <button onClick={handleCreateNew} style={styles.addBtn}>+ NOVO</button>
+            {view === 'library' && (
+              <>
+                <input ref={importSongFileRef} type="file" accept=".showpad,application/json" style={{ display: 'none' }} onChange={handleImportShowpadSongFile} />
+                <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                  <button type="button" onClick={() => importSongFileRef.current?.click()} style={{ ...styles.importBtnLabel, flex: 1, border: 'none', cursor: 'pointer' }}>IMPORTAR</button>
+                  <button type="button" onClick={handleCreateNew} style={{ ...styles.addBtn, flex: 1 }}>+ NOVO</button>
+                </div>
+              </>
+            )}
+            {view === 'setlists' && (
+              <button type="button" onClick={handleCreateNew} style={styles.addBtn}>+ NOVO</button>
             )}
           </div>
         </div>
