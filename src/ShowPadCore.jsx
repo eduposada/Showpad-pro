@@ -282,9 +282,9 @@ export const pullFromCloud = async (userId) => {
         });
         for (const item of cloudList) {
             if (item.is_solo) {
-                const hasSolo = await db.my_bands.where('is_solo').equals(1).first();
-                if (hasSolo && hasSolo.id !== item.id) {
-                    await db.my_bands.delete(hasSolo.id);
+                const localSolos = await db.my_bands.filter((b) => b.is_solo === true).toArray();
+                for (const s of localSolos) {
+                    if (s.id !== item.id) await db.my_bands.delete(s.id);
                 }
             }
             await db.my_bands.put(item);

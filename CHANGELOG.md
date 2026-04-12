@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.4.8] - 2026-04-11
+
+### Corrigido
+
+- **Bandas solo duplicadas (Dexie):** a checagem usava `where('is_solo').equals(1)`, mas o registro grava `is_solo: true` — no Dexie isso não casa, então a app achava que não havia solo e criava outra a cada execução. O `useEffect` ainda dependia de **`sortBy`**, então cada troca de ordenação na biblioteca disparava de novo → dezenas de SOLO no localhost (IndexedDB da origem `localhost` é separado da produção). Corrigido com filtro por boolean, efeito só em **`session`**, limpeza de duplicatas ao detectar várias solo do mesmo `owner_id`, e ajuste no download (`pullFromCloud`).
+
 ## [8.4.7] - 2026-04-11
 
 ### Release estável

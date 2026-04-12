@@ -17,7 +17,7 @@ export function InfoModal({ onClose }) {
     <div style={overlay} role="dialog" aria-modal="true" aria-labelledby="info-modal-title" onClick={onClose}>
       <div style={panel} onClick={(e) => e.stopPropagation()}>
         <h2 id="info-modal-title" style={h2}>ShowPad Pro</h2>
-        <p style={{ ...muted, marginBottom: '16px' }}>Versão atual: <strong style={{ color: '#fff' }}>v8.4.7</strong></p>
+        <p style={{ ...muted, marginBottom: '16px' }}>Versão atual: <strong style={{ color: '#fff' }}>v8.4.8</strong></p>
         <p style={muted}><strong style={{ color: '#fff' }}>Desenvolvedor:</strong> Eduardo Posada</p>
         <p style={muted}>
           <strong style={{ color: '#fff' }}>Descrição:</strong> Aplicação web para músicos gerenciarem repertórios, cifras e setlists em tempo real.

@@ -67,32 +67,49 @@ export default function App() {
 
   const checkSoloBandV3 = async (user) => {
     if (!user) return;
-    const existing = await db.my_bands.where('is_solo').equals(1).first();
-    
-    if (!existing) {
-        const soloName = `${getUserDisplayName()} - SOLO`;
-        try {
-            const soloId = crypto.randomUUID();
-            const soloData = { 
-                id: soloId,
-                name: soloName, 
-                invite_code: soloInviteCodeForBandId(soloId),
-                owner_id: user.id,
-                role: 'admin', 
-                is_solo: true 
-            };
-            await db.my_bands.put(soloData);
-            refreshData();
-        } catch(e) { console.error("❌ Erro na Solo V3:", e.message); }
+    // is_solo é boolean no Dexie; .equals(1) nunca casava → criava uma SOLO nova a cada execução.
+    let solosForUser = await db.my_bands
+        .filter((b) => b.is_solo === true && b.owner_id === user.id)
+        .toArray();
+    if (solosForUser.length > 1) {
+        solosForUser.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+        for (let i = 1; i < solosForUser.length; i++) {
+            await db.my_bands.delete(solosForUser[i].id);
+        }
+        solosForUser = [solosForUser[0]];
+    }
+    if (solosForUser.length > 0) return;
+
+    const soloName = `${getUserDisplayName()} - SOLO`;
+    try {
+        const soloId = crypto.randomUUID();
+        const soloData = {
+            id: soloId,
+            name: soloName,
+            invite_code: soloInviteCodeForBandId(soloId),
+            owner_id: user.id,
+            role: 'admin',
+            is_solo: true,
+        };
+        await db.my_bands.put(soloData);
+        refreshData();
+    } catch (e) {
+        console.error('❌ Erro na Solo V3:', e.message);
     }
   };
 
-  useEffect(() => { 
-    if (session) { 
-        checkSoloBandV3(session.user);
-        refreshData(); 
-        initMidi(); 
-        checkServer(); 
+  // Garantir banda solo só quando a sessão muda — não ao trocar ordenação (sortBy).
+  useEffect(() => {
+    if (session) {
+      checkSoloBandV3(session.user);
+      initMidi();
+      checkServer();
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (session) {
+      refreshData();
     }
   }, [session, sortBy]);
 
