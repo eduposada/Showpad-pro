@@ -14,7 +14,20 @@ db.version(14).stores({
     band_songs: '++id, [band_id+song_id], band_id, song_id, custom_tone' 
 });
 
-// LÓGICA MUSICAL
+export const runFullBackup = async () => {
+    try {
+        const songs = await db.songs.toArray();
+        const setlists = await db.setlists.toArray();
+        const my_bands = await db.my_bands.toArray();
+        const backup = { type: "FULL_BACKUP", version: "8.1.1", date: new Date().toISOString(), songs, setlists, my_bands };
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `SHOWPAD_BACKUP_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch (e) { alert("Erro no backup: " + e.message); }
+};
+
 export const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 export const chordRegex = /([A-G][#b]?(?:m|maj|dim|sus|aug|add|alt|[0-9])*(?:\/[A-G][#b]?)?)/g;
 
@@ -60,120 +73,31 @@ export const formatChordsVisual = (text) => {
     });
 };
 
-// 🚀 v7.1.7: FUNÇÃO DE BROADCAST (ADMIN ENVIANDO) - UNIFICADA
 export const broadcastBandChanges = async (bandId, userId) => {
     if (!supabase) return;
-    
-    // 1. Pegar músicas vinculadas à banda no Dexie
     const relations = await db.band_songs.where('band_id').equals(bandId).toArray();
     const songIds = relations.map(r => r.song_id);
     const songs = await db.songs.where('id').anyOf(songIds).toArray();
-
-    // 2. Upload para 'band_repertoire' (Biblioteca) e 'band_songs' (Vínculos)
     if (songs.length > 0) {
-        const repertoirePayload = songs.map(s => ({
-            band_id: bandId,
-            title: s.title,
-            artist: s.artist,
-            content: s.content,
-            bpm: s.bpm || 120,
-            last_updated_by: userId
-        }));
-        
-        // Salva na biblioteca da banda
-        await supabase.from('band_repertoire').upsert(repertoirePayload, { onConflict: 'band_id,title,artist' });
-
-        // Salva os vínculos na tabela band_songs do Supabase
-        // Filtramos para enviar apenas se o ID da música for compatível (UUID)
-        const linksPayload = relations.map(r => ({
-            band_id: bandId,
-            song_id: r.song_id,
-            custom_tone: r.custom_tone || 0
-        })).filter(l => typeof l.song_id === 'string'); // Evita erro de IDs numéricos locais
-
-        if (linksPayload.length > 0) {
-            await supabase.from('band_songs').upsert(linksPayload, { onConflict: 'band_id,song_id' });
-        }
+        const payload = songs.map(s => ({ band_id: bandId, title: s.title, artist: s.artist, content: s.content, bpm: s.bpm || 120, last_updated_by: userId }));
+        await supabase.from('band_repertoire').upsert(payload, { onConflict: 'band_id,title,artist' });
     }
-
-    // 3. Upload dos Shows da Banda
-    const shows = await db.setlists.where('band_id').equals(bandId).toArray();
-    if (shows.length > 0) {
-        const showsPayload = shows.map(sh => ({
-            title: sh.title,
-            location: sh.location,
-            time: sh.time,
-            members: sh.members,
-            notes: sh.notes,
-            creator_id: userId,
-            songs: sh.songs,
-            band_id: bandId
-        }));
-        await supabase.from('setlists').upsert(showsPayload, { onConflict: 'title,band_id' });
-    }
-
-    // 4. Disparar sinal de fumaça para os membros
     await supabase.from('band_broadcasts').insert([{ band_id: bandId, sender_id: userId }]);
 };
 
-// 🚀 v7.1.7: FUNÇÃO DE CAPTURA (MEMBRO RECEBENDO) - REVISADA
 export const pullBandChanges = async (bandId) => {
     if (!supabase) return;
-
-    // 1. Baixar as relações oficiais (band_songs)
-    const { data: remoteLinks } = await supabase.from('band_songs').select('*').eq('band_id', bandId);
-    
-    // 2. Baixar músicas do repertório da banda
     const { data: remoteSongs } = await supabase.from('band_repertoire').select('*').eq('band_id', bandId);
-    
     if (remoteSongs) {
         for (let rs of remoteSongs) {
             const ex = await db.songs.where({title: rs.title, artist: rs.artist}).first();
-            const songData = { 
-                title: rs.title, 
-                artist: rs.artist, 
-                content: rs.content, 
-                bpm: rs.bpm, 
-                creator_id: rs.last_updated_by 
-            };
-            
-            let currentSongId;
-            if (!ex) {
-                currentSongId = await db.songs.add(songData);
-            } else {
-                currentSongId = ex.id;
-                await db.songs.update(ex.id, songData);
-            }
-            
-            // Reconstruir o vínculo local baseado no que veio da nuvem
-            const link = remoteLinks?.find(l => l.song_id === rs.id); // Tenta achar o tom customizado se houver
-            await db.band_songs.put({ 
-                band_id: bandId, 
-                song_id: currentSongId, 
-                custom_tone: link ? link.custom_tone : 0 
-            });
+            const songData = { title: rs.title, artist: rs.artist, content: rs.content, bpm: rs.bpm, creator_id: rs.last_updated_by };
+            let sId;
+            if (!ex) sId = await db.songs.add(songData);
+            else { sId = ex.id; await db.songs.update(ex.id, songData); }
+            await db.band_songs.put({ band_id: bandId, song_id: sId, custom_tone: 0 });
         }
     }
-
-    // 3. Baixar shows da banda
-    const { data: remoteShows } = await supabase.from('setlists').select('*').eq('band_id', bandId);
-    if (remoteShows) {
-        for (let rs of remoteShows) {
-            const ex = await db.setlists.where({title: rs.title, band_id: bandId}).first();
-            // Removemos o ID remoto para o Dexie gerar o local ou atualizar
-            const { id, ...showDataWithoutId } = rs; 
-            if (!ex) await db.setlists.add(showDataWithoutId);
-            else await db.setlists.update(ex.id, showDataWithoutId);
-        }
-    }
-};
-
-export const triggerDL = (data, filename) => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename || 'Backup.json';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 };
 
 export const deleteBandComplete = async (bandId) => {
@@ -188,16 +112,74 @@ export const deleteBandComplete = async (bandId) => {
 
 export const pushToCloud = async (userId) => {
     if (!supabase) return;
-    const s = await db.songs.toArray();
-    if (s.length > 0) await supabase.from('songs').upsert(s.map(x => ({...x, id: undefined, creator_id: userId})), { onConflict: 'title,artist,creator_id' });
-    const sl = await db.setlists.toArray();
-    if (sl.length > 0) await supabase.from('setlists').upsert(sl.map(x => ({...x, id: undefined, creator_id: userId})), { onConflict: 'title,creator_id' });
+    try {
+        // 1. Músicas
+        const s = await db.songs.toArray();
+        if (s.length > 0) {
+            const cleanSongs = s.map(({ id, ...rest }) => ({ ...rest, creator_id: userId }));
+            await supabase.from('songs').upsert(cleanSongs, { onConflict: 'title,artist,creator_id' });
+        }
+        // 2. Setlists
+        const sl = await db.setlists.toArray();
+        if (sl.length > 0) {
+            const cleanSl = sl.map(({ id, ...rest }) => ({ ...rest, creator_id: userId }));
+            await supabase.from('setlists').upsert(cleanSl, { onConflict: 'title,creator_id' });
+        }
+        // 3. Bandas (Nova Lógica)
+        const b = await db.my_bands.toArray();
+        if (b.length > 0) {
+            const cleanB = b.map(band => ({ ...band, creator_id: userId }));
+            await supabase.from('my_bands').upsert(cleanB, { onConflict: 'id' });
+        }
+        console.log("✅ Sync Out Ok");
+    } catch (e) { console.error("Push error:", e.message); }
 };
 
 export const pullFromCloud = async (userId) => {
     if (!supabase) return;
-    const { data: s } = await supabase.from('songs').select('*').eq('creator_id', userId);
-    if (s) for (let x of s) { const ex = await db.songs.where({title: x.title, artist: x.artist}).first(); if (!ex) await db.songs.add({...x, id: undefined}); }
-    const { data: sl } = await supabase.from('setlists').select('*').eq('creator_id', userId);
-    if (sl) for (let x of sl) { const ex = await db.setlists.where({title: x.title}).first(); if (!ex) await db.setlists.add({...x, id: undefined}); }
+    try {
+        // 1. Músicas
+        const { data: s } = await supabase.from('songs').select('*').eq('creator_id', userId);
+        if (s) {
+            for (let item of s) {
+                const ex = await db.songs.where({title: item.title, artist: item.artist}).first();
+                if (!ex) { const { id, ...dataWithoutId } = item; await db.songs.add(dataWithoutId); }
+            }
+        }
+        // 2. Setlists
+        const { data: sl } = await supabase.from('setlists').select('*').eq('creator_id', userId);
+        if (sl) {
+            for (let item of sl) {
+                const ex = await db.setlists.where({title: item.title}).first();
+                if (!ex) { const { id, ...dataWithoutId } = item; await db.setlists.add(dataWithoutId); }
+            }
+        }
+        // 3. Bandas (Nova Lógica anti-duplicidade)
+        const { data: b } = await supabase.from('my_bands').select('*').eq('creator_id', userId);
+        if (b) {
+            for (let item of b) {
+                if (item.is_solo) {
+                    const hasSolo = await db.my_bands.where('is_solo').equals(1).first();
+                    if (hasSolo) {
+                        // Se já tem solo local, apenas garante que o ID bate com o da nuvem
+                        if (hasSolo.id !== item.id) {
+                            await db.my_bands.delete(hasSolo.id);
+                            await db.my_bands.put(item);
+                        }
+                        continue;
+                    }
+                }
+                await db.my_bands.put(item);
+            }
+        }
+        console.log("✅ Sync In Ok");
+    } catch (e) { console.error("Pull error:", e.message); }
+};
+
+export const triggerDL = (data, filename) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename || 'Backup.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 };

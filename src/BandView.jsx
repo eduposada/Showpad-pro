@@ -17,6 +17,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const [bandSongs, setBandSongs] = useState([]);
     const [members, setMembers] = useState([]);
 
+    // v7.1.5: Estados para controle de Broadcast
     const [hasUpdates, setHasUpdates] = useState(false);
 
     const [editName, setEditName] = useState('');
@@ -27,10 +28,11 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     useEffect(() => { 
         fetchBands(); 
         
-        // v7.1.7: Monitoramento de atualizações em tempo real
+        // v7.1.5: Sintonizar rádio de atualizações em tempo real
         const channel = supabase
             .channel('band_updates')
             .on('postgres_changes', { event: 'INSERT', table: 'band_broadcasts' }, (payload) => {
+                // Se o sinal de fumaça não foi enviado por mim, alertar novidades
                 if (payload.new.sender_id !== session.user.id) {
                     setHasUpdates(true);
                 }
@@ -94,8 +96,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 const cloudList = data.filter(i => i.bands).map(i => ({ 
                     ...i.bands, 
                     role: i.role,
-                    // v7.1.7: Reconhece banda solo pelo marcador is_solo da nuvem
-                    is_solo: i.bands.is_solo === true || i.bands.invite_code.startsWith("SOLO")
+                    is_solo: i.bands.invite_code.startsWith("SOLO")
                 }));
                 await db.my_bands.clear();
                 for (let b of cloudList) await db.my_bands.put(b);
@@ -107,26 +108,28 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         setLoading(false);
     };
 
+    // v7.1.5: DISSEMINAR (ADMIN)
     const handleBroadcast = async (band) => {
         setLoading(true);
         try {
             await broadcastBandChanges(band.id, session.user.id);
-            alert("📢 Mudanças disseminadas para a nuvem!");
+            alert("📢 Mudanças disseminadas com sucesso para todos os membros!");
         } catch (e) { alert("Erro no Broadcast: " + e.message); }
         setLoading(false);
     };
 
+    // v7.1.5: CAPTURAR MUDANÇAS (MEMBRO)
     const handlePullChanges = async () => {
         setLoading(true);
         try {
+            // Pegar IDs de todas as bandas que participo
             const myBands = await db.my_bands.toArray();
             for (let b of myBands) {
-                // Sincroniza todas, incluindo a SOLO se houver mudanças remotas
-                await pullBandChanges(b.id);
+                if (!b.is_solo) await pullBandChanges(b.id);
             }
             setHasUpdates(false);
             await fetchBands();
-            alert("✅ Sincronização concluída!");
+            alert("✅ Sincronização da frota concluída!");
         } catch (e) { alert("Erro ao sincronizar: " + e.message); }
         setLoading(false);
     };
@@ -192,7 +195,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         if (!newBandName) return;
         setLoading(true);
         const code = Math.random().toString(36).substring(2, 7).toUpperCase();
-        const { data: band } = await supabase.from('bands').insert([{ name: newBandName, owner_id: session.user.id, invite_code: code, is_solo: false }]).select().single();
+        const { data: band } = await supabase.from('bands').insert([{ name: newBandName, owner_id: session.user.id, invite_code: code }]).select().single();
         if (band) {
             await supabase.from('band_members').insert([{ band_id: band.id, profile_id: session.user.id, role: 'admin' }]);
             setNewBandName(''); fetchBands();
@@ -212,8 +215,8 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 <h1 style={{ color: '#fff', fontSize: '28px', fontWeight: '900', margin: 0 }}>BANDAS</h1>
                 <div style={{display:'flex', gap:'10px'}}>
                     {hasUpdates && (
-                        <div style={{backgroundColor:'#ff9500', color:'#000', padding:'8px 15px', borderRadius:'10px', fontSize:'11px', fontWeight:'900', display:'flex', alignItems:'center', gap:'8px'}}>
-                            <Bell size={14}/> NOVIDADES DISPONÍVEIS
+                        <div style={{backgroundColor:'#ff9500', color:'#000', padding:'8px 15px', borderRadius:'10px', fontSize:'11px', fontWeight:'900', display:'flex', alignItems:'center', gap:'8px', animation:'pulse 2s infinite'}}>
+                            <Bell size={14}/> NOVIDADES DA FROTA
                         </div>
                     )}
                     <button onClick={hasUpdates ? handlePullChanges : fetchBands} style={{
@@ -227,6 +230,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 </div>
             </div>
 
+            {/* Cadastro de Bandas */}
             <div style={{ display: 'flex', gap: '20px', marginBottom: '40px' }}>
                 <div style={{ flex: 1, background: '#1c1c1e', padding: '20px', borderRadius: '15px', border: '1px solid #333' }}>
                     <h4 style={{ color: '#007aff', fontSize: '10px', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>Nova Banda</h4>
@@ -240,18 +244,19 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 </div>
             </div>
 
+            {/* Cards de Bandas */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
                 {bands.map(b => (
                     <div key={b.id} style={{ ...styles.settingsCard, maxWidth: 'none', background: '#1c1c1e', border: '1px solid #333' }}>
                         <div style={{ padding: '20px', display: 'flex', gap: '15px', alignItems: 'center' }}>
                             <div style={{ width: '60px', height: '60px', borderRadius: '12px', background: '#000', border: '1px solid #444', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {b.logo_url ? <img src={b.logo_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Music color={b.is_solo ? "#007aff" : "#333"} />}
+                                {b.logo_url ? <img src={b.logo_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Music color="#333" />}
                             </div>
                             <div style={{ flex: 1 }}>
                                 <h2 style={{ color: b.is_solo ? '#007aff' : '#FFD700', margin: 0, fontSize: '18px', fontWeight: '900' }}>{b.name}</h2>
                                 <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
                                     <span style={{ color: '#888', fontSize: '10px', fontWeight: 'bold' }}>{b.role?.toUpperCase()}</span>
-                                    {!b.is_solo && (
+                                    {b.role === 'admin' && !b.is_solo && (
                                         <div style={{backgroundColor:'#222', padding:'2px 8px', borderRadius:'10px', display:'flex', alignItems:'center', gap:'4px'}}>
                                             <Hash size={10} color="#34c759"/>
                                             <span style={{color:'#34c759', fontSize:'11px', fontWeight:'900'}}>{b.invite_code}</span>
@@ -271,7 +276,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                         <div style={{ padding: '15px 20px', borderTop: '1px solid #222', display: 'flex', gap: '8px', background: '#161618' }}>
                             <button onClick={() => setShowRepertoire(b)} style={{ ...styles.headerBtn, flex: 1, color: '#FFD700' }}><Music size={14}/> REPERTÓRIO</button>
                             <button onClick={() => setShowBandShows(b)} style={{ ...styles.headerBtn, flex: 1, color: '#fff' }}><Layout size={14}/> SHOWS</button>
-                            {b.role === 'admin' && (
+                            {b.role === 'admin' && !b.is_solo && (
                                 <button onClick={() => handleBroadcast(b)} style={{ ...styles.headerBtn, flex: 1, color: '#4cd964', borderColor:'#4cd96444' }}>
                                     <Radio size={14}/> DISSEMINAR
                                 </button>
@@ -281,38 +286,43 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 ))}
             </div>
 
+            {/* Modal de Repertório */}
             {showRepertoire && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '850px', height: '85vh', borderRadius: '24px', border: '1px solid #444', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                         <div style={{ padding: '25px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#252529' }}>
-                            <h2 style={{ color: showRepertoire.is_solo ? '#007aff' : '#FFD700', margin: 0 }}>{showRepertoire.is_solo ? "Meu Acervo Particular" : `Repertório: ${showRepertoire.name}`}</h2>
+                            <h2 style={{ color: '#FFD700', margin: 0 }}>Repertório: {showRepertoire.name}</h2>
                             <X onClick={() => setShowRepertoire(null)} style={{ cursor: 'pointer' }} color="#fff" />
                         </div>
                         <div style={{ flex: 1, overflowY: 'auto', padding: '30px' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
-                                <div>
-                                    <h4 style={{ color: '#888', fontSize: '11px', marginBottom: '15px' }}>BIBLIOTECA GERAL</h4>
-                                    <div style={{ background: '#111', borderRadius: '12px', padding: '10px', border: '1px solid #222' }}>
-                                        {allSongs.filter(s => !bandSongs.find(bs => bs.id === s.id)).map(s => (
-                                            <div key={s.id} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between' }}>
-                                                <span style={{ color: '#fff' }}>{s.title}</span>
-                                                <Plus onClick={() => addSongToBand(s.id)} size={18} color="#34c759" style={{ cursor: 'pointer' }} />
-                                            </div>
-                                        ))}
+                            {showRepertoire.is_solo ? (
+                                <div style={{ textAlign: 'center', padding: '60px', color: '#888' }}><Zap size={40} color="#FFD700" /><h3 style={{ color: '#fff' }}>Modo Solo Ativo</h3><p>Músicas pessoais.</p></div>
+                            ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+                                    <div>
+                                        <h4 style={{ color: '#888', fontSize: '11px', marginBottom: '15px' }}>BIBLIOTECA LOCAL</h4>
+                                        <div style={{ background: '#111', borderRadius: '12px', padding: '10px', border: '1px solid #222' }}>
+                                            {allSongs.filter(s => !bandSongs.find(bs => bs.id === s.id)).map(s => (
+                                                <div key={s.id} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between' }}>
+                                                    <span style={{ color: '#fff' }}>{s.title}</span>
+                                                    <Plus onClick={() => addSongToBand(s.id)} size={18} color="#34c759" style={{ cursor: 'pointer' }} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h4 style={{ color: '#FFD700', fontSize: '11px', marginBottom: '15px' }}>REPERTÓRIO DA BANDA</h4>
+                                        <div style={{ background: '#000', borderRadius: '12px', padding: '10px', border: '1px solid #FFD70033' }}>
+                                            {bandSongs.map(s => (
+                                                <div key={s.id} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between' }}>
+                                                    <span style={{ color: '#FFD700' }}>{s.title}</span>
+                                                    <MinusCircle onClick={() => removeSongFromBand(s.id)} size={18} color="#ff3b30" style={{ cursor: 'pointer' }} />
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
-                                <div>
-                                    <h4 style={{ color: showRepertoire.is_solo ? '#007aff' : '#FFD700', fontSize: '11px', marginBottom: '15px' }}>{showRepertoire.is_solo ? "MINHAS SELECIONADAS" : "REPERTÓRIO DA BANDA"}</h4>
-                                    <div style={{ background: '#000', borderRadius: '12px', padding: '10px', border: `1px solid ${showRepertoire.is_solo ? '#007aff33' : '#FFD70033'}` }}>
-                                        {bandSongs.map(s => (
-                                            <div key={s.id} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between' }}>
-                                                <span style={{ color: showRepertoire.is_solo ? '#007aff' : '#FFD700' }}>{s.title}</span>
-                                                <MinusCircle onClick={() => removeSongFromBand(s.id)} size={18} color="#ff3b30" style={{ cursor: 'pointer' }} />
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
+                            )}
                         </div>
                         <div style={{ padding: '20px', background: '#252529', textAlign: 'right' }}><button onClick={() => setShowRepertoire(null)} style={styles.saveBtn}>FECHAR</button></div>
                     </div>
@@ -323,7 +333,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '550px', borderRadius: '28px', border: '1px solid #444', overflow: 'hidden' }}>
                         <div style={{ padding: '20px 25px', background: '#252529', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between' }}>
-                            <h2 style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>EDITAR CONFIGURAÇÕES</h2>
+                            <h2 style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>EDITAR BANDA</h2>
                             <X onClick={() => setShowSettings(null)} style={{ cursor: 'pointer' }} color="#888" />
                         </div>
                         <div style={{ padding: '25px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
