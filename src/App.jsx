@@ -27,6 +27,7 @@ export default function App() {
   const [view, setView] = useState('library'); 
   const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30);
   const [sortBy, setSortBy] = useState(localStorage.getItem('sortBy') || 'title');
+  const [filterArtist, setFilterArtist] = useState('');
 
   const [midiStatus, setMidiStatus] = useState("off");
   const [midiFlash, setMidiFlash] = useState(false);
@@ -218,6 +219,12 @@ export default function App() {
 
   if (!session) return <AuthView styles={styles} />;
 
+  const filteredSongs = filterArtist
+    ? songs.filter((s) => (s.artist || '').trim() === filterArtist)
+    : songs;
+  const uniqueArtists = [...new Set(songs.map((s) => (s.artist || '').trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
   return (
     <div style={styles.appContainer}>
       <header style={styles.mainHeader}>
@@ -276,8 +283,28 @@ export default function App() {
             <button onClick={() => setView('garimpo')} style={view === 'garimpo' ? styles.activeTab : styles.tab}>GARIMPAR</button>
           </div>
 
+          {view === 'library' && (
+            <div style={{ padding: '8px', borderBottom: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button type="button" onClick={() => { setSortBy('title'); setFilterArtist(''); }} style={{ ...styles.headerBtn, flex: 1, fontSize: '9px', ...(sortBy === 'title' ? { borderColor: '#007aff', color: '#007aff' } : {}) }}>A–Z TÍTULO</button>
+                <button type="button" onClick={() => { setSortBy('artist'); setFilterArtist(''); }} style={{ ...styles.headerBtn, flex: 1, fontSize: '9px', ...(sortBy === 'artist' ? { borderColor: '#007aff', color: '#007aff' } : {}) }}>A–Z ARTISTA</button>
+              </div>
+              <select
+                value={filterArtist}
+                onChange={(e) => setFilterArtist(e.target.value)}
+                style={{
+                  width: '100%', padding: '6px 8px', borderRadius: '6px', backgroundColor: '#2c2c2e', fontSize: '11px', cursor: 'pointer',
+                  ...(filterArtist !== '' ? { color: '#4cd964', border: '1px solid #4cd964' } : { color: '#fff', border: '1px solid #444' })
+                }}
+              >
+                <option value="">Todos os artistas</option>
+                {uniqueArtists.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+          )}
+
           <div style={styles.listArea}>
-            {['library', 'setlists'].includes(view) ? (view === 'library' ? songs : setlists).map(item => {
+            {['library', 'setlists'].includes(view) ? (view === 'library' ? filteredSongs : setlists).map(item => {
               const band = item.band_id ? bands.find(b => b.id === item.band_id) : null;
               return (
                 <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}

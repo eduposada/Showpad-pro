@@ -15,7 +15,7 @@ O app é uma aplicação de alta performance focada em estabilidade de dados e f
 1. **Autenticação (Supabase Auth):**
    - Login via Email/Senha.
    - Login via Google OAuth (conta Google).
-2. **Gestão de Repertório:** Edição de cifras com transposição tonal dinâmica e detecção automática de acordes.
+2. **Gestão de Repertório:** Edição de cifras com transposição tonal dinâmica e detecção automática de acordes. Na aba **Biblioteca (MÚSICAS)**, a lista lateral oferece ordenação alfabética **A–Z por título** ou **A–Z por artista** e um **filtro por artista** (seletor com artistas únicos derivados das músicas, ordenados alfabeticamente, ignorando valores vazios). Com filtro ativo, o seletor fica destacado em verde; ao trocar a ordenação, o filtro é limpo. A lista lateral mostra só as músicas que passam pelo filtro; o editor e demais fluxos que dependem do array completo de músicas continuam a usar a lista integral.
 3. **Shows (Setlists):** Criação de listas de músicas para apresentações com campos de notas, local e hora.
 4. **Gestão de Bandas:** Sistema de bandas para compartilhamento de repertório. Inclui suporte a uma "Banda Solo" automática por usuário.
 5. **Garimpo:** Captura de músicas de fontes externas (URLs) mantendo a grafia original (Case Sensitive).
