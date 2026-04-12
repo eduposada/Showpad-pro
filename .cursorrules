@@ -17,7 +17,7 @@ Público-alvo: músicos solo, bandas e diretores musicais.
 - Nunca refatore tudo nem reescreva arquivos grandes sem necessidade explícita.
 - Quando tiver dúvida sobre regra de negócio ou comportamento desejado, pergunte antes de assumir qualquer coisa.
 - Nunca introduza comportamentos que possam causar perda de dados ou duplicidade silenciosa.
-- **Não mexer** em fluxos ou módulos que **já estão estáveis e a funcionar bem** (ex.: Garimpo, sync Supabase, backup) salvo pedido explícito ou correção de bug comprovado — evitar refactors ou “melhorias” que toquem nesses caminhos sem necessidade.
+- **Recursos e menus já estáveis:** antes de introduzir qualquer comportamento que **possa afetar** funcionalidades, ecrãs ou fluxos que já funcionem bem, **consultar o mantenedor**, pedir **ratificação explícita** e expor **com detalhe** o que muda e as **consequências** (riscos, impacto em dados, UX, sync, etc.). Não avançar com essa alteração sem esse ok.
 
 ---
 

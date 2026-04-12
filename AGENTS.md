@@ -23,4 +23,4 @@ React + Vite, Dexie local, Supabase na nuvem. Convenções detalhadas de código
 
 ## Estabilidade
 
-Não alterar funcionalidades que o mantenedor indicou como **já estáveis** (Garimpo, sync, backup, etc.) sem pedido explícito ou bug confirmado — evitar refactors que atravessem esses fluxos sem necessidade.
+Se uma alteração **puder afetar** recursos, menus ou fluxos **já estáveis**, a IA deve **consultar o mantenedor**, pedir **ratificação** e explicar **em detalhe** as **consequências** antes de implementar. Sem esse ok, não avançar.
