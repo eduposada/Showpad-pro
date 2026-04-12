@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.4.7] - 2026-04-11
+
+### Corrigido
+
+- Sync: `invite_code` é **único** na tabela `bands`. A banda solo usava `SOLO_V3` igual para todos → *duplicate key … bands_invite_code_key*. Agora solo usa `SOLO_<id da banda>` (único); no envio, códigos solo antigos são normalizados e o Dexie é atualizado.
+
 ## [8.4.6] - 2026-04-11
 
 ### Corrigido

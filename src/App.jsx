@@ -6,7 +6,7 @@ import {
   CloudUpload, CloudDownload, Info, Download
 } from 'lucide-react';
 
-import { db, transposeContent, supabase, triggerDL, pushToCloud, pullFromCloud } from './ShowPadCore';
+import { db, transposeContent, supabase, triggerDL, pushToCloud, pullFromCloud, soloInviteCodeForBandId } from './ShowPadCore';
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
 import { SettingsView } from './SettingsView';
@@ -72,10 +72,11 @@ export default function App() {
     if (!existing) {
         const soloName = `${getUserDisplayName()} - SOLO`;
         try {
+            const soloId = crypto.randomUUID();
             const soloData = { 
-                id: crypto.randomUUID(),
+                id: soloId,
                 name: soloName, 
-                invite_code: 'SOLO_V3', 
+                invite_code: soloInviteCodeForBandId(soloId),
                 owner_id: user.id,
                 role: 'admin', 
                 is_solo: true 

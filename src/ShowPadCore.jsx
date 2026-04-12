@@ -164,12 +164,29 @@ function dedupeBandsById(rows) {
     return out;
 }
 
+/** Código de convite único globalmente para banda solo (Postgres: UNIQUE em invite_code). */
+export function soloInviteCodeForBandId(bandId) {
+    return `SOLO_${String(bandId).replace(/-/g, '')}`;
+}
+
+/**
+ * Banda solo partilhava `SOLO_V3` entre todos os utilizadores → violação de bands_invite_code_key.
+ * Qualquer solo passa a usar SOLO_<id da banda sem hífens>, único por linha.
+ */
+function normalizeInviteCodeForSupabase(band) {
+    const code = (band.invite_code || '').trim();
+    if (band.is_solo || (code && code.toUpperCase().startsWith('SOLO'))) {
+        return soloInviteCodeForBandId(band.id);
+    }
+    return code;
+}
+
 /** Colunas da tabela Supabase `bands` (Dexie guarda também role/is_solo só para UI). */
 function bandRowsForSupabase(band) {
     return {
         id: band.id,
         name: band.name,
-        invite_code: band.invite_code,
+        invite_code: normalizeInviteCodeForSupabase(band),
         owner_id: band.owner_id,
         description: band.description ?? null,
         logo_url: band.logo_url ?? null,
@@ -209,6 +226,12 @@ export const pushToCloud = async (userId) => {
         }));
         const rM = await supabase.from('band_members').upsert(memberRows, { onConflict: 'band_id,profile_id' });
         throwIfSupabaseError(rM.error, 'Envio de vínculos banda/membro');
+        for (const band of ownedBands) {
+            const normalized = normalizeInviteCodeForSupabase(band);
+            if (normalized !== band.invite_code) {
+                await db.my_bands.update(band.id, { invite_code: normalized });
+            }
+        }
     }
     console.log('✅ Sync Out Ok');
 };
