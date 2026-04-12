@@ -4,6 +4,11 @@ Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
 ## [8.4.3] - 2026-04-12
 
+### Corrigido
+
+- Sync Supabase: `pushToCloud` / `pullFromCloud` verificam `error` nas respostas e **lançam exceção** (o alerta do app reflete falhas reais; Supabase ausente também erro explícito).
+- Garimpo: não conta importação com **cifra vazia**; detecta resposta **HTML** no lugar de JSON no dev (sem proxy); mensagem orientando `VITE_API_SCRAPE_URL`; aviso no console ao subir o Vite sem proxy.
+
 ### Adicionado
 
 - `vite.config.js`: proxy de `POST /api/scrape` para `VITE_API_SCRAPE_URL` no `npm run dev`, igual ao fluxo da Vercel (reiniciar o Vite após criar/editar o `.env`).

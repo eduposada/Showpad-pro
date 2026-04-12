@@ -7,8 +7,24 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const proxyTarget = (env.VITE_API_SCRAPE_URL || '').trim().replace(/\/$/, '')
 
+  const garimpoHintPlugin = {
+    name: 'showpad-garimpo-proxy-hint',
+    configureServer(server) {
+      server.httpServer?.once('listening', () => {
+        if (!proxyTarget) {
+          console.warn(
+            '\n[ShowPad] Garimpo no dev: defina VITE_API_SCRAPE_URL no .env (URL da Vercel, sem / no fim) e reinicie — senão POST /api/scrape não existe e o import falha.\n'
+          )
+        } else {
+          console.log(`\n[ShowPad] Garimpo: proxy /api/scrape → ${proxyTarget}\n`)
+        }
+      })
+    },
+  }
+
   return {
     plugins: [
+      garimpoHintPlugin,
       react(),
       legacy({
         // Define os alvos: navegadores com mais de 1% de uso ou versões específicas

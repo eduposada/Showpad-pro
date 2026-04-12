@@ -12,12 +12,21 @@ function parseHtmlCifra(html) {
     if (!contentMatch) {
         return { ok: false, error: 'Cifra não encontrada no HTML.' };
     }
+    const content = contentMatch[1].replace(/<[^>]*>/g, '').trim();
+    if (!content) {
+        return { ok: false, error: 'Bloco <pre> da cifra está vazio (resposta inválida ou página errada).' };
+    }
     return {
         ok: true,
         title: titleMatch ? titleMatch[1].trim() : 'Música',
         artist: artistMatch ? artistMatch[1].trim() : 'Artista',
-        content: contentMatch[1].replace(/<[^>]*>/g, '').trim(),
+        content,
     };
+}
+
+function isNonJsonBodyProbablySpa(text) {
+    const t = (text || '').trimStart();
+    return t.startsWith('<!') || t.startsWith('<html') || t.startsWith('<HTML');
 }
 
 async function scrapeViaApi(endpoint, url) {
@@ -27,10 +36,18 @@ async function scrapeViaApi(endpoint, url) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url }),
         });
+        const text = await response.text();
         let data = {};
         try {
-            data = await response.json();
+            data = JSON.parse(text);
         } catch {
+            if (response.ok && isNonJsonBodyProbablySpa(text)) {
+                return {
+                    ok: false,
+                    error:
+                        'A API devolveu HTML em vez de JSON. No dev: crie .env com VITE_API_SCRAPE_URL=https://seu-app.vercel.app e reinicie o npm run dev.',
+                };
+            }
             data = {};
         }
         if (!response.ok) {
@@ -72,7 +89,12 @@ async function scrapeViaCorsproxy(url) {
         } catch {
             /* HTML esperado */
         }
-        return parseHtmlCifra(text);
+        const parsed = parseHtmlCifra(text);
+        if (!parsed.ok) return parsed;
+        if (!parsed.content.trim()) {
+            return { ok: false, error: 'Cifra vazia após leitura do HTML (proxy).' };
+        }
+        return parsed;
     } catch (e) {
         return { ok: false, error: e.message || 'Falha no proxy.' };
     }
@@ -116,6 +138,10 @@ export const GarimpoView = ({ styles, refresh, session }) => {
 
                 if (!result.ok) {
                     failed.push({ url, reason: result.error || 'Falha desconhecida' });
+                    continue;
+                }
+                if (!result.content || !String(result.content).trim()) {
+                    failed.push({ url, reason: 'Cifra vazia — importação cancelada.' });
                     continue;
                 }
 
