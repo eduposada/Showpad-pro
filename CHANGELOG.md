@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.4.5] - 2026-04-11
+
+### Corrigido
+
+- Sync para a nuvem (`pushToCloud`): **deduplicação** antes do `upsert` de músicas, shows e bandas, evitando o erro do Postgres *«ON CONFLICT DO UPDATE command cannot affect row a second time»* quando o Dexie tem mais de uma linha com a mesma chave de conflito (ex.: mesmo título e artista).
+
 ## [8.4.4] - 2026-04-11
 
 ### Corrigido

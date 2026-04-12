@@ -117,6 +117,53 @@ function throwIfSupabaseError(error, etapa) {
     }
 }
 
+/**
+ * Um único UPSERT no Postgres não pode incluir duas linhas que colidem na mesma chave
+ * (erro: "ON CONFLICT DO UPDATE command cannot affect row a second time").
+ * No Dexie podem existir duas músicas com o mesmo título/artista; mantemos a de maior id (mais recente).
+ */
+function dedupeSongsForCloudUpsert(rows, userId) {
+    const sorted = [...rows].sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+    const seen = new Set();
+    const out = [];
+    for (const row of sorted) {
+        const { id, ...rest } = row;
+        const payload = { ...rest, creator_id: userId };
+        const key = `${payload.title}\0${payload.artist}\0${payload.creator_id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(payload);
+    }
+    return out;
+}
+
+function dedupeSetlistsForCloudUpsert(rows, userId) {
+    const sorted = [...rows].sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+    const seen = new Set();
+    const out = [];
+    for (const row of sorted) {
+        const { id, ...rest } = row;
+        const payload = { ...rest, creator_id: userId };
+        const key = `${payload.title}\0${payload.creator_id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(payload);
+    }
+    return out;
+}
+
+function dedupeBandsForCloudUpsert(rows, userId) {
+    const seen = new Set();
+    const out = [];
+    for (const band of rows) {
+        const payload = { ...band, creator_id: userId };
+        if (!payload.id || seen.has(payload.id)) continue;
+        seen.add(payload.id);
+        out.push(payload);
+    }
+    return out;
+}
+
 export const pushToCloud = async (userId) => {
     if (!supabase) {
         throw new Error('Supabase não configurado (variáveis de ambiente).');
@@ -124,21 +171,21 @@ export const pushToCloud = async (userId) => {
     // 1. Músicas
     const s = await db.songs.toArray();
     if (s.length > 0) {
-        const cleanSongs = s.map(({ id, ...rest }) => ({ ...rest, creator_id: userId }));
+        const cleanSongs = dedupeSongsForCloudUpsert(s, userId);
         const r = await supabase.from('songs').upsert(cleanSongs, { onConflict: 'title,artist,creator_id' });
         throwIfSupabaseError(r.error, 'Envio de músicas');
     }
     // 2. Setlists
     const sl = await db.setlists.toArray();
     if (sl.length > 0) {
-        const cleanSl = sl.map(({ id, ...rest }) => ({ ...rest, creator_id: userId }));
+        const cleanSl = dedupeSetlistsForCloudUpsert(sl, userId);
         const r = await supabase.from('setlists').upsert(cleanSl, { onConflict: 'title,creator_id' });
         throwIfSupabaseError(r.error, 'Envio de shows');
     }
     // 3. Bandas
     const b = await db.my_bands.toArray();
     if (b.length > 0) {
-        const cleanB = b.map((band) => ({ ...band, creator_id: userId }));
+        const cleanB = dedupeBandsForCloudUpsert(b, userId);
         const r = await supabase.from('my_bands').upsert(cleanB, { onConflict: 'id' });
         throwIfSupabaseError(r.error, 'Envio de bandas');
     }
