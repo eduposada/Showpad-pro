@@ -17,7 +17,7 @@ export function InfoModal({ onClose }) {
     <div style={overlay} role="dialog" aria-modal="true" aria-labelledby="info-modal-title" onClick={onClose}>
       <div style={panel} onClick={(e) => e.stopPropagation()}>
         <h2 id="info-modal-title" style={h2}>ShowPad Pro</h2>
-        <p style={{ ...muted, marginBottom: '16px' }}>Versão atual: <strong style={{ color: '#fff' }}>v8.3</strong></p>
+        <p style={{ ...muted, marginBottom: '16px' }}>Versão atual: <strong style={{ color: '#fff' }}>v8.4.1</strong></p>
         <p style={muted}><strong style={{ color: '#fff' }}>Desenvolvedor:</strong> Eduardo Posada</p>
         <p style={muted}>
           <strong style={{ color: '#fff' }}>Descrição:</strong> Aplicação web para músicos gerenciarem repertórios, cifras e setlists em tempo real.
@@ -28,6 +28,8 @@ export function InfoModal({ onClose }) {
         <p style={{ ...muted, marginBottom: '8px' }}><strong style={{ color: '#fff' }}>Funcionalidades:</strong></p>
         <ul style={ul}>
           <li>Gestão de repertório com transposição tonal</li>
+          <li>Biblioteca: ordenação A–Z por título ou por artista e filtro por artista</li>
+          <li>Exportar e importar músicas individuais em arquivo .showpad (JSON)</li>
           <li>Shows e Setlists</li>
           <li>Gestão de Bandas</li>
           <li>Garimpo de músicas via URL</li>
