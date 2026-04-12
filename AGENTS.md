@@ -1,6 +1,10 @@
 # Instruções para assistentes de IA (ShowPad Pro)
 
-Este ficheiro resume regras que também estão em `.cursorrules`, `.cursor/rules/` e `GIT_WORKFLOW.md`. Serve para qualquer ferramenta de IA que trabalhe neste repositório.
+Este arquivo resume regras que também estão em `.cursorrules`, `.cursor/rules/` e `GIT_WORKFLOW.md`. Serve para qualquer ferramenta de IA que trabalhe neste repositório.
+
+## Idioma
+
+Comunicação com o mantenedor: **sempre em português do Brasil (pt-BR)**, salvo pedido explícito em contrário.
 
 ## Git e tags
 

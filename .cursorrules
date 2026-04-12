@@ -10,6 +10,12 @@ Público-alvo: músicos solo, bandas e diretores musicais.
 
 ---
 
+## Idioma
+
+- Toda a **comunicação** com o mantenedor (respostas, explicações, perguntas, confirmações, resumos de alterações) deve ser em **português do Brasil** (pt-BR), salvo pedido explícito em contrário.
+
+---
+
 ## Princípios Gerais
 
 - Leia o contexto completo antes de sugerir qualquer alteração.
@@ -17,7 +23,7 @@ Público-alvo: músicos solo, bandas e diretores musicais.
 - Nunca refatore tudo nem reescreva arquivos grandes sem necessidade explícita.
 - Quando tiver dúvida sobre regra de negócio ou comportamento desejado, pergunte antes de assumir qualquer coisa.
 - Nunca introduza comportamentos que possam causar perda de dados ou duplicidade silenciosa.
-- **Recursos e menus já estáveis:** antes de introduzir qualquer comportamento que **possa afetar** funcionalidades, ecrãs ou fluxos que já funcionem bem, **consultar o mantenedor**, pedir **ratificação explícita** e expor **com detalhe** o que muda e as **consequências** (riscos, impacto em dados, UX, sync, etc.). Não avançar com essa alteração sem esse ok.
+- **Recursos e menus já estáveis:** antes de introduzir qualquer comportamento que **possa afetar** funcionalidades, telas ou fluxos que já funcionem bem, **consultar o mantenedor**, pedir **ratificação explícita** e expor **com detalhe** o que muda e as **consequências** (riscos, impacto em dados, UX, sync, etc.). Não avançar com essa alteração sem esse ok.
 
 ---
 
@@ -94,7 +100,7 @@ feat: / fix: / refactor: / chore: / docs:
 ## Versão e releases (tags)
 
 - Só criar ou enviar **tag** após o mantenedor **confirmar por escrito** (ver também `GIT_WORKFLOW.md`).
-- Em **cada tag de release**: atualizar **`CHANGELOG.md`** (secção `[X.Y.Z]` com data e notas), **`package.json`** / `package-lock.json` (`version`), e a **versão na UI** (ex.: `InfoModal.jsx`). O commit que leva a tag deve refletir esses números; não deixar tag, changelog e ecrã desalinhados.
+- Em **cada tag de release**: atualizar **`CHANGELOG.md`** (seção `[X.Y.Z]` com data e notas), **`package.json`** / `package-lock.json` (`version`), e a **versão na UI** (ex.: `InfoModal.jsx`). O commit que leva a tag deve refletir esses números; não deixar tag, changelog e versão mostrada na interface desalinhados.
 - Regras detalhadas para o Cursor: `.cursor/rules/release-versioning.mdc` e `.cursor/rules/git-workflow.mdc`.
 
 Histórico de tags (referência): v8.1 (estabilidade Sync e Garimpo), v8.2 (estável sem duplicidade de bandas), **v8.4.7** (2026-04-11: Garimpo dev/prod, sync Supabase, backup/restauração verificados).
