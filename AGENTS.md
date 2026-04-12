@@ -20,3 +20,7 @@ Antes ou no mesmo commit da tag:
 ## Projeto
 
 React + Vite, Dexie local, Supabase na nuvem. Convenções detalhadas de código e negócio: **`.cursorrules`**.
+
+## Estabilidade
+
+Não alterar funcionalidades que o mantenedor indicou como **já estáveis** (Garimpo, sync, backup, etc.) sem pedido explícito ou bug confirmado — evitar refactors que atravessem esses fluxos sem necessidade.
