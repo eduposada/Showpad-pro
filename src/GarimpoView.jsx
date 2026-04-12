@@ -30,7 +30,7 @@ export const GarimpoView = ({ styles, refresh, session }) => {
                 
                 setStatus(`Garimpando: ${musicaFallback}...`);
                 
-                const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+                const response = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`);
                 if (!response.ok) throw new Error("Falha na conexão");
                 const html = await response.text();
 
