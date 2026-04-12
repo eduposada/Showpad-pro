@@ -4,6 +4,11 @@ Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
 ## [8.4.3] - 2026-04-12
 
+### Adicionado
+
+- `vite.config.js`: proxy de `POST /api/scrape` para `VITE_API_SCRAPE_URL` no `npm run dev`, igual ao fluxo da Vercel (reiniciar o Vite após criar/editar o `.env`).
+- `.env.example` com variável documentada.
+
 ### Corrigido
 
 - Garimpo: `api/scrape` agora lê o corpo JSON de forma robusta (objeto, string, buffer ou stream), evitando `url` vazia na Vercel.

@@ -2,13 +2,8 @@ import React, { useState } from 'react';
 import { X, ClipboardPaste, Loader2, DownloadCloud } from 'lucide-react';
 import { db } from './ShowPadCore';
 
-/** Base do deploy (ex.: https://meu-app.vercel.app). Em dev, use .env: VITE_API_SCRAPE_URL=... para usar a API da Vercel. */
-function getScrapeApiUrl() {
-    const raw = (import.meta.env.VITE_API_SCRAPE_URL || '').trim().replace(/\/$/, '');
-    if (!raw) return '/api/scrape';
-    if (raw.includes('/api/scrape')) return raw;
-    return `${raw}/api/scrape`;
-}
+/** Mesmo caminho que na Vercel. No dev, o Vite (vite.config) faz proxy para VITE_API_SCRAPE_URL se estiver no .env. */
+const SCRAPE_API_PATH = '/api/scrape';
 
 function parseHtmlCifra(html) {
     const titleMatch = html.match(/<h1 class="t1">([^<]+)<\/h1>/) || html.match(/<h1[^>]*>([^<]+)<\/h1>/);
@@ -114,8 +109,7 @@ export const GarimpoView = ({ styles, refresh, session }) => {
 
                 setStatus(`Garimpando: ${musicaFallback}...`);
 
-                const apiUrl = getScrapeApiUrl();
-                let result = await scrapeViaApi(apiUrl, url);
+                let result = await scrapeViaApi(SCRAPE_API_PATH, url);
                 if (!result.ok) {
                     result = await scrapeViaCorsproxy(url);
                 }
@@ -157,7 +151,7 @@ export const GarimpoView = ({ styles, refresh, session }) => {
             setStatus('❌ Nenhuma música importada.');
             const hint =
                 import.meta.env.DEV && !import.meta.env.VITE_API_SCRAPE_URL
-                    ? '\n\nDica (dev): no .env crie VITE_API_SCRAPE_URL=https://seu-app.vercel.app para usar a API do deploy.'
+                    ? '\n\nDica (dev): no .env defina VITE_API_SCRAPE_URL=https://seu-app.vercel.app (sem / no fim) e reinicie o Vite — o proxy usa o mesmo /api/scrape que na Vercel.'
                     : '';
             alert(`${failed.map((f) => `${f.reason}\n${f.url}`).join('\n\n')}${hint}`);
         } else {
