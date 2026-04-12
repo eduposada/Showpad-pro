@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     try {
         const { data } = await axios.get(url, {
             headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' },
-            timeout: 20000,
+            timeout: 9000,
             maxRedirects: 5,
         });
 

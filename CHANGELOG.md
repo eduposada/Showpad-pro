@@ -11,7 +11,7 @@ Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
-- `vercel.json` com `maxDuration` de 30s para `api/scrape.js`.
+- `vercel.json` com `maxDuration` de 10s para `api/scrape.js` (limite típico do plano Hobby na Vercel).
 - Fallback para corsproxy + regex quando a API não está disponível (ex.: `vite` sem proxy).
 
 ## [8.3.1] - 2026-04-12
