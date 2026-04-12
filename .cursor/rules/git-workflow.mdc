@@ -7,9 +7,9 @@ alwaysApply: true
 
 - **Branch de trabalho:** orientar o usuário a trabalhar na branch **`main`** como padrão.
 - **Tags:** nunca sugerir `git checkout <tag>` como forma de **trabalhar** no código (isso leva a *detached HEAD* e risco de perda de commits).
-- **Criar tags:** usar anotação e envio explícito:
+- **Criar tags:** **só** após o usuário **confirmar por escrito** que está tudo ok e que quer marcar uma versão estável. Não criar nem enviar tags ao fim de tarefas sem essa confirmação. Quando autorizado, usar:
   - `git tag -a <nome> -m "descrição"`
-  - `git push origin --tags`
+  - `git push origin <tag>` (ou `--tags` se combinado)
 - **Recuperar uma versão antiga para desenvolver:** sugerir `git checkout -b <nova-branch> <tag>` em vez de *checkout* direto na tag.
 - **Antes de operações Git mais complexas** (merge, rebase, reset, force push, etc.): lembrar de verificar o estado com `git status` e `git branch` (e, se útil, `git log --oneline -5`).
 
