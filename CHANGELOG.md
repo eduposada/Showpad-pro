@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.4.6] - 2026-04-11
+
+### Corrigido
+
+- Sync com a nuvem: **`my_bands` só existe no Dexie local**, não no Supabase. O envio passa a usar as tabelas **`bands`** e **`band_members`** (só bandas em que o utilizador é `owner_id`); o download de bandas usa o mesmo critério que o ecrã Bandas (`band_members` + `bands`). Corrige *«Could not find the table public.my_bands»*.
+
 ## [8.4.5] - 2026-04-11
 
 ### Corrigido

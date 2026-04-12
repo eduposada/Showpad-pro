@@ -152,16 +152,29 @@ function dedupeSetlistsForCloudUpsert(rows, userId) {
     return out;
 }
 
-function dedupeBandsForCloudUpsert(rows, userId) {
+/** Uma linha por id de banda (evita upsert inválido no Postgres). */
+function dedupeBandsById(rows) {
     const seen = new Set();
     const out = [];
     for (const band of rows) {
-        const payload = { ...band, creator_id: userId };
-        if (!payload.id || seen.has(payload.id)) continue;
-        seen.add(payload.id);
-        out.push(payload);
+        if (!band?.id || seen.has(band.id)) continue;
+        seen.add(band.id);
+        out.push(band);
     }
     return out;
+}
+
+/** Colunas da tabela Supabase `bands` (Dexie guarda também role/is_solo só para UI). */
+function bandRowsForSupabase(band) {
+    return {
+        id: band.id,
+        name: band.name,
+        invite_code: band.invite_code,
+        owner_id: band.owner_id,
+        description: band.description ?? null,
+        logo_url: band.logo_url ?? null,
+        created_at: band.created_at || new Date().toISOString(),
+    };
 }
 
 export const pushToCloud = async (userId) => {
@@ -182,12 +195,20 @@ export const pushToCloud = async (userId) => {
         const r = await supabase.from('setlists').upsert(cleanSl, { onConflict: 'title,creator_id' });
         throwIfSupabaseError(r.error, 'Envio de shows');
     }
-    // 3. Bandas
-    const b = await db.my_bands.toArray();
-    if (b.length > 0) {
-        const cleanB = dedupeBandsForCloudUpsert(b, userId);
-        const r = await supabase.from('my_bands').upsert(cleanB, { onConflict: 'id' });
+    // 3. Bandas — no Postgres não existe `my_bands`; bandas reais estão em `bands` + `band_members`.
+    const allBands = await db.my_bands.toArray();
+    const ownedBands = dedupeBandsById(allBands.filter((row) => row.owner_id === userId));
+    if (ownedBands.length > 0) {
+        const bandRows = ownedBands.map(bandRowsForSupabase);
+        const r = await supabase.from('bands').upsert(bandRows, { onConflict: 'id' });
         throwIfSupabaseError(r.error, 'Envio de bandas');
+        const memberRows = ownedBands.map((band) => ({
+            band_id: band.id,
+            profile_id: userId,
+            role: band.role || 'admin',
+        }));
+        const rM = await supabase.from('band_members').upsert(memberRows, { onConflict: 'band_id,profile_id' });
+        throwIfSupabaseError(rM.error, 'Envio de vínculos banda/membro');
     }
     console.log('✅ Sync Out Ok');
 };
@@ -220,19 +241,27 @@ export const pullFromCloud = async (userId) => {
             }
         }
     }
-    // 3. Bandas
-    const { data: b, error: eBands } = await supabase.from('my_bands').select('*').eq('creator_id', userId);
+    // 3. Bandas — mesmo critério que BandView.fetchBands (band_members + bands)
+    const { data: bandJoin, error: eBands } = await supabase
+        .from('band_members')
+        .select('role, bands (*)')
+        .eq('profile_id', userId);
     throwIfSupabaseError(eBands, 'Download de bandas');
-    if (b) {
-        for (const item of b) {
+    if (bandJoin?.length) {
+        const cloudList = bandJoin.filter((i) => i.bands).map((i) => {
+            const br = i.bands;
+            const code = (br.invite_code || '').toUpperCase();
+            return {
+                ...br,
+                role: i.role,
+                is_solo: code.startsWith('SOLO'),
+            };
+        });
+        for (const item of cloudList) {
             if (item.is_solo) {
                 const hasSolo = await db.my_bands.where('is_solo').equals(1).first();
-                if (hasSolo) {
-                    if (hasSolo.id !== item.id) {
-                        await db.my_bands.delete(hasSolo.id);
-                        await db.my_bands.put(item);
-                    }
-                    continue;
+                if (hasSolo && hasSolo.id !== item.id) {
+                    await db.my_bands.delete(hasSolo.id);
                 }
             }
             await db.my_bands.put(item);
