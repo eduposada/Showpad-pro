@@ -1,5 +1,5 @@
 import axios from 'axios';
-import * as cheerio from 'cheerio';
+import { load } from 'cheerio';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
@@ -12,6 +12,47 @@ function isAllowedCifraClubUrl(urlString) {
     } catch {
         return false;
     }
+}
+
+function readStreamToString(req) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        req.on('data', (c) => chunks.push(c));
+        req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+        req.on('error', reject);
+    });
+}
+
+async function getPostJson(req) {
+    if (req.body !== undefined && req.body !== null) {
+        if (typeof req.body === 'string') {
+            try {
+                return JSON.parse(req.body);
+            } catch {
+                return {};
+            }
+        }
+        if (Buffer.isBuffer(req.body)) {
+            try {
+                return JSON.parse(req.body.toString('utf8'));
+            } catch {
+                return {};
+            }
+        }
+        if (typeof req.body === 'object') {
+            return { ...req.body };
+        }
+    }
+    const len = Number(req.headers['content-length'] || 0);
+    if (req.method === 'POST' && len > 0) {
+        try {
+            const raw = await readStreamToString(req);
+            return JSON.parse(raw || '{}');
+        } catch {
+            return {};
+        }
+    }
+    return {};
 }
 
 export default async function handler(req, res) {
@@ -27,15 +68,8 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Método não permitido' });
     }
 
-    let body = req.body;
-    if (typeof body === 'string') {
-        try {
-            body = JSON.parse(body || '{}');
-        } catch {
-            return res.status(400).json({ error: 'JSON inválido' });
-        }
-    }
-    const { url } = body || {};
+    const body = await getPostJson(req);
+    const { url } = body;
 
     if (!url || typeof url !== 'string' || !isAllowedCifraClubUrl(url)) {
         return res.status(400).json({ error: 'URL inválida. Use apenas links https do Cifra Club.' });
@@ -43,12 +77,17 @@ export default async function handler(req, res) {
 
     try {
         const { data } = await axios.get(url, {
-            headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' },
+            headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
             timeout: 9000,
             maxRedirects: 5,
+            validateStatus: (s) => s < 500,
         });
 
-        const $ = cheerio.load(data);
+        if (typeof data !== 'string' || !data.includes('<')) {
+            return res.status(502).json({ error: 'Resposta inesperada do Cifra Club.' });
+        }
+
+        const $ = load(data);
         let title = $('h1.t1').text().trim() || $('h1').first().text().trim();
         let artist = $('.header-main-subtitle').text().trim() || $('h2.t3').text().trim() || $('.t3').text().trim();
 

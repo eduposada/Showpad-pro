@@ -2,44 +2,20 @@ import React, { useState } from 'react';
 import { X, ClipboardPaste, Loader2, DownloadCloud } from 'lucide-react';
 import { db } from './ShowPadCore';
 
-async function scrapeViaApi(url) {
-    const response = await fetch('/api/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-    });
-    let data = {};
-    try {
-        data = await response.json();
-    } catch {
-        data = {};
-    }
-    if (!response.ok) {
-        return { ok: false, error: data.error || `Servidor retornou ${response.status}` };
-    }
-    const content = data.content != null ? String(data.content).trim() : '';
-    if (!content) {
-        return { ok: false, error: data.error || 'Cifra vazia na resposta do servidor.' };
-    }
-    return {
-        ok: true,
-        title: (data.title || '').trim() || 'Música',
-        artist: (data.artist || '').trim() || 'Artista',
-        content,
-    };
+/** Base do deploy (ex.: https://meu-app.vercel.app). Em dev, use .env: VITE_API_SCRAPE_URL=... para usar a API da Vercel. */
+function getScrapeApiUrl() {
+    const raw = (import.meta.env.VITE_API_SCRAPE_URL || '').trim().replace(/\/$/, '');
+    if (!raw) return '/api/scrape';
+    if (raw.includes('/api/scrape')) return raw;
+    return `${raw}/api/scrape`;
 }
 
-async function scrapeViaCorsproxy(url) {
-    const response = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`);
-    if (!response.ok) {
-        return { ok: false, error: 'Falha na conexão (proxy).' };
-    }
-    const html = await response.text();
+function parseHtmlCifra(html) {
     const titleMatch = html.match(/<h1 class="t1">([^<]+)<\/h1>/) || html.match(/<h1[^>]*>([^<]+)<\/h1>/);
     const artistMatch = html.match(/<h2 class="t3">([^<]+)<\/h2>/) || html.match(/<a[^>]*js-main-artist[^>]*>([^<]+)<\/a>/);
     const contentMatch = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
     if (!contentMatch) {
-        return { ok: false, error: 'Cifra não encontrada no HTML (proxy).' };
+        return { ok: false, error: 'Cifra não encontrada no HTML.' };
     }
     return {
         ok: true,
@@ -47,6 +23,64 @@ async function scrapeViaCorsproxy(url) {
         artist: artistMatch ? artistMatch[1].trim() : 'Artista',
         content: contentMatch[1].replace(/<[^>]*>/g, '').trim(),
     };
+}
+
+async function scrapeViaApi(endpoint, url) {
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url }),
+        });
+        let data = {};
+        try {
+            data = await response.json();
+        } catch {
+            data = {};
+        }
+        if (!response.ok) {
+            return { ok: false, error: data.error || `API: ${response.status}` };
+        }
+        const content = data.content != null ? String(data.content).trim() : '';
+        if (!content) {
+            return { ok: false, error: data.error || 'Cifra vazia na resposta do servidor.' };
+        }
+        return {
+            ok: true,
+            title: (data.title || '').trim() || 'Música',
+            artist: (data.artist || '').trim() || 'Artista',
+            content,
+        };
+    } catch (e) {
+        return { ok: false, error: e.message || 'Falha de rede na API.' };
+    }
+}
+
+async function scrapeViaCorsproxy(url) {
+    try {
+        const response = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`);
+        const text = await response.text();
+        if (!response.ok) {
+            try {
+                const j = JSON.parse(text);
+                if (j.error) return { ok: false, error: `Proxy: ${j.error}` };
+            } catch {
+                /* ignore */
+            }
+            return { ok: false, error: `Proxy HTTP ${response.status}` };
+        }
+        try {
+            const j = JSON.parse(text);
+            if (j.error && !text.includes('<pre')) {
+                return { ok: false, error: `Proxy: ${j.error}` };
+            }
+        } catch {
+            /* HTML esperado */
+        }
+        return parseHtmlCifra(text);
+    } catch (e) {
+        return { ok: false, error: e.message || 'Falha no proxy.' };
+    }
 }
 
 export const GarimpoView = ({ styles, refresh, session }) => {
@@ -80,7 +114,8 @@ export const GarimpoView = ({ styles, refresh, session }) => {
 
                 setStatus(`Garimpando: ${musicaFallback}...`);
 
-                let result = await scrapeViaApi(url);
+                const apiUrl = getScrapeApiUrl();
+                let result = await scrapeViaApi(apiUrl, url);
                 if (!result.ok) {
                     result = await scrapeViaCorsproxy(url);
                 }
@@ -120,7 +155,11 @@ export const GarimpoView = ({ styles, refresh, session }) => {
             );
         } else if (failed.length > 0) {
             setStatus('❌ Nenhuma música importada.');
-            alert(failed.map((f) => `${f.reason}\n${f.url}`).join('\n\n'));
+            const hint =
+                import.meta.env.DEV && !import.meta.env.VITE_API_SCRAPE_URL
+                    ? '\n\nDica (dev): no .env crie VITE_API_SCRAPE_URL=https://seu-app.vercel.app para usar a API do deploy.'
+                    : '';
+            alert(`${failed.map((f) => `${f.reason}\n${f.url}`).join('\n\n')}${hint}`);
         } else {
             setStatus('');
         }

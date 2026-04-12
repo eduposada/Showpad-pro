@@ -2,6 +2,15 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.4.3] - 2026-04-12
+
+### Corrigido
+
+- Garimpo: `api/scrape` agora lê o corpo JSON de forma robusta (objeto, string, buffer ou stream), evitando `url` vazia na Vercel.
+- Runtime explícito `nodejs20.x` para a função serverless; Cheerio via `import { load }`.
+- Cliente: `scrapeViaApi` e proxy com `try/catch` para o fallback ao corsproxy sempre correr; mensagens quando o proxy devolve JSON de erro (ex.: 403 plano corsproxy.io).
+- Desenvolvimento local: variável opcional `VITE_API_SCRAPE_URL` (base do deploy) para o Garimpo usar `POST /api/scrape` na Vercel enquanto o Vite não expõe essa rota.
+
 ## [8.4.2] - 2026-04-12
 
 ### Corrigido
