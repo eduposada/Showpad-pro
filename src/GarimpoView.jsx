@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, ClipboardPaste, Loader2, DownloadCloud } from 'lucide-react';
 import { db } from './ShowPadCore';
 
-/** Mesmo caminho que na Vercel. No dev, o Vite (vite.config) faz proxy para VITE_API_SCRAPE_URL se estiver no .env. */
+/** Mesmo caminho que na Vercel. No dev, o plugin Vite atende POST /api/scrape localmente (api/scrapeCore). */
 const SCRAPE_API_PATH = '/api/scrape';
 
 function parseHtmlCifra(html) {
@@ -45,7 +45,7 @@ async function scrapeViaApi(endpoint, url) {
                 return {
                     ok: false,
                     error:
-                        'A API devolveu HTML em vez de JSON. No dev: crie .env com VITE_API_SCRAPE_URL=https://seu-app.vercel.app e reinicie o npm run dev.',
+                        'A API devolveu HTML em vez de JSON. Reinicie o npm run dev e confira o terminal (plugin Garimpo).',
                 };
             }
             data = {};
@@ -175,11 +175,7 @@ export const GarimpoView = ({ styles, refresh, session }) => {
             );
         } else if (failed.length > 0) {
             setStatus('❌ Nenhuma música importada.');
-            const hint =
-                import.meta.env.DEV && !import.meta.env.VITE_API_SCRAPE_URL
-                    ? '\n\nDica (dev): no .env defina VITE_API_SCRAPE_URL=https://seu-app.vercel.app (sem / no fim) e reinicie o Vite — o proxy usa o mesmo /api/scrape que na Vercel.'
-                    : '';
-            alert(`${failed.map((f) => `${f.reason}\n${f.url}`).join('\n\n')}${hint}`);
+            alert(failed.map((f) => `${f.reason}\n${f.url}`).join('\n\n'));
         } else {
             setStatus('');
         }

@@ -2,6 +2,17 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.4.4] - 2026-04-11
+
+### Corrigido
+
+- Garimpo no `npm run dev`: rota **POST /api/scrape** servida no próprio Vite (plugin + `api/scrapeCore.js`), mesma lógica que `api/scrape.js` na Vercel — deixa de depender de proxy/`VITE_API_SCRAPE_URL`.
+
+### Alterado
+
+- `api/scrape.js` passa a delegar a `scrapeCore.js`; `.env.example` e mensagens do Garimpo atualizados.
+- Processo de release: regras em `.cursor/rules/release-versioning.mdc`, `.cursorrules`, `GIT_WORKFLOW.md` e `AGENTS.md` — em cada tag, alinhar `CHANGELOG`, `package.json`, lockfile e versão na UI (`InfoModal`).
+
 ## [8.4.3] - 2026-04-12
 
 ### Corrigido

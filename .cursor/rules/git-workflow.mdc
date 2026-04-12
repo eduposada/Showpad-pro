@@ -10,6 +10,8 @@ alwaysApply: true
 - **Criar tags:** **só** após o usuário **confirmar por escrito** que está tudo ok e que quer marcar uma versão estável. Não criar nem enviar tags ao fim de tarefas sem essa confirmação. Quando autorizado, usar:
   - `git tag -a <nome> -m "descrição"`
   - `git push origin <tag>` (ou `--tags` se combinado)
+- **Antes da tag de release:** sincronizar `CHANGELOG.md`, `package.json` (e lockfile se necessário), versão na UI (`InfoModal.jsx`) — ver `.cursor/rules/release-versioning.mdc`.
+- **Ratificação de release:** quando o usuário disser que uma versão está **estável** e pronta para release, **lembrá-lo** de criar a tag (sem criar a tag até ele pedir explicitamente, alinhado à regra anterior).
 - **Recuperar uma versão antiga para desenvolver:** sugerir `git checkout -b <nova-branch> <tag>` em vez de *checkout* direto na tag.
 - **Antes de operações Git mais complexas** (merge, rebase, reset, force push, etc.): lembrar de verificar o estado com `git status` e `git branch` (e, se útil, `git log --oneline -5`).
 

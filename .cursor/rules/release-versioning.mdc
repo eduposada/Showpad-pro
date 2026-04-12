@@ -1,0 +1,19 @@
+---
+description: Sincronizar versão, CHANGELOG e tag em cada release
+alwaysApply: true
+---
+
+# Versão, CHANGELOG e tag de release (ShowPad Pro)
+
+Sempre que o mantenedor pedir **criar uma tag de release** (só após confirmação explícita; ver regras de Git em `git-workflow.mdc`):
+
+1. **`CHANGELOG.md`:** garantir que existe uma secção `## [X.Y.Z] - AAAA-MM-DD` com as alterações que essa release inclui (log de desenvolvimento visível no repositório).
+2. **Versão na UI:** alinhar o texto mostrado ao utilizador (ex.: `src/InfoModal.jsx` — «Versão atual: vX.Y.Z») com `X.Y.Z`.
+3. **`package.json`:** campo `"version"` = `X.Y.Z` (semver, **sem** prefixo `v`). Atualizar também as entradas de versão do pacote em `package-lock.json` se o projeto as mantiver sincronizadas.
+4. **Commit:** incluir estas alterações no mesmo commit da release (ou num commit dedicado imediatamente antes da tag), para o histórico bater certo com a etiqueta.
+5. **Tag:** `git tag -a vX.Y.Z -m "Release vX.Y.Z: …"` no commit correto.
+6. **Push:** quando combinado, `git push origin main` (ou a branch de release) e `git push origin vX.Y.Z`.
+
+Não deixar tag, interface e changelog com números diferentes. Não criar tag sem pedido explícito do mantenedor.
+
+Referência humana: `GIT_WORKFLOW.md` (secção de release).

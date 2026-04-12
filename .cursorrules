@@ -1,0 +1,99 @@
+# ShowPad Pro — Cursor Rules
+
+## Visão Geral do Projeto
+
+ShowPad Pro é uma aplicação web para músicos gerenciarem repertórios, cifras e setlists em tempo real. Resolve problemas de sincronização entre dispositivos e oferece transposição musical e automação MIDI para performance ao vivo.
+
+Stack: React + Vite (SPA) hospedado na Vercel. Backend: Supabase (Auth + PostgreSQL). Banco local: Dexie.js (IndexedDB). Estilização: CSS-in-JS via objeto centralizado em Styles.js. CI/CD: Vercel ligado ao GitHub.
+
+Público-alvo: músicos solo, bandas e diretores musicais.
+
+---
+
+## Princípios Gerais
+
+- Leia o contexto completo antes de sugerir qualquer alteração.
+- Trabalhe de forma incremental. Prefira mudanças pequenas e localizadas com explicação clara do impacto.
+- Nunca refatore tudo nem reescreva arquivos grandes sem necessidade explícita.
+- Quando tiver dúvida sobre regra de negócio ou comportamento desejado, pergunte antes de assumir qualquer coisa.
+- Nunca introduza comportamentos que possam causar perda de dados ou duplicidade silenciosa.
+
+---
+
+## Limites Técnicos
+
+- Arquivos com no máximo ~250–300 linhas. Dividir em módulos menores se necessário.
+- Funções com responsabilidade única. Evitar funções que misturem sync, lógica de negócio e renderização de UI.
+- Não introduzir novas dependências sem justificar claramente e verificar se não é possível resolver com o que já existe.
+- Não migrar para outro framework (Next.js, TypeScript etc.) sem orientação explícita.
+- Linguagem: JavaScript (JSX). Sem TypeScript por ora.
+
+---
+
+## Arquitetura e Organização
+
+- Lógica de banco local (Dexie), sincronização e lógica musical ficam em ShowPadCore.js ou módulos designados. Não espalhar lógica de sync em componentes de UI.
+- Estilos: usar somente o objeto `styles` definido em Styles.js. Não criar CSS externo, styled-components ou inline styles avulsos.
+- Organizar código por funcionalidade em src/features/ (auth, garimpo, bandas, shows).
+- Componentes verdadeiramente genéricos vão em src/components/.
+- Autenticação via Supabase Auth com Email/Senha e Google OAuth. Não alterar fluxo de login sem considerar impacto na criação/verificação de Banda Solo.
+
+---
+
+## Regras de Negócio Críticas
+
+### Banda Solo
+- Cada usuário tem no máximo uma Banda Solo (is_solo: true).
+- No primeiro login (email ou Google), criar automaticamente a Banda Solo se não existir.
+- Antes de criar, verificar se já existe. Nunca duplicar.
+- Em sync: preservar sempre a banda solo local. Descartar versão conflitante da nuvem.
+
+### Case Sensitivity e Cifras
+- Nunca normalizar títulos ou artistas para uppercase/lowercase.
+- A grafia original do usuário deve ser preservada em todas as operações, incluindo Garimpo, edição e sync.
+
+### Transposição Musical
+- Lógica de transposição baseada em chordRegex e scale de 12 semitons.
+- Não misturar lógica de transposição com código de UI.
+- Ao propor alterações, explicar impacto na detecção de acordes e no conteúdo do campo content.
+
+### Sincronização Dexie ↔ Supabase
+- Nunca usar o ID numérico do Dexie como PK na nuvem.
+- Antes de enviar ao Supabase: remover IDs locais do Dexie e permitir que o Supabase gere UUIDs.
+- Garantir que não haja registros duplicados e que dados mais antigos não sobrescrevam dados mais novos.
+- Preferir o registro com updated_at mais recente em caso de conflito.
+- Banda solo local sempre prevalece sobre versão da nuvem.
+
+---
+
+## Modelo de Dados (referência rápida)
+
+Tabela songs: id (uuid PK), title, artist, content, bpm, creator_id (FK users)
+Tabela setlists: id (uuid PK), title, location, time, notes, songs (jsonb), creator_id, band_id
+Tabela bands: id (uuid PK), name, invite_code, owner_id, is_solo (boolean), logo_url, description
+
+Acesso filtrado via RLS no Supabase com base em creator_id e band_id.
+
+---
+
+## O que a IA NÃO deve fazer sem autorização explícita
+
+- Alterar modelo de dados no Supabase (tabelas, colunas, tipos).
+- Modificar profundamente o fluxo de sincronização Dexie ↔ Supabase.
+- Remover ou alterar campos de: Banda Solo (is_solo, invite_code), transposição e detecção de acordes, identificadores de usuário (creator_id, owner_id, band_id).
+- Introduzir novos provedores de autenticação.
+- Reescrever completamente ShowPadCore.js ou módulos centrais sem pedido explícito.
+
+---
+
+## Convenções de Commit
+
+feat: / fix: / refactor: / chore: / docs:
+
+## Versão e releases (tags)
+
+- Só criar ou enviar **tag** após o mantenedor **confirmar por escrito** (ver também `GIT_WORKFLOW.md`).
+- Em **cada tag de release**: atualizar **`CHANGELOG.md`** (secção `[X.Y.Z]` com data e notas), **`package.json`** / `package-lock.json` (`version`), e a **versão na UI** (ex.: `InfoModal.jsx`). O commit que leva a tag deve refletir esses números; não deixar tag, changelog e ecrã desalinhados.
+- Regras detalhadas para o Cursor: `.cursor/rules/release-versioning.mdc` e `.cursor/rules/git-workflow.mdc`.
+
+Histórico de tags anteriores (referência): v8.1 (estabilidade Sync e Garimpo), v8.2 (estável sem duplicidade de bandas).
