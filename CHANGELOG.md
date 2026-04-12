@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.4.9] - 2026-04-12
+
+### Adicionado
+
+- **Fase A (plano bandas/repertório):** migração SQL em `supabase/migrations/` — tabelas `band_join_requests` e `band_repertoire_proposals`, funções `is_band_member` / `is_band_admin`, RLS, coluna opcional `band_broadcasts.kind`; instruções em `supabase/README.md`. O código da app ainda **não** usa estas tabelas (Fase B em diante).
+
 ## [8.4.8] - 2026-04-11
 
 ### Release estável
