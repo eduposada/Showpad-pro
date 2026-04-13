@@ -54,6 +54,22 @@ Se a query com `profiles(full_name, email)` falhar no log, executa também:
 
 ## Shows da banda (`setlists.band_id`) e SYNC
 
+### Se já tens `band_id` e só uma política “cada um vê os seus” — faz isto
+
+1. Abre o **Supabase** do projeto → menu **SQL Editor** (ícone de base de dados / “SQL”).
+2. Abre no repositório o ficheiro  
+   **[migrations/20260414120000_setlists_rls_own_and_band.sql](migrations/20260414120000_setlists_rls_own_and_band.sql)**  
+   copia **todo** o conteúdo e cola no SQL Editor.
+3. Clica **Run** (executar). Se aparecer erro do tipo *policy does not exist* no `DROP`, é normal — significa que o nome da política antiga é outro. Nesse caso: **Table Editor** → tabela **`setlists`** → separador **Policies** → apaga manualmente a política que diz “own setlists” / “only see their own” → volta a correr o script (ou apaga só as linhas `DROP POLICY` que falharam e corre o resto).
+
+**O que o script faz, em linguagem simples**
+
+- **Antes:** a regra dizia “só vejo linhas em que eu sou o `creator_id`”. Quem subiu o show da banda foi outro utilizador → tu **não** vias essa linha.
+- **Depois:** continuas a ver as tuas linhas **e** passas a ver linhas com **`band_id`** de qualquer banda em que estás em **`band_members`** (a mesma banda do ShowPad).
+- **Escrever / apagar:** continua a ser só nas linhas em que **tu** és o `creator_id` (como a app já envia no upload).
+
+---
+
 A app (**v8.5.3+**) faz:
 
 - **UPLOAD:** `upsert` em `setlists` com `creator_id = auth.uid()` (quem está logado) e, para shows da banda, **`band_id`** preenchido com o uuid da banda.
