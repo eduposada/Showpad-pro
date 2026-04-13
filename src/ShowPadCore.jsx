@@ -141,9 +141,9 @@ function dedupeSetlistsForCloudUpsert(rows, userId) {
     const out = [];
     for (const row of sorted) {
         const { id, ...rest } = row;
-        // Shows com band_id pertencem ao dono da banda na nuvem — membros puxam por `band_id`, não por `creator_id` do admin.
-        const creatorForCloud = rest.band_id ? (rest.creator_id || userId) : userId;
-        const payload = { ...rest, creator_id: creatorForCloud };
+        // RLS típico em `setlists`: só permite escrever linhas com creator_id = auth.uid().
+        // Membros continuam a receber shows da banda pelo pull em `band_id` (não depende deste campo na leitura).
+        const payload = { ...rest, creator_id: userId };
         const key = `${payload.title}\0${payload.creator_id}`;
         if (seen.has(key)) continue;
         seen.add(key);

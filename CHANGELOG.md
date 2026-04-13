@@ -2,12 +2,18 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.5.4] - 2026-04-13
+
+### Corrigido
+
+- **UPLOAD / `setlists`:** o envio voltou a gravar `creator_id` como o utilizador autenticado na nuvem. A tentativa anterior (manter o dono local na coluna `creator_id` em shows com `band_id`) fazia o Postgres rejeitar linhas com política RLS típica (`creator_id = auth.uid()`). Os shows da banda seguem identificados por **`band_id`** no pull; o Dexie local continua com o `creator_id` que já tinhas ao criar o show.
+
 ## [8.5.3] - 2026-04-13
 
 ### Corrigido
 
 - **Editor de show da banda:** lista “Repertório” voltou a encher-se usando `band_repertoire` no Supabase (o pull da Fase D deixou de popular `band_songs`; o editor ainda filtrava só por Dexie).
-- **SYNC shows da banda:** no envio à nuvem, `creator_id` de setlists com `band_id` mantém-se o do dono do show na base local (ex.: `owner_id`), em vez de ser sobrescrito pelo utilizador que carrega no **UPLOAD**. No **SYNC**, após carregar bandas, o cliente também descarrega `setlists` com `band_id` nas bandas não solo em que o utilizador é membro (requer RLS no Supabase — ver `supabase/README.md`).
+- **SYNC shows da banda:** no **SYNC**, após carregar bandas, o cliente também descarrega `setlists` com `band_id` nas bandas não solo em que o utilizador é membro (requer RLS no Supabase — ver `supabase/README.md`).
 
 ### Alterado
 

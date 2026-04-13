@@ -54,7 +54,7 @@ Se a query com `profiles(full_name, email)` falhar no log, executa também:
 
 ## Shows da banda (`setlists.band_id`) e SYNC
 
-A partir da **v8.5.3**, o cliente faz **pull** de linhas em `setlists` com `band_id` pertencente a bandas em que o utilizador é membro (além dos shows pessoais `creator_id = auth.uid()`).
+A partir da **v8.5.3**, o cliente faz **pull** de linhas em `setlists` com `band_id` pertencente a bandas em que o utilizador é membro (além dos shows pessoais `creator_id = auth.uid()`). No **upload**, o cliente grava `creator_id = auth.uid()` nas linhas enviadas (exigência habitual de RLS); o vínculo à banda fica em **`band_id`**.
 
 Para os **membros** receberem na prática estes registos, a tabela `setlists` no Supabase precisa de **RLS** que permita `SELECT` quando `band_id` está numa banda onde existe linha em `band_members` para `auth.uid()`. Sem isso, a query devolve erro ou lista vazia — o código regista um aviso na consola e continua.
 
