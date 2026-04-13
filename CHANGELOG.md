@@ -2,6 +2,13 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.5.9] - 2026-04-14
+
+### Corrigido
+
+- **UPLOAD:** `await db.setlists.toArray().filter` era inválido (`toArray()` devolve Promise) — corrigido para `(await db.setlists.toArray()).filter(...)`.
+- **SYNC shows da banda:** deduplicação na leitura da nuvem por `band_id` + `title` (mantém a linha com `updated_at` mais recente) e fusão no Dexie de cópias locais duplicadas do mesmo show, para deixar de aparecerem dois com o mesmo nome após sync.
+
 ## [8.5.8] - 2026-04-14
 
 ### Adicionado

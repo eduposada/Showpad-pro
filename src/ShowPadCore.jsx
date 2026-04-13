@@ -117,16 +117,61 @@ function normalizeSetlistSongsFromApi(raw) {
     return [];
 }
 
-/**
- * Preenche `content` (e `bpm` se faltar) em `setlist.songs` via `band_repertoire`
- * quando a setlist tem `band_id` e algum item veio só com título/referência — típico após SYNC para outro membro.
- */
+/** Na resposta do Supabase, mais do que uma linha por banda+título → ficar com a mais recente (`updated_at`). */
+function dedupeCloudBandSetlistsByTitle(rows) {
+    const list = [...(rows || [])].filter((r) => r && r.band_id && r.title);
+    list.sort((a, b) => {
+        const ta = new Date(a.updated_at || 0).getTime();
+        const tb = new Date(b.updated_at || 0).getTime();
+        return tb - ta;
+    });
+    const seen = new Set();
+    const out = [];
+    for (const r of list) {
+        const k = `${r.band_id}::${r.title}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(r);
+    }
+    return out;
+}
+
+/** Várias cópias locais do mesmo show (mesma banda + título): manter só o registo com maior `id` Dexie. */
+async function mergeDexieDuplicateBandSetlists(bandId) {
+    const locals = await db.setlists.where('band_id').equals(bandId).toArray();
+    const byTitle = new Map();
+    for (const loc of locals) {
+        const ttl = loc.title;
+        if (!ttl) continue;
+        const arr = byTitle.get(ttl) || [];
+        arr.push(loc);
+        byTitle.set(ttl, arr);
+    }
+    for (const arr of byTitle.values()) {
+        if (arr.length < 2) continue;
+        arr.sort((a, b) => {
+            const ar = a.revoked_by_admin ? 1 : 0;
+            const br = b.revoked_by_admin ? 1 : 0;
+            if (ar !== br) return ar - br;
+            return (Number(a.id) || 0) - (Number(b.id) || 0);
+        });
+        const keep = arr[arr.length - 1];
+        for (let i = 0; i < arr.length - 1; i += 1) {
+            if (arr[i].id !== keep.id) await db.setlists.delete(arr[i].id);
+        }
+    }
+}
+
 /** Remove na nuvem todas as linhas de setlist dessa banda com o mesmo título (admin). */
 export async function deleteBandSetlistFromCloud(bandId, title) {
     if (!supabase || !bandId || !title) return { error: new Error('Parâmetros em falta.') };
     return supabase.from('setlists').delete().eq('band_id', bandId).eq('title', title);
 }
 
+/**
+ * Preenche `content` (e `bpm` se faltar) em `setlist.songs` via `band_repertoire`
+ * quando a setlist tem `band_id` e algum item veio só com título/referência — típico após SYNC para outro membro.
+ */
 export async function hydrateBandSetlistSongsFromRepertoire(setlist) {
     if (!supabase || !setlist?.band_id) return setlist;
     const songsNorm = normalizeSetlistSongsFromApi(setlist.songs);
@@ -280,7 +325,7 @@ export const pushToCloud = async (userId) => {
             await db.setlists.update(row.id, { songs: h.songs });
         }
     }
-    sl = await db.setlists.toArray().filter((r) => !r.revoked_by_admin);
+    sl = (await db.setlists.toArray()).filter((r) => !r.revoked_by_admin);
     if (sl.length > 0) {
         const cleanSl = dedupeSetlistsForCloudUpsert(sl, userId);
         const r = await supabase.from('setlists').upsert(cleanSl, { onConflict: 'title,creator_id' });
@@ -376,7 +421,7 @@ export const pullFromCloud = async (userId) => {
         if (eBandShows) {
             console.warn('Download de shows da banda:', eBandShows.message || eBandShows);
         } else {
-            const bandShowsSafe = bandShows || [];
+            const bandShowsSafe = dedupeCloudBandSetlistsByTitle(bandShows || []);
             for (const item of bandShowsSafe) {
                 const rest = { ...item };
                 delete rest.id;
@@ -432,6 +477,7 @@ export const pullFromCloud = async (userId) => {
                         await db.setlists.update(loc.id, { revoked_by_admin: false });
                     }
                 }
+                await mergeDexieDuplicateBandSetlists(bid);
             }
         }
     }
