@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.5.6] - 2026-04-14
+
+### Corrigido
+
+- **Shows da banda no outro membro:** as entradas em `setlist.songs` podiam chegar só com título/`id` (sem `content`), porque vinham da biblioteca local de outro utilizador. A app passa a **hidratar** a partir de `band_repertoire` no **SYNC** (pull) e ao **UPLOAD** (antes do upsert), e ao abrir o **editor** do show. Ao adicionar música ao show da banda, grava-se **snapshot** (`title`, `artist`, `content`, `bpm`) para a nuvem levar a cifra.
+
 ## [8.5.5] - 2026-04-13
 
 ### Alterado

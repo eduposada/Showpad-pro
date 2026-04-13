@@ -98,6 +98,49 @@ export const pullBandChanges = async (bandId) => {
     return data || [];
 };
 
+function repertoireMapKey(title, artist) {
+    return `${String(title ?? '').trim()}::${String(artist ?? '').trim()}`;
+}
+
+/**
+ * Preenche `content` (e `bpm` se faltar) em `setlist.songs` via `band_repertoire`
+ * quando a setlist tem `band_id` e algum item veio só com título/referência — típico após SYNC para outro membro.
+ */
+export async function hydrateBandSetlistSongsFromRepertoire(setlist) {
+    if (!supabase || !setlist?.band_id || !Array.isArray(setlist.songs) || setlist.songs.length === 0) {
+        return setlist;
+    }
+    const needsHydration = setlist.songs.some((s) => {
+        if (!s || typeof s !== 'object') return false;
+        const c = s.content;
+        return c == null || String(c).trim() === '';
+    });
+    if (!needsHydration) return setlist;
+
+    const { data, error } = await supabase
+        .from('band_repertoire')
+        .select('title, artist, content, bpm')
+        .eq('band_id', setlist.band_id);
+    if (error || !data?.length) return setlist;
+
+    const repMap = new Map(data.map((r) => [repertoireMapKey(r.title, r.artist), r]));
+
+    const songs = setlist.songs.map((s) => {
+        if (!s || typeof s !== 'object') return s;
+        if (s.content != null && String(s.content).trim() !== '') return s;
+        const r = repMap.get(repertoireMapKey(s.title, s.artist));
+        if (!r) return s;
+        return {
+            ...s,
+            title: s.title ?? r.title,
+            artist: s.artist ?? r.artist,
+            content: r.content ?? '',
+            bpm: s.bpm ?? r.bpm ?? 120,
+        };
+    });
+    return { ...setlist, songs };
+}
+
 export const deleteBandComplete = async (bandId) => {
     if (!supabase) return;
     await supabase.from('bands').delete().eq('id', bandId);
@@ -205,8 +248,16 @@ export const pushToCloud = async (userId) => {
         const r = await supabase.from('songs').upsert(cleanSongs, { onConflict: 'title,artist,creator_id' });
         throwIfSupabaseError(r.error, 'Envio de músicas');
     }
-    // 2. Setlists
-    const sl = await db.setlists.toArray();
+    // 2. Setlists — garantir cifra em `songs` nos shows de banda antes do upsert
+    let sl = await db.setlists.toArray();
+    for (const row of sl) {
+        if (!row.band_id) continue;
+        const h = await hydrateBandSetlistSongsFromRepertoire(row);
+        if (JSON.stringify(row.songs ?? []) !== JSON.stringify(h.songs ?? [])) {
+            await db.setlists.update(row.id, { songs: h.songs });
+        }
+    }
+    sl = await db.setlists.toArray();
     if (sl.length > 0) {
         const cleanSl = dedupeSetlistsForCloudUpsert(sl, userId);
         const r = await supabase.from('setlists').upsert(cleanSl, { onConflict: 'title,creator_id' });
@@ -308,25 +359,26 @@ export const pullFromCloud = async (userId) => {
                 const bid = rest.band_id;
                 const ttl = rest.title;
                 if (!bid || !ttl) continue;
+                const hydrated = await hydrateBandSetlistSongsFromRepertoire(rest);
                 const ex = await db.setlists.where('band_id').equals(bid).filter((row) => row.title === ttl).first();
                 if (!ex) {
-                    await db.setlists.add({ ...rest });
+                    await db.setlists.add({ ...hydrated });
                     continue;
                 }
-                const remoteTs = rest.updated_at ? new Date(rest.updated_at).getTime() : 0;
+                const remoteTs = hydrated.updated_at ? new Date(hydrated.updated_at).getTime() : 0;
                 const localTs = ex.updated_at ? new Date(ex.updated_at).getTime() : 0;
-                const remoteSongs = JSON.stringify(rest.songs ?? null);
+                const remoteSongs = JSON.stringify(hydrated.songs ?? null);
                 const localSongs = JSON.stringify(ex.songs ?? null);
                 if (remoteTs > localTs || remoteSongs !== localSongs) {
                     await db.setlists.update(ex.id, {
-                        location: rest.location,
-                        time: rest.time,
-                        members: rest.members,
-                        notes: rest.notes,
-                        songs: rest.songs,
-                        band_id: rest.band_id,
-                        creator_id: rest.creator_id,
-                        ...(rest.updated_at ? { updated_at: rest.updated_at } : {}),
+                        location: hydrated.location,
+                        time: hydrated.time,
+                        members: hydrated.members,
+                        notes: hydrated.notes,
+                        songs: hydrated.songs,
+                        band_id: hydrated.band_id,
+                        creator_id: hydrated.creator_id,
+                        ...(hydrated.updated_at ? { updated_at: hydrated.updated_at } : {}),
                     });
                 }
             }

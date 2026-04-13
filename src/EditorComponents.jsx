@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2, ArrowUp, ArrowDown, Plus, X, Monitor, Music, ChevronUp, ChevronDown } from 'lucide-react';
-import { db, transposeContent, supabase } from './ShowPadCore';
+import { db, transposeContent, supabase, hydrateBandSetlistSongsFromRepertoire } from './ShowPadCore';
 
 export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, refresh, styles }) => {
   const [lC, setLC] = useState(item.data.content || "");
@@ -66,6 +66,21 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
     run();
     return () => { cancelled = true; };
   }, [item.type, item.data.band_id, item.data.id, bands]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const data = item.data;
+    (async () => {
+      if (item.type !== 'setlist' || !data.band_id || !supabase) return;
+      const h = await hydrateBandSetlistSongsFromRepertoire(data);
+      if (cancelled) return;
+      if (JSON.stringify(data.songs ?? []) === JSON.stringify(h.songs ?? [])) return;
+      await db.setlists.update(data.id, { songs: h.songs });
+      refresh();
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh não é estável; basta reagir ao item
+  }, [item.type, item.data.id, item.data.band_id, item.data.songs]);
 
   const save = async (overideBpm) => {
     const isSong = item.type === 'song';
@@ -155,7 +170,14 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
                         {band && !band.is_solo ? `Repertório: ${band.name}` : "Biblioteca Geral"}
                     </h3>
                     {filteredSongs.map(s => (
-                        <div key={s.id} style={{padding:'8px', borderBottom:'1px solid #222', cursor:'pointer', display:'flex', justifyContent:'space-between'}} onClick={async ()=>{const n=[...(item.data.songs||[]), s]; await db.setlists.update(item.data.id,{songs:n}); refresh();}}>
+                        <div key={s.id} style={{padding:'8px', borderBottom:'1px solid #222', cursor:'pointer', display:'flex', justifyContent:'space-between'}} onClick={async ()=>{
+                            const entry = (band && !band.is_solo)
+                                ? { title: s.title, artist: s.artist, content: s.content ?? '', bpm: s.bpm ?? 120 }
+                                : { ...s };
+                            const n=[...(item.data.songs||[]), entry];
+                            await db.setlists.update(item.data.id,{songs:n});
+                            refresh();
+                        }}>
                             <span style={{fontSize:'13px'}}>{s.title}</span>
                             <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                                 <small style={{color: '#666', fontSize: '10px'}}>BPM: {s.bpm || "---"}</small>
