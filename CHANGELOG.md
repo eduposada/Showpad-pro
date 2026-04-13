@@ -2,6 +2,18 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.5.3] - 2026-04-13
+
+### Corrigido
+
+- **Editor de show da banda:** lista “Repertório” voltou a encher-se usando `band_repertoire` no Supabase (o pull da Fase D deixou de popular `band_songs`; o editor ainda filtrava só por Dexie).
+- **SYNC shows da banda:** no envio à nuvem, `creator_id` de setlists com `band_id` mantém-se o do dono do show na base local (ex.: `owner_id`), em vez de ser sobrescrito pelo utilizador que carrega no **UPLOAD**. No **SYNC**, após carregar bandas, o cliente também descarrega `setlists` com `band_id` nas bandas não solo em que o utilizador é membro (requer RLS no Supabase — ver `supabase/README.md`).
+
+### Alterado
+
+- **Bandas:** aviso laranja passa a dizer **NOVIDADES!**; área dos cards com rolagem quando há muitas bandas; pedidos de entrada mostram **foto** (`profiles.avatar_url`, se existir) e nome; badges de pedidos/propostas **abaixo** do ícone de configurações, alinhados.
+- **SINCRONIZAR AGORA** (aba Bandas): passa a chamar `pullFromCloud` + `refreshData`, alinhado ao botão **SYNC** do cabeçalho, para refletir shows e o restante na UI.
+
 ## [8.5.2] - 2026-04-12
 
 ### Alterado

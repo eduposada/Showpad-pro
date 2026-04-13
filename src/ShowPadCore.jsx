@@ -141,7 +141,9 @@ function dedupeSetlistsForCloudUpsert(rows, userId) {
     const out = [];
     for (const row of sorted) {
         const { id, ...rest } = row;
-        const payload = { ...rest, creator_id: userId };
+        // Shows com band_id pertencem ao dono da banda na nuvem — membros puxam por `band_id`, não por `creator_id` do admin.
+        const creatorForCloud = rest.band_id ? (rest.creator_id || userId) : userId;
+        const payload = { ...rest, creator_id: creatorForCloud };
         const key = `${payload.title}\0${payload.creator_id}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -250,12 +252,13 @@ export const pullFromCloud = async (userId) => {
             }
         }
     }
-    // 2. Setlists
+    // 2. Setlists pessoais (sem banda) — evita colidir com show de banda com o mesmo título
     const { data: sl, error: eSl } = await supabase.from('setlists').select('*').eq('creator_id', userId);
     throwIfSupabaseError(eSl, 'Download de shows');
     if (sl) {
         for (const item of sl) {
-            const ex = await db.setlists.where({ title: item.title }).first();
+            if (item.band_id) continue;
+            const ex = await db.setlists.filter((row) => row.title === item.title && !row.band_id).first();
             if (!ex) {
                 const { id, ...dataWithoutId } = item;
                 await db.setlists.add(dataWithoutId);
@@ -268,8 +271,9 @@ export const pullFromCloud = async (userId) => {
         .select('role, bands (*)')
         .eq('profile_id', userId);
     throwIfSupabaseError(eBands, 'Download de bandas');
+    let cloudList = [];
     if (bandJoin?.length) {
-        const cloudList = bandJoin.filter((i) => i.bands).map((i) => {
+        cloudList = bandJoin.filter((i) => i.bands).map((i) => {
             const br = i.bands;
             const code = (br.invite_code || '').toUpperCase();
             return {
@@ -286,6 +290,46 @@ export const pullFromCloud = async (userId) => {
                 }
             }
             await db.my_bands.put(item);
+        }
+    }
+    // 4. Shows vinculados às bandas (admin/owner na nuvem; membros recebem por band_id — exige RLS SELECT por membro)
+    const nonSoloBandIds = cloudList.filter((b) => !b.is_solo).map((b) => b.id);
+    if (nonSoloBandIds.length > 0) {
+        const { data: bandShows, error: eBandShows } = await supabase
+            .from('setlists')
+            .select('*')
+            .in('band_id', nonSoloBandIds);
+        if (eBandShows) {
+            console.warn('Download de shows da banda:', eBandShows.message || eBandShows);
+        } else if (bandShows?.length) {
+            for (const item of bandShows) {
+                const rest = { ...item };
+                delete rest.id;
+                const bid = rest.band_id;
+                const ttl = rest.title;
+                if (!bid || !ttl) continue;
+                const ex = await db.setlists.where('band_id').equals(bid).filter((row) => row.title === ttl).first();
+                if (!ex) {
+                    await db.setlists.add({ ...rest });
+                    continue;
+                }
+                const remoteTs = rest.updated_at ? new Date(rest.updated_at).getTime() : 0;
+                const localTs = ex.updated_at ? new Date(ex.updated_at).getTime() : 0;
+                const remoteSongs = JSON.stringify(rest.songs ?? null);
+                const localSongs = JSON.stringify(ex.songs ?? null);
+                if (remoteTs > localTs || remoteSongs !== localSongs) {
+                    await db.setlists.update(ex.id, {
+                        location: rest.location,
+                        time: rest.time,
+                        members: rest.members,
+                        notes: rest.notes,
+                        songs: rest.songs,
+                        band_id: rest.band_id,
+                        creator_id: rest.creator_id,
+                        ...(rest.updated_at ? { updated_at: rest.updated_at } : {}),
+                    });
+                }
+            }
         }
     }
     console.log('✅ Sync In Ok');

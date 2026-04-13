@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, RefreshCw, Trash2, Layout, Music, X, Settings, Save, UserMinus, Zap, MinusCircle, Hash, Radio, Bell, UserPlus, Check, Ban } from 'lucide-react';
-import { supabase, db, deleteBandComplete, broadcastBandChanges, pullBandChanges } from './ShowPadCore';
+import { supabase, db, deleteBandComplete, broadcastBandChanges, pullFromCloud } from './ShowPadCore';
 import { BandShowManager } from './BandShowManager';
 
-export const BandView = ({ session, styles, onSelectShow }) => {
+export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     const [loading, setLoading] = useState(false);
     const [bands, setBands] = useState([]);
     const [newBandName, setNewBandName] = useState('');
@@ -144,11 +144,19 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const fetchJoinRequests = async (bandId) => {
         let q = supabase
             .from('band_join_requests')
-            .select('id, band_id, profile_id, created_at, profiles(full_name, email)')
+            .select('id, band_id, profile_id, created_at, profiles(full_name, email, avatar_url)')
             .eq('band_id', bandId)
             .eq('status', 'pending')
             .order('created_at', { ascending: true });
         let { data, error } = await q;
+        if (error && ((error.message || '').includes('relationship') || (error.message || '').includes('avatar_url'))) {
+            ({ data, error } = await supabase
+                .from('band_join_requests')
+                .select('id, band_id, profile_id, created_at, profiles(full_name, email)')
+                .eq('band_id', bandId)
+                .eq('status', 'pending')
+                .order('created_at', { ascending: true }));
+        }
         if (error && (error.message || '').includes('relationship')) {
             ({ data, error } = await supabase
                 .from('band_join_requests')
@@ -179,14 +187,11 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const handlePullChanges = async () => {
         setLoading(true);
         try {
-            // Pegar IDs de todas as bandas que participo
-            const myBands = await db.my_bands.toArray();
-            for (let b of myBands) {
-                if (!b.is_solo) await pullBandChanges(b.id);
-            }
+            await pullFromCloud(session.user.id);
+            if (typeof refreshData === 'function') await refreshData();
             setHasUpdates(false);
             await fetchBands();
-            alert('✅ Sincronização concluída. O repertório da banda foi atualizado sem sobrescrever sua biblioteca pessoal.');
+            alert('✅ Sincronização concluída. Músicas, shows e bandas foram atualizados na base local (shows da banda dependem de permissões RLS no Supabase — ver documentação).');
         } catch (e) { alert("Erro ao sincronizar: " + e.message); }
         setLoading(false);
     };
@@ -493,13 +498,13 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     };
 
     return (
-        <div style={styles.garimpoPanel}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+        <div style={{ ...styles.garimpoPanel, flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
                 <h1 style={{ color: '#fff', fontSize: '28px', fontWeight: '900', margin: 0 }}>BANDAS</h1>
                 <div style={{display:'flex', gap:'10px'}}>
                     {hasUpdates && (
                         <div style={{backgroundColor:'#ff9500', color:'#000', padding:'8px 15px', borderRadius:'10px', fontSize:'11px', fontWeight:'900', display:'flex', alignItems:'center', gap:'8px', animation:'pulse 2s infinite'}}>
-                            <Bell size={14}/> NOVIDADES DA FROTA
+                            <Bell size={14}/> NOVIDADES!
                         </div>
                     )}
                     <button onClick={hasUpdates ? handlePullChanges : fetchBands} style={{
@@ -513,6 +518,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 </div>
             </div>
 
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {/* Cadastro de Bandas */}
             <div style={{ display: 'flex', gap: '20px', marginBottom: '40px' }}>
                 <div style={{ flex: 1, background: '#1c1c1e', padding: '20px', borderRadius: '15px', border: '1px solid #333' }}>
@@ -557,26 +563,28 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                                     <button onClick={() => leaveBand(b.id)} style={{ background: 'none', border: 'none', color: '#ff9500' }} title="Sair"><UserMinus size={18} /></button>
                                 )}
                                 {b.role === 'admin' && (
-                                    <div style={{ position: 'relative' }}>
-                                        <button onClick={() => setShowSettings(b)} style={{ background: 'none', border: 'none', color: '#888' }} title="Configurações da banda"><Settings size={20} /></button>
-                                        {(pendingJoinCounts[b.id] || 0) > 0 && (
-                                            <span title="Pedidos de entrada pendentes" style={{
-                                                position: 'absolute', top: -2, right: -6, minWidth: 18, height: 18, borderRadius: 9,
-                                                background: '#ff3b30', color: '#fff', fontSize: 10, fontWeight: 900,
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
-                                            }}>
-                                                {pendingJoinCounts[b.id] > 9 ? '9+' : pendingJoinCounts[b.id]}
-                                            </span>
-                                        )}
-                                        {(pendingProposalCounts[b.id] || 0) > 0 && (
-                                            <span title="Propostas de repertório pendentes" style={{
-                                                position: 'absolute', top: 16, right: -6, minWidth: 18, height: 18, borderRadius: 9,
-                                                background: '#ff9500', color: '#111', fontSize: 10, fontWeight: 900,
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
-                                            }}>
-                                                {pendingProposalCounts[b.id] > 9 ? '9+' : pendingProposalCounts[b.id]}
-                                            </span>
-                                        )}
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                                        <button type="button" onClick={() => setShowSettings(b)} style={{ background: 'none', border: 'none', color: '#888' }} title="Configurações da banda"><Settings size={20} /></button>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', minHeight: 18, alignItems: 'center' }}>
+                                            {(pendingJoinCounts[b.id] || 0) > 0 && (
+                                                <span title="Pedidos de entrada pendentes" style={{
+                                                    minWidth: 18, height: 18, borderRadius: 9,
+                                                    background: '#ff3b30', color: '#fff', fontSize: 10, fontWeight: 900,
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
+                                                }}>
+                                                    {pendingJoinCounts[b.id] > 9 ? '9+' : pendingJoinCounts[b.id]}
+                                                </span>
+                                            )}
+                                            {(pendingProposalCounts[b.id] || 0) > 0 && (
+                                                <span title="Propostas de repertório pendentes" style={{
+                                                    minWidth: 18, height: 18, borderRadius: 9,
+                                                    background: '#ff9500', color: '#111', fontSize: 10, fontWeight: 900,
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
+                                                }}>
+                                                    {pendingProposalCounts[b.id] > 9 ? '9+' : pendingProposalCounts[b.id]}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -592,6 +600,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                         </div>
                     </div>
                 ))}
+            </div>
             </div>
 
             {/* Modal de Repertório */}
@@ -708,11 +717,23 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                                             {joinRequests.map((req) => {
                                                 const prof = req.profiles;
                                                 const nome = prof?.full_name || prof?.email || `Usuário ${String(req.profile_id).slice(0, 8)}…`;
+                                                const avatarUrl = prof?.avatar_url;
                                                 return (
                                                     <div key={req.id} style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-                                                        <div style={{ flex: 1, minWidth: 140 }}>
-                                                            <div style={{ color: '#fff', fontSize: '13px', fontWeight: 700 }}>{nome}</div>
-                                                            {prof?.email && <div style={{ color: '#888', fontSize: '11px' }}>{prof.email}</div>}
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 140 }}>
+                                                            <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#222', border: '1px solid #444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                {avatarUrl ? (
+                                                                    <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                ) : (
+                                                                    <UserPlus size={20} color="#555" />
+                                                                )}
+                                                            </div>
+                                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                                <div style={{ color: '#fff', fontSize: '13px', fontWeight: 700 }}>{nome}</div>
+                                                                {prof?.full_name && prof?.email && (
+                                                                    <div style={{ color: '#888', fontSize: '11px' }}>{prof.email}</div>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                         <div style={{ display: 'flex', gap: '8px' }}>
                                                             <button type="button" disabled={loading} onClick={() => acceptJoinRequest(req)} style={{ ...styles.headerBtn, color: '#34c759', borderColor: '#34c75955', padding: '8px 12px', fontSize: '11px' }}>

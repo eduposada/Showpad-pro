@@ -49,3 +49,32 @@ Se a query com `profiles(full_name, email)` falhar no log, executa também:
 1. Utilizador A cria banda (admin). Utilizador B pede entrada com o código — deve ver mensagem de aguardar aprovação.
 2. A abre **Configurações** da banda → vê o pedido → **ACEITAR** ou **RECUSAR**.
 3. Após aceitar, B atualiza a lista de bandas (**ATUALIZAR**) e deve ver a banda.
+
+---
+
+## Shows da banda (`setlists.band_id`) e SYNC
+
+A partir da **v8.5.3**, o cliente faz **pull** de linhas em `setlists` com `band_id` pertencente a bandas em que o utilizador é membro (além dos shows pessoais `creator_id = auth.uid()`).
+
+Para os **membros** receberem na prática estes registos, a tabela `setlists` no Supabase precisa de **RLS** que permita `SELECT` quando `band_id` está numa banda onde existe linha em `band_members` para `auth.uid()`. Sem isso, a query devolve erro ou lista vazia — o código regista um aviso na consola e continua.
+
+Coluna útil na tabela: `band_id` (uuid, nullable). Se ainda não existir, adiciona antes de ajustar políticas.
+
+**Exemplo de política (ajusta nomes se já tiveres RLS em `setlists`):**
+
+```sql
+create policy "setlists_select_for_band_members"
+on public.setlists
+for select
+to authenticated
+using (
+  band_id is not null
+  and exists (
+    select 1 from public.band_members bm
+    where bm.band_id = setlists.band_id
+      and bm.profile_id = auth.uid()
+  )
+);
+```
+
+Garante também políticas de `INSERT`/`UPDATE`/`DELETE` coerentes com o teu modelo (dono, admin, etc.), para não bloquear o **UPLOAD** a partir do cliente.

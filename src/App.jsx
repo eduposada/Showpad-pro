@@ -399,7 +399,7 @@ export default function App() {
 
         <div style={styles.mainEditor}>
           {view === 'garimpo' ? <GarimpoView isServerOnline={isServerOnline} styles={styles} refresh={refreshData} session={session} />
-          : view === 'bands' ? <BandView session={session} styles={styles} onSelectShow={openBandShow} />
+          : view === 'bands' ? <BandView session={session} styles={styles} onSelectShow={openBandShow} refreshData={refreshData} />
           : selectedItem ? <MainEditor key={selectedItem.data.id} item={selectedItem} songs={songs} bands={bands} triggerDL={triggerDL} onClose={()=>setSelectedItem(null)} onShow={()=>setShowMode(true)} refresh={refreshData} styles={styles} />
           : <div style={styles.empty}>
               <Music size={120} color="#111" />

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2, ArrowUp, ArrowDown, Plus, X, Monitor, Music, ChevronUp, ChevronDown } from 'lucide-react';
-import { db, transposeContent } from './ShowPadCore';
+import { db, transposeContent, supabase } from './ShowPadCore';
 
 export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, refresh, styles }) => {
   const [lC, setLC] = useState(item.data.content || "");
@@ -13,8 +13,8 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
   const [lBpm, setLBpm] = useState(parseInt(item.data.bpm, 10) || 120);
   const [confirmDelete, setConfirmDelete] = useState(false);
   
-  // Estado para armazenar quais músicas pertencem a esta banda (Opção B)
-  const [bandRepertoireIds, setBandRepertoireIds] = useState([]);
+  /** Repertório oficial da banda (Supabase `band_repertoire`) — Fase D não preenche mais `band_songs` no pull. */
+  const [bandOfficialPickList, setBandOfficialPickList] = useState([]);
 
   useEffect(() => { 
     setConfirmDelete(false); 
@@ -26,17 +26,46 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
     setLMem(item.data.members || "");
     setLNot(item.data.notes || "");
     setLBpm(parseInt(item.data.bpm, 10) || 120);
-    
-    // Carrega o repertório vinculado à banda deste show
-    if (item.type === 'setlist' && item.data.band_id) {
-        loadBandRepertoire();
-    }
   }, [item.data.id]);
 
-  const loadBandRepertoire = async () => {
-    const relations = await db.band_songs.where('band_id').equals(item.data.band_id).toArray();
-    setBandRepertoireIds(relations.map(r => r.song_id));
-  };
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (item.type !== 'setlist' || !item.data.band_id || !supabase) {
+        setBandOfficialPickList([]);
+        return;
+      }
+      const band = bands.find((b) => b.id === item.data.band_id);
+      if (band?.is_solo) {
+        setBandOfficialPickList([]);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('band_repertoire')
+        .select('title, artist, content, bpm')
+        .eq('band_id', item.data.band_id)
+        .order('title', { ascending: true });
+      if (cancelled) return;
+      if (error) {
+        console.warn('Repertório da banda (editor):', error.message || error);
+        setBandOfficialPickList([]);
+        return;
+      }
+      const key = (title, artist) => `${String(title || '').trim()}::${String(artist || '').trim()}`;
+      const rows = data || [];
+      setBandOfficialPickList(
+        rows.map((row) => ({
+          id: `band-official:${item.data.band_id}:${key(row.title, row.artist)}`,
+          title: row.title,
+          artist: row.artist,
+          content: row.content || '',
+          bpm: row.bpm || 120,
+        })),
+      );
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [item.type, item.data.band_id, item.data.id, bands]);
 
   const save = async (overideBpm) => {
     const isSong = item.type === 'song';
@@ -75,10 +104,7 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
   if (item.type === 'setlist') {
     const band = item.data.band_id ? bands.find(b => b.id === item.data.band_id) : null;
     
-    // FILTRO DE REPERTÓRIO: Agora usa o estado alimentado pela tabela band_songs
-    const filteredSongs = (band && !band.is_solo) 
-        ? songs.filter(s => bandRepertoireIds.includes(s.id)) 
-        : songs;
+    const filteredSongs = (band && !band.is_solo) ? bandOfficialPickList : songs;
 
     return (
         <div style={styles.mainEditor}>
