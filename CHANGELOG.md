@@ -2,6 +2,17 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.5.7] - 2026-04-14
+
+### Corrigido
+
+- **Pull de shows da banda:** merge Dexie passa a comparar `songs` normalizado (ex.: jsonb como string) e a **atualizar quando a nuvem tem mais faixas** que a cópia local — cenário típico: membro com lista vazia antiga e admin já com o set montado na nuvem.
+- **Hidratação:** normaliza `songs` para array antes de preencher `content` (evita lista tratada como vazia por formato).
+
+### Documentação
+
+- Migração opcional `20260414193000_setlists_songs_jsonb.sql` e nota no README se a tabela `setlists` **não tiver coluna `songs`** (sem ela, o Postgres não guarda o set e o membro vê o show sem músicas).
+
 ## [8.5.6] - 2026-04-14
 
 ### Corrigido

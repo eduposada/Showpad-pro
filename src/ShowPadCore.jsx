@@ -102,30 +102,46 @@ function repertoireMapKey(title, artist) {
     return `${String(title ?? '').trim()}::${String(artist ?? '').trim()}`;
 }
 
+/** `setlists.songs` no Postgres (jsonb) por vezes chega como string JSON; garante sempre array. */
+function normalizeSetlistSongsFromApi(raw) {
+    if (raw == null) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+        try {
+            const p = JSON.parse(raw);
+            return Array.isArray(p) ? p : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
+}
+
 /**
  * Preenche `content` (e `bpm` se faltar) em `setlist.songs` via `band_repertoire`
  * quando a setlist tem `band_id` e algum item veio só com título/referência — típico após SYNC para outro membro.
  */
 export async function hydrateBandSetlistSongsFromRepertoire(setlist) {
-    if (!supabase || !setlist?.band_id || !Array.isArray(setlist.songs) || setlist.songs.length === 0) {
-        return setlist;
-    }
-    const needsHydration = setlist.songs.some((s) => {
+    if (!supabase || !setlist?.band_id) return setlist;
+    const songsNorm = normalizeSetlistSongsFromApi(setlist.songs);
+    const base = { ...setlist, songs: songsNorm };
+    if (songsNorm.length === 0) return base;
+    const needsHydration = songsNorm.some((s) => {
         if (!s || typeof s !== 'object') return false;
         const c = s.content;
         return c == null || String(c).trim() === '';
     });
-    if (!needsHydration) return setlist;
+    if (!needsHydration) return base;
 
     const { data, error } = await supabase
         .from('band_repertoire')
         .select('title, artist, content, bpm')
         .eq('band_id', setlist.band_id);
-    if (error || !data?.length) return setlist;
+    if (error || !data?.length) return base;
 
     const repMap = new Map(data.map((r) => [repertoireMapKey(r.title, r.artist), r]));
 
-    const songs = setlist.songs.map((s) => {
+    const songs = songsNorm.map((s) => {
         if (!s || typeof s !== 'object') return s;
         if (s.content != null && String(s.content).trim() !== '') return s;
         const r = repMap.get(repertoireMapKey(s.title, s.artist));
@@ -138,7 +154,7 @@ export async function hydrateBandSetlistSongsFromRepertoire(setlist) {
             bpm: s.bpm ?? r.bpm ?? 120,
         };
     });
-    return { ...setlist, songs };
+    return { ...base, songs };
 }
 
 export const deleteBandComplete = async (bandId) => {
@@ -356,6 +372,7 @@ export const pullFromCloud = async (userId) => {
             for (const item of bandShows) {
                 const rest = { ...item };
                 delete rest.id;
+                rest.songs = normalizeSetlistSongsFromApi(rest.songs);
                 const bid = rest.band_id;
                 const ttl = rest.title;
                 if (!bid || !ttl) continue;
@@ -368,8 +385,13 @@ export const pullFromCloud = async (userId) => {
                 const remoteTs = hydrated.updated_at ? new Date(hydrated.updated_at).getTime() : 0;
                 const localTs = ex.updated_at ? new Date(ex.updated_at).getTime() : 0;
                 const remoteSongs = JSON.stringify(hydrated.songs ?? null);
-                const localSongs = JSON.stringify(ex.songs ?? null);
-                if (remoteTs > localTs || remoteSongs !== localSongs) {
+                const localSongsNorm = normalizeSetlistSongsFromApi(ex.songs);
+                const localSongs = JSON.stringify(localSongsNorm);
+                const remoteLen = Array.isArray(hydrated.songs) ? hydrated.songs.length : 0;
+                const localLen = localSongsNorm.length;
+                // Nuvem com mais faixas que o Dexie local: puxar sempre (ex.: membro tinha cópia vazia antiga).
+                const shouldMerge = remoteTs > localTs || remoteSongs !== localSongs || remoteLen > localLen;
+                if (shouldMerge) {
                     await db.setlists.update(ex.id, {
                         location: hydrated.location,
                         time: hydrated.time,

@@ -54,6 +54,15 @@ Se a query com `profiles(full_name, email)` falhar no log, executa também:
 
 ## Shows da banda (`setlists.band_id`) e SYNC
 
+### Membro vê o show mas a lista “Músicas no Show” vem vazia
+
+1. No **Table Editor** → `setlists` → confirma se existe a coluna **`songs`** (tipo **jsonb**). A app grava aí o array de músicas escolhidas para aquele show.
+2. Se **não** existir, executa no **SQL Editor** o ficheiro  
+   **[migrations/20260414193000_setlists_songs_jsonb.sql](migrations/20260414193000_setlists_songs_jsonb.sql)**  
+   Depois o **admin** faz de novo **UPLOAD** do show (para gravar as faixas na nuvem) e o **membro** faz **SYNC**.
+
+A partir da **v8.5.7**, o cliente também: normaliza `songs` se vier como texto JSON; no pull, se a **nuvem tiver mais músicas** que a cópia local, **atualiza** a lista (útil quando o membro tinha uma cópia antiga vazia).
+
 ### Se já tens `band_id` e só uma política “cada um vê os seus” — faz isto
 
 1. Abre o **Supabase** do projeto → menu **SQL Editor** (ícone de base de dados / “SQL”).
