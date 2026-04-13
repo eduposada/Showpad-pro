@@ -186,7 +186,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
             }
             setHasUpdates(false);
             await fetchBands();
-            alert("✅ Sincronização da frota concluída!");
+            alert('✅ Sincronização concluída. O repertório da banda foi atualizado sem sobrescrever sua biblioteca pessoal.');
         } catch (e) { alert("Erro ao sincronizar: " + e.message); }
         setLoading(false);
     };
@@ -389,6 +389,108 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         const key = toSongKey(s.title, s.artist);
         return !officialKeys.has(key) && !pendingKeys.has(key);
     });
+    const isRepertoireAdmin = showRepertoire?.role === 'admin';
+
+    const saveOfficialSong = async (song) => {
+        const { error } = await supabase.from('band_repertoire').upsert([{
+            band_id: showRepertoire.id,
+            title: song.title,
+            artist: song.artist,
+            content: song.content || '',
+            bpm: song.bpm || 120,
+            last_updated_by: session.user.id,
+        }], { onConflict: 'band_id,title,artist' });
+        if (error) throw new Error(error.message || 'Erro ao salvar repertório oficial.');
+    };
+
+    const notifyBandChange = async (kind = 'repertoire') => {
+        const res = await supabase.from('band_broadcasts').insert({
+            band_id: showRepertoire.id,
+            sender_id: session.user.id,
+            kind,
+        });
+        if (res.error && (res.error.message || '').toLowerCase().includes('kind')) {
+            await supabase.from('band_broadcasts').insert({
+                band_id: showRepertoire.id,
+                sender_id: session.user.id,
+            });
+        }
+    };
+
+    const addSongToRepertoire = async (songId) => {
+        if (!showRepertoire) return;
+        if (!isRepertoireAdmin) return addSongToProposalQueue(songId);
+        setLoading(true);
+        try {
+            const song = allSongs.find((s) => s.id === songId);
+            if (!song) throw new Error('Música não encontrada.');
+            await saveOfficialSong(song);
+            await notifyBandChange('repertoire');
+            await refreshRepertoire();
+            setHasUpdates(true);
+        } catch (e) {
+            alert(e.message || String(e));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const removeOfficialSong = async (song) => {
+        if (!showRepertoire || !isRepertoireAdmin) return;
+        if (!window.confirm(`Remover "${song.title}" do repertório oficial?`)) return;
+        setLoading(true);
+        try {
+            const { error } = await supabase.from('band_repertoire')
+                .delete()
+                .eq('band_id', showRepertoire.id)
+                .eq('title', song.title)
+                .eq('artist', song.artist);
+            if (error) throw new Error(error.message || 'Erro ao remover música oficial.');
+            await notifyBandChange('repertoire');
+            await refreshRepertoire();
+        } catch (e) {
+            alert(e.message || String(e));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const acceptProposal = async (proposal) => {
+        if (!isRepertoireAdmin) return;
+        setLoading(true);
+        try {
+            await saveOfficialSong(proposal);
+            const { error } = await supabase.from('band_repertoire_proposals')
+                .update({ status: 'accepted', resolved_at: new Date().toISOString() })
+                .eq('id', proposal.id);
+            if (error) throw new Error(error.message || 'Erro ao aprovar proposta.');
+            await notifyBandChange('repertoire');
+            await refreshRepertoire();
+            await loadPendingProposalCounts();
+        } catch (e) {
+            alert(e.message || String(e));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const rejectProposal = async (proposal) => {
+        if (!isRepertoireAdmin) return;
+        if (!window.confirm('Recusar esta proposta?')) return;
+        setLoading(true);
+        try {
+            const { error } = await supabase.from('band_repertoire_proposals')
+                .update({ status: 'rejected', resolved_at: new Date().toISOString() })
+                .eq('id', proposal.id);
+            if (error) throw new Error(error.message || 'Erro ao recusar proposta.');
+            await refreshRepertoire();
+            await loadPendingProposalCounts();
+        } catch (e) {
+            alert(e.message || String(e));
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <div style={styles.garimpoPanel}>
@@ -459,7 +561,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                                         <button onClick={() => setShowSettings(b)} style={{ background: 'none', border: 'none', color: '#888' }} title="Configurações da banda"><Settings size={20} /></button>
                                         {(pendingJoinCounts[b.id] || 0) > 0 && (
                                             <span title="Pedidos de entrada pendentes" style={{
-                                                position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9,
+                                                position: 'absolute', top: -2, right: -6, minWidth: 18, height: 18, borderRadius: 9,
                                                 background: '#ff3b30', color: '#fff', fontSize: 10, fontWeight: 900,
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
                                             }}>
@@ -468,7 +570,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                                         )}
                                         {(pendingProposalCounts[b.id] || 0) > 0 && (
                                             <span title="Propostas de repertório pendentes" style={{
-                                                position: 'absolute', bottom: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9,
+                                                position: 'absolute', top: 16, right: -6, minWidth: 18, height: 18, borderRadius: 9,
                                                 background: '#ff9500', color: '#111', fontSize: 10, fontWeight: 900,
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
                                             }}>
@@ -522,7 +624,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                                                         <div style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>{s.title}</div>
                                                         <div style={{ color: '#8a8a8a', fontSize: 11 }}>{s.artist || 'Artista'}</div>
                                                     </div>
-                                                    <Plus onClick={() => addSongToProposalQueue(s.id)} size={18} color="#34c759" style={{ cursor: 'pointer', flexShrink: 0 }} />
+                                                    <Plus onClick={() => addSongToRepertoire(s.id)} size={18} color="#34c759" style={{ cursor: 'pointer', flexShrink: 0 }} />
                                                 </div>
                                             ))}
                                         </div>
@@ -531,15 +633,32 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                                         <h4 style={{ color: '#FFD700', fontSize: '11px', marginBottom: '15px' }}>REPERTÓRIO DA BANDA</h4>
                                         <div style={{ background: '#000', borderRadius: '12px', padding: '10px', border: '1px solid #FFD70033', minHeight: '220px' }}>
                                             {officialRepertoire.map((s, idx) => (
-                                                <div key={`off-${s.title}-${s.artist}-${idx}`} style={{ padding: '12px', borderBottom: '1px solid #222' }}>
-                                                    <div style={{ color: '#FFD700', fontSize: 13, fontWeight: 700 }}>{s.title}</div>
-                                                    <div style={{ color: '#b8992d', fontSize: 11 }}>{s.artist || 'Artista'} • Oficial</div>
+                                                <div key={`off-${s.title}-${s.artist}-${idx}`} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                                                    <div>
+                                                        <div style={{ color: '#FFD700', fontSize: 13, fontWeight: 700 }}>{s.title}</div>
+                                                        <div style={{ color: '#b8992d', fontSize: 11 }}>{s.artist || 'Artista'} • Oficial</div>
+                                                    </div>
+                                                    {isRepertoireAdmin && (
+                                                        <MinusCircle onClick={() => removeOfficialSong(s)} size={18} color="#ff3b30" style={{ cursor: 'pointer', flexShrink: 0 }} />
+                                                    )}
                                                 </div>
                                             ))}
                                             {pendingProposals.map((p) => (
-                                                <div key={p.id} style={{ padding: '12px', borderBottom: '1px solid #222' }}>
-                                                    <div style={{ color: '#9ea3aa', fontSize: 13, fontWeight: 700 }}>{p.title}</div>
-                                                    <div style={{ color: '#7d858f', fontSize: 11 }}>{p.artist || 'Artista'} • Pendente</div>
+                                                <div key={p.id} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                                                    <div>
+                                                        <div style={{ color: '#9ea3aa', fontSize: 13, fontWeight: 700 }}>{p.title}</div>
+                                                        <div style={{ color: '#7d858f', fontSize: 11 }}>{p.artist || 'Artista'} • Pendente</div>
+                                                    </div>
+                                                    {isRepertoireAdmin && (
+                                                        <div style={{ display: 'flex', gap: 8 }}>
+                                                            <button type="button" disabled={loading} onClick={() => acceptProposal(p)} style={{ ...styles.headerBtn, color: '#34c759', borderColor: '#34c75955', padding: '4px 8px', fontSize: 10 }}>
+                                                                <Check size={12} /> OK
+                                                            </button>
+                                                            <button type="button" disabled={loading} onClick={() => rejectProposal(p)} style={{ ...styles.headerBtn, color: '#ff3b30', borderColor: '#ff3b3055', padding: '4px 8px', fontSize: 10 }}>
+                                                                <Ban size={12} /> NÃO
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ))}
                                             {queuedSongs.map((s) => (
@@ -555,8 +674,8 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                                                 <p style={{ color: '#666', fontSize: '12px', margin: '8px' }}>Repertório vazio.</p>
                                             )}
                                         </div>
-                                        <button type="button" disabled={loading || proposalQueueIds.length === 0} onClick={submitRepertoireProposals} style={{ ...styles.primaryButton, width: '100%', marginTop: '12px', backgroundColor: proposalQueueIds.length ? '#ff9500' : '#3a3a3a', color: proposalQueueIds.length ? '#111' : '#888' }}>
-                                            ENVIAR PROPOSTAS ({proposalQueueIds.length})
+                                        <button type="button" disabled={loading || isRepertoireAdmin || proposalQueueIds.length === 0} onClick={submitRepertoireProposals} style={{ ...styles.primaryButton, width: '100%', marginTop: '12px', backgroundColor: proposalQueueIds.length ? '#ff9500' : '#3a3a3a', color: proposalQueueIds.length ? '#111' : '#888' }}>
+                                            {isRepertoireAdmin ? 'ALTERAÇÕES DIRETAS ATIVAS (ADMIN)' : `ENVIAR PROPOSTAS (${proposalQueueIds.length})`}
                                         </button>
                                     </div>
                                 </div>

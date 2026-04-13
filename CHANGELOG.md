@@ -2,6 +2,13 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.5.2] - 2026-04-12
+
+### Alterado
+
+- **Fase D (governança de repertório):** admin passa a editar o repertório oficial **diretamente** (adicionar/remover), com aprovação/reprovação item a item das propostas pendentes; membros continuam por proposta. Ajustado posicionamento do badge de pedidos no botão de configurações (mais abaixo).
+- `pullBandChanges` não sobrescreve mais a biblioteca pessoal (`db.songs`), apenas lê `band_repertoire` para sincronização do contexto da banda.
+
 ## [8.5.1] - 2026-04-12
 
 ### Adicionado

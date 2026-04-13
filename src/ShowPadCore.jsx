@@ -86,18 +86,16 @@ export const broadcastBandChanges = async (bandId, userId) => {
 };
 
 export const pullBandChanges = async (bandId) => {
-    if (!supabase) return;
-    const { data: remoteSongs } = await supabase.from('band_repertoire').select('*').eq('band_id', bandId);
-    if (remoteSongs) {
-        for (let rs of remoteSongs) {
-            const ex = await db.songs.where({title: rs.title, artist: rs.artist}).first();
-            const songData = { title: rs.title, artist: rs.artist, content: rs.content, bpm: rs.bpm, creator_id: rs.last_updated_by };
-            let sId;
-            if (!ex) sId = await db.songs.add(songData);
-            else { sId = ex.id; await db.songs.update(ex.id, songData); }
-            await db.band_songs.put({ band_id: bandId, song_id: sId, custom_tone: 0 });
-        }
-    }
+    if (!supabase) return [];
+    // Fase D: não fundir nem sobrescrever a biblioteca pessoal (db.songs).
+    // A visão do repertório da banda lê direto de band_repertoire.
+    const { data, error } = await supabase
+        .from('band_repertoire')
+        .select('title, artist, content, bpm, last_updated_by, updated_at')
+        .eq('band_id', bandId)
+        .order('title', { ascending: true });
+    if (error) throw new Error(error.message || 'Erro ao puxar repertório da banda.');
+    return data || [];
 };
 
 export const deleteBandComplete = async (bandId) => {
