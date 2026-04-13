@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.5.5] - 2026-04-13
+
+### Alterado
+
+- Mensagem após **SINCRONIZAR AGORA** na aba Bandas: texto em linguagem natural para o utilizador, sem referência a RLS ou documentação técnica.
+
 ## [8.5.4] - 2026-04-13
 
 ### Corrigido

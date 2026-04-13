@@ -191,7 +191,7 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
             if (typeof refreshData === 'function') await refreshData();
             setHasUpdates(false);
             await fetchBands();
-            alert('✅ Sincronização concluída. Músicas, shows e bandas foram atualizados na base local (shows da banda dependem de permissões RLS no Supabase — ver documentação).');
+            alert('✅ Sincronização concluída. Músicas, shows e bandas foram atualizados neste aparelho.');
         } catch (e) { alert("Erro ao sincronizar: " + e.message); }
         setLoading(false);
     };
