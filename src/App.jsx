@@ -361,12 +361,17 @@ export default function App() {
           <div style={styles.listArea}>
             {['library', 'setlists'].includes(view) ? (view === 'library' ? filteredSongs : setlists).map(item => {
               const band = item.band_id ? bands.find(b => b.id === item.band_id) : null;
+              const revokedShow = view === 'setlists' && item.revoked_by_admin && item.band_id;
               return (
-                <div key={item.id} style={selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem}
+                <div key={item.id} style={{
+                  ...(selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem),
+                  ...(revokedShow ? { opacity: 0.75, borderLeft: '3px solid #ff9500' } : {}),
+                }}
                      onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
                   <div style={{flex:1, overflow:'hidden'}}>
-                      <strong style={{color:'#fff', display:'block'}}>{item.title}</strong>
+                      <strong style={{color: revokedShow ? '#999' : '#fff', display:'block'}}>{item.title}</strong>
                       {band && <span style={styles.bandTagOrange}>{band.name}</span>}
+                      {revokedShow && <span style={{ display: 'block', fontSize: '9px', color: '#ff9500', fontWeight: 800, marginTop: '2px' }}>FORA DA AGENDA OFICIAL</span>}
                       <small style={styles.artistYellow}>{item.artist || item.location || "---"}</small>
                   </div>
                   <div style={{display:'flex', gap:'6px', alignItems:'center'}}>

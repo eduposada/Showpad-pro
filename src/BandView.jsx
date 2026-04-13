@@ -759,7 +759,13 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
             )}
 
             {showBandShows && (
-                <BandShowManager band={showBandShows} styles={styles} onClose={() => setShowBandShows(null)} onSelectShow={(show) => { onSelectShow({ type: 'setlist', data: show }); setShowBandShows(null); }} />
+                <BandShowManager
+                    band={showBandShows}
+                    isBandAdmin={showBandShows?.role === 'admin'}
+                    styles={styles}
+                    onClose={() => setShowBandShows(null)}
+                    onSelectShow={(show) => { onSelectShow({ type: 'setlist', data: show }); setShowBandShows(null); }}
+                />
             )}
         </div>
     );

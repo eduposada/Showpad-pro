@@ -161,6 +161,8 @@ using (creator_id = auth.uid())
 with check (creator_id = auth.uid());
 ```
 
+**DELETE (admin apaga show da banda na app)** — A app chama `delete` em `setlists` com `band_id` + `title`. A política RLS tem de permitir que o **administrador da banda** apague linhas dessa banda; se só existir `DELETE` com `creator_id = auth.uid()`, falha quando o `creator_id` na linha for outro utilizador. Script opcional: [migrations/20260414200000_setlists_delete_band_admin.sql](migrations/20260414200000_setlists_delete_band_admin.sql).
+
 **3d — DELETE** (só se a app ou o Dashboard apagarem linhas; opcional mas coerente)
 
 ```sql

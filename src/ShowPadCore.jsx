@@ -121,6 +121,12 @@ function normalizeSetlistSongsFromApi(raw) {
  * Preenche `content` (e `bpm` se faltar) em `setlist.songs` via `band_repertoire`
  * quando a setlist tem `band_id` e algum item veio só com título/referência — típico após SYNC para outro membro.
  */
+/** Remove na nuvem todas as linhas de setlist dessa banda com o mesmo título (admin). */
+export async function deleteBandSetlistFromCloud(bandId, title) {
+    if (!supabase || !bandId || !title) return { error: new Error('Parâmetros em falta.') };
+    return supabase.from('setlists').delete().eq('band_id', bandId).eq('title', title);
+}
+
 export async function hydrateBandSetlistSongsFromRepertoire(setlist) {
     if (!supabase || !setlist?.band_id) return setlist;
     const songsNorm = normalizeSetlistSongsFromApi(setlist.songs);
@@ -199,7 +205,7 @@ function dedupeSetlistsForCloudUpsert(rows, userId) {
     const seen = new Set();
     const out = [];
     for (const row of sorted) {
-        const { id, ...rest } = row;
+        const { id, revoked_by_admin, from_band_sync, ...rest } = row;
         // RLS típico em `setlists`: só permite escrever linhas com creator_id = auth.uid().
         // Membros continuam a receber shows da banda pelo pull em `band_id` (não depende deste campo na leitura).
         const payload = { ...rest, creator_id: userId };
@@ -264,16 +270,17 @@ export const pushToCloud = async (userId) => {
         const r = await supabase.from('songs').upsert(cleanSongs, { onConflict: 'title,artist,creator_id' });
         throwIfSupabaseError(r.error, 'Envio de músicas');
     }
-    // 2. Setlists — garantir cifra em `songs` nos shows de banda antes do upsert
+    // 2. Setlists — garantir cifra em `songs` nos shows de banda antes do upsert (ignora cópias revogadas só-locais)
     let sl = await db.setlists.toArray();
-    for (const row of sl) {
+    const slPushable = sl.filter((r) => !r.revoked_by_admin);
+    for (const row of slPushable) {
         if (!row.band_id) continue;
         const h = await hydrateBandSetlistSongsFromRepertoire(row);
         if (JSON.stringify(row.songs ?? []) !== JSON.stringify(h.songs ?? [])) {
             await db.setlists.update(row.id, { songs: h.songs });
         }
     }
-    sl = await db.setlists.toArray();
+    sl = await db.setlists.toArray().filter((r) => !r.revoked_by_admin);
     if (sl.length > 0) {
         const cleanSl = dedupeSetlistsForCloudUpsert(sl, userId);
         const r = await supabase.from('setlists').upsert(cleanSl, { onConflict: 'title,creator_id' });
@@ -368,8 +375,9 @@ export const pullFromCloud = async (userId) => {
             .in('band_id', nonSoloBandIds);
         if (eBandShows) {
             console.warn('Download de shows da banda:', eBandShows.message || eBandShows);
-        } else if (bandShows?.length) {
-            for (const item of bandShows) {
+        } else {
+            const bandShowsSafe = bandShows || [];
+            for (const item of bandShowsSafe) {
                 const rest = { ...item };
                 delete rest.id;
                 rest.songs = normalizeSetlistSongsFromApi(rest.songs);
@@ -379,7 +387,11 @@ export const pullFromCloud = async (userId) => {
                 const hydrated = await hydrateBandSetlistSongsFromRepertoire(rest);
                 const ex = await db.setlists.where('band_id').equals(bid).filter((row) => row.title === ttl).first();
                 if (!ex) {
-                    await db.setlists.add({ ...hydrated });
+                    await db.setlists.add({
+                        ...hydrated,
+                        revoked_by_admin: false,
+                        from_band_sync: true,
+                    });
                     continue;
                 }
                 const remoteTs = hydrated.updated_at ? new Date(hydrated.updated_at).getTime() : 0;
@@ -400,8 +412,25 @@ export const pullFromCloud = async (userId) => {
                         songs: hydrated.songs,
                         band_id: hydrated.band_id,
                         creator_id: hydrated.creator_id,
+                        revoked_by_admin: false,
+                        from_band_sync: true,
                         ...(hydrated.updated_at ? { updated_at: hydrated.updated_at } : {}),
                     });
+                }
+            }
+            // Títulos na nuvem (pode ser lista vazia): marcar cópias locais sincronizadas que já não existem na nuvem
+            for (const bid of nonSoloBandIds) {
+                const cloudTitles = new Set(bandShowsSafe.filter((s) => s.band_id === bid).map((s) => s.title));
+                const locals = await db.setlists.where('band_id').equals(bid).toArray();
+                for (const loc of locals) {
+                    if (!loc.from_band_sync) continue;
+                    if (!cloudTitles.has(loc.title)) {
+                        if (!loc.revoked_by_admin) {
+                            await db.setlists.update(loc.id, { revoked_by_admin: true });
+                        }
+                    } else if (loc.revoked_by_admin) {
+                        await db.setlists.update(loc.id, { revoked_by_admin: false });
+                    }
                 }
             }
         }

@@ -123,6 +123,15 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
 
     return (
         <div style={styles.mainEditor}>
+            {item.data.revoked_by_admin && item.data.band_id && (
+                <div style={{
+                    padding: '12px 20px', background: '#2a2210', borderBottom: '1px solid #ff950055', color: '#ffcc6b',
+                    fontSize: '12px', fontWeight: 700, lineHeight: 1.45,
+                }}>
+                    Este show já não faz parte da agenda oficial da banda (foi removido pelo administrador na nuvem).
+                    Podes consultar ou remover da lista na agenda de shows da banda.
+                </div>
+            )}
             <div style={{...styles.editorHeader, borderLeft: band ? '6px solid #ff9500' : 'none'}}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                     <input style={styles.hInput} value={lT} onChange={e=>setLT(e.target.value)} onBlur={save} placeholder="Título do Show" />

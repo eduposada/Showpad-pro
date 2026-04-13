@@ -2,6 +2,16 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.5.8] - 2026-04-14
+
+### Adicionado
+
+- **Agenda de shows da banda:** ao apagar como **admin**, o show é removido também no **Supabase** (além do Dexie). No **SYNC**, cópias locais que já tinham vindo da nuvem (`from_band_sync`) e cujo título **já não existe** na nuvem passam a `revoked_by_admin`: aparecem **a cinza**, com selo **«Fora da agenda oficial»** e texto explicativo; o membro pode **remover da lista** ou abrir o editor (aviso no topo). Membro **não-admin** ao apagar só remove **neste aparelho**. Shows revogados **não** entram no UPLOAD.
+
+### Documentação
+
+- Nota em `supabase/README.md` sobre política **DELETE** em `setlists` para o admin conseguir apagar na nuvem.
+
 ## [8.5.7] - 2026-04-14
 
 ### Corrigido
