@@ -54,27 +54,110 @@ Se a query com `profiles(full_name, email)` falhar no log, executa também:
 
 ## Shows da banda (`setlists.band_id`) e SYNC
 
-A partir da **v8.5.3**, o cliente faz **pull** de linhas em `setlists` com `band_id` pertencente a bandas em que o utilizador é membro (além dos shows pessoais `creator_id = auth.uid()`). No **upload**, o cliente grava `creator_id = auth.uid()` nas linhas enviadas (exigência habitual de RLS); o vínculo à banda fica em **`band_id`**.
+A app (**v8.5.3+**) faz:
 
-Para os **membros** receberem na prática estes registos, a tabela `setlists` no Supabase precisa de **RLS** que permita `SELECT` quando `band_id` está numa banda onde existe linha em `band_members` para `auth.uid()`. Sem isso, a query devolve erro ou lista vazia — o código regista um aviso na consola e continua.
+- **UPLOAD:** `upsert` em `setlists` com `creator_id = auth.uid()` (quem está logado) e, para shows da banda, **`band_id`** preenchido com o uuid da banda.
+- **SYNC (pull):** além dos teus shows pessoais (`creator_id = auth.uid()`), pede à API todas as linhas em que **`band_id`** é uma banda em que existes em **`band_members`**.
 
-Coluna útil na tabela: `band_id` (uuid, nullable). Se ainda não existir, adiciona antes de ajustar políticas.
+Para isto funcionar no Supabase, trata de **coluna + políticas RLS**. Segue a ordem recomendada.
 
-**Exemplo de política (ajusta nomes se já tiveres RLS em `setlists`):**
+### 1) Coluna `band_id` na tabela `setlists`
+
+No Dashboard: **Table Editor** → `setlists` → confirma se existe a coluna **`band_id`** (tipo **uuid**, nullable).
+
+Se **não** existir, no **SQL Editor** (uma vez):
 
 ```sql
-create policy "setlists_select_for_band_members"
+alter table public.setlists
+  add column if not exists band_id uuid references public.bands (id) on delete set null;
+
+create index if not exists setlists_band_id_idx on public.setlists (band_id)
+  where band_id is not null;
+```
+
+(A FK para `bands` é opcional mas ajuda à integridade; `on delete set null` evita apagar linhas se apagares uma banda.)
+
+### 2) RLS ligado em `setlists`
+
+Em **Authentication** → não; em **Table Editor** → `setlists` → verifica se **RLS** está **Enabled**.
+
+Se estiver desligado e quiseres RLS só a partir deste guia: **Enable RLS**. Se já tens políticas antigas, **não dupliques** políticas com o mesmo efeito — ajusta ou substitui conforme o passo 3.
+
+### 3) Políticas RLS recomendadas (copiar para o SQL Editor)
+
+Ideia: **lês** as tuas linhas (`creator_id = auth.uid()`) **ou** linhas de show de banda em que és **membro**; **escreves** só onde `creator_id = auth.uid()` (como a app já faz no upload).
+
+**3a — SELECT (leitura: pessoal + shows da banda)**
+
+```sql
+drop policy if exists "setlists_select_own_or_band" on public.setlists;
+
+create policy "setlists_select_own_or_band"
 on public.setlists
 for select
 to authenticated
 using (
-  band_id is not null
-  and exists (
-    select 1 from public.band_members bm
-    where bm.band_id = setlists.band_id
-      and bm.profile_id = auth.uid()
+  creator_id = auth.uid()
+  or (
+    band_id is not null
+    and exists (
+      select 1 from public.band_members bm
+      where bm.band_id = setlists.band_id
+        and bm.profile_id = auth.uid()
+    )
   )
 );
 ```
 
-Garante também políticas de `INSERT`/`UPDATE`/`DELETE` coerentes com o teu modelo (dono, admin, etc.), para não bloquear o **UPLOAD** a partir do cliente.
+Se já tinhas uma política só com `creator_id = auth.uid()`, os **membros deixavam de ver** os shows que outro membro subiu com o mesmo `band_id` — por isso esta política **OR** com `band_members` é importante.
+
+**3b — INSERT**
+
+```sql
+drop policy if exists "setlists_insert_own" on public.setlists;
+
+create policy "setlists_insert_own"
+on public.setlists
+for insert
+to authenticated
+with check (creator_id = auth.uid());
+```
+
+**3c — UPDATE** (o cliente usa `upsert`, que pode fazer update)
+
+```sql
+drop policy if exists "setlists_update_own" on public.setlists;
+
+create policy "setlists_update_own"
+on public.setlists
+for update
+to authenticated
+using (creator_id = auth.uid())
+with check (creator_id = auth.uid());
+```
+
+**3d — DELETE** (só se a app ou o Dashboard apagarem linhas; opcional mas coerente)
+
+```sql
+drop policy if exists "setlists_delete_own" on public.setlists;
+
+create policy "setlists_delete_own"
+on public.setlists
+for delete
+to authenticated
+using (creator_id = auth.uid());
+```
+
+**Nota:** Com isto, **só quem gravou a linha na nuvem** (`creator_id`) pode alterá-la ou apagá-la. Membros veem cópias via **SELECT** por `band_id`, mas não editam o registo do outro na nuvem — alinha com o uso actual da app (cada um faz upload das suas alterações; conflitos de título são outro tema).
+
+### 4) Testar no Dashboard
+
+1. Utilizador **A** (admin da banda): cria show com `band_id` preenchido → **UPLOAD** na app.
+2. Utilizador **B** (membro da mesma banda): **SYNC** ou **SINCRONIZAR AGORA** na aba Bandas.
+3. **B** deve passar a ver o show na lista **SHOWS** (Dexie) após o sync.
+
+Se **B** não receber nada: abre **Logs** do Supabase ou a consola do browser — erros `42501` ou respostas vazias indicam política ou coluna em falta.
+
+### 5) `band_members.profile_id` vs `auth.uid()`
+
+As políticas acima assumem que **`band_members.profile_id`** é o mesmo uuid que **`auth.users.id`** (o que a app já usa). Se no teu projecto o membro for outro tipo de id, as políticas têm de ser ajustadas a esse modelo.
