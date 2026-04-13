@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.5.0] - 2026-04-12
+
+### Adicionado
+
+- **Fase B (bandas):** entrada na banda via **pedido** (`band_join_requests`); administrador aprova ou recusa em **Configurações** da banda; badge com número de pedidos pendentes no ícone de engrenagem; texto de ajuda no formulário de código. Migração opcional de FK para `profiles` em `supabase/migrations/20260412130000_band_join_requests_profile_fk.sql`.
+
 ## [8.4.9] - 2026-04-12
 
 ### Adicionado

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, RefreshCw, Users, Trash2, Layout, Music, X, Settings, Save, UserMinus, ImageIcon, Zap, MinusCircle, Upload, Hash, Radio, Bell } from 'lucide-react';
+import { Plus, RefreshCw, Trash2, Layout, Music, X, Settings, Save, UserMinus, Zap, MinusCircle, Hash, Radio, Bell, UserPlus, Check, Ban } from 'lucide-react';
 import { supabase, db, deleteBandComplete, broadcastBandChanges, pullBandChanges } from './ShowPadCore';
 import { BandShowManager } from './BandShowManager';
 
@@ -24,6 +24,10 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const [editDesc, setEditDesc] = useState('');
     const [editLogo, setEditLogo] = useState('');
     const [editDate, setEditDate] = useState('');
+
+    /** Pedidos de entrada pendentes (Fase B) — só admins veem todos da banda via RLS */
+    const [joinRequests, setJoinRequests] = useState([]);
+    const [pendingJoinCounts, setPendingJoinCounts] = useState({});
 
     useEffect(() => { 
         fetchBands(); 
@@ -54,6 +58,11 @@ export const BandView = ({ session, styles, onSelectShow }) => {
             const dateOnly = showSettings.created_at ? showSettings.created_at.split('T')[0] : '';
             setEditDate(dateOnly);
             fetchMembers(showSettings.id);
+            if (showSettings.role === 'admin' && !showSettings.is_solo) {
+                fetchJoinRequests(showSettings.id);
+            } else {
+                setJoinRequests([]);
+            }
         }
     }, [showSettings]);
 
@@ -104,8 +113,42 @@ export const BandView = ({ session, styles, onSelectShow }) => {
             const localBands = await db.my_bands.toArray();
             localBands.sort((a, b) => (a.is_solo ? -1 : b.is_solo ? 1 : 0));
             setBands(localBands);
+            await loadPendingJoinCounts();
         } catch (err) { console.error(err); }
         setLoading(false);
+    };
+
+    const loadPendingJoinCounts = async () => {
+        const { data } = await supabase.from('band_join_requests').select('band_id').eq('status', 'pending');
+        const counts = {};
+        (data || []).forEach((r) => {
+            counts[r.band_id] = (counts[r.band_id] || 0) + 1;
+        });
+        setPendingJoinCounts(counts);
+    };
+
+    const fetchJoinRequests = async (bandId) => {
+        let q = supabase
+            .from('band_join_requests')
+            .select('id, band_id, profile_id, created_at, profiles(full_name, email)')
+            .eq('band_id', bandId)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: true });
+        let { data, error } = await q;
+        if (error && (error.message || '').includes('relationship')) {
+            ({ data, error } = await supabase
+                .from('band_join_requests')
+                .select('id, band_id, profile_id, created_at')
+                .eq('band_id', bandId)
+                .eq('status', 'pending')
+                .order('created_at', { ascending: true }));
+        }
+        if (error) {
+            console.error(error);
+            setJoinRequests([]);
+            return;
+        }
+        setJoinRequests(data || []);
     };
 
     // v7.1.5: DISSEMINAR (ADMIN)
@@ -139,12 +182,71 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         if (!cleanCode || cleanCode.length < 3) return;
         setLoading(true);
         try {
-            const { data: band } = await supabase.from('bands').select('id, name').eq('invite_code', cleanCode).maybeSingle(); 
-            if (!band) throw new Error("Código não encontrado.");
-            await supabase.from('band_members').insert([{ band_id: band.id, profile_id: session.user.id, role: 'member' }]);
-            alert(`Bem-vindo à banda ${band.name}!`);
-            setInviteCode(''); await fetchBands();
-        } catch (err) { alert(err.message); } finally { setLoading(false); }
+            const { data: band } = await supabase.from('bands').select('id, name').eq('invite_code', cleanCode).maybeSingle();
+            if (!band) throw new Error('Código não encontrado.');
+            const { error } = await supabase.from('band_join_requests').insert({
+                band_id: band.id,
+                profile_id: session.user.id,
+            });
+            if (error) {
+                if (error.code === '23505') {
+                    throw new Error('Já existe um pedido pendente para esta banda. Aguarde o administrador.');
+                }
+                if (error.code === '42501' || (error.message && error.message.includes('policy'))) {
+                    throw new Error('Não foi possível enviar o pedido. Talvez você já seja membro desta banda.');
+                }
+                throw new Error(error.message || 'Erro ao enviar pedido.');
+            }
+            alert(`Pedido enviado para "${band.name}". O administrador precisa aprovar sua entrada.`);
+            setInviteCode('');
+        } catch (err) {
+            alert(err.message || String(err));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const acceptJoinRequest = async (req) => {
+        setLoading(true);
+        try {
+            const { error: eMem } = await supabase.from('band_members').insert({
+                band_id: req.band_id,
+                profile_id: req.profile_id,
+                role: 'member',
+            });
+            if (eMem) throw new Error(eMem.message || 'Erro ao admitir membro.');
+            const { error: eUp } = await supabase.from('band_join_requests').update({
+                status: 'accepted',
+                resolved_at: new Date().toISOString(),
+            }).eq('id', req.id);
+            if (eUp) throw new Error(eUp.message || 'Erro ao atualizar pedido.');
+            await fetchJoinRequests(showSettings.id);
+            await fetchMembers(showSettings.id);
+            await loadPendingJoinCounts();
+            alert('Membro admitido com sucesso.');
+        } catch (e) {
+            alert(e.message || String(e));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const rejectJoinRequest = async (req) => {
+        if (!window.confirm('Recusar este pedido de entrada?')) return;
+        setLoading(true);
+        try {
+            const { error } = await supabase.from('band_join_requests').update({
+                status: 'rejected',
+                resolved_at: new Date().toISOString(),
+            }).eq('id', req.id);
+            if (error) throw new Error(error.message);
+            await fetchJoinRequests(showSettings.id);
+            await loadPendingJoinCounts();
+        } catch (e) {
+            alert(e.message || String(e));
+        } finally {
+            setLoading(false);
+        }
     };
 
     const leaveBand = async (bandId) => {
@@ -239,8 +341,11 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                 </div>
                 <div style={{ flex: 1, background: '#111', padding: '20px', borderRadius: '15px', border: '1px solid #333' }}>
                     <h4 style={{ color: '#34c759', fontSize: '10px', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>Código de Convite</h4>
+                    <p style={{ color: '#888', fontSize: '11px', margin: '0 0 10px 0', lineHeight: 1.4 }}>
+                        Digite o código da banda. Seu pedido será enviado ao administrador para aprovação.
+                    </p>
                     <input style={styles.inputField} value={inviteCode} onChange={e => setInviteCode(e.target.value.toUpperCase())} placeholder="Ex: AX72P" />
-                    <button onClick={joinBandByCode} style={{ ...styles.primaryButton, backgroundColor: '#34c759', marginTop: '10px' }} disabled={loading}>ENTRAR</button>
+                    <button onClick={joinBandByCode} style={{ ...styles.primaryButton, backgroundColor: '#34c759', marginTop: '10px' }} disabled={loading}>PEDIR ENTRADA</button>
                 </div>
             </div>
 
@@ -264,13 +369,26 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                                     )}
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '10px' }}>
+                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                                 {!b.is_solo && (
                                     b.role === 'admin' ? 
                                     <button onClick={() => handleDeleteBand(b)} style={{ background: 'none', border: 'none', color: '#ff3b30' }} title="Excluir"><Trash2 size={18} /></button> :
                                     <button onClick={() => leaveBand(b.id)} style={{ background: 'none', border: 'none', color: '#ff9500' }} title="Sair"><UserMinus size={18} /></button>
                                 )}
-                                {b.role === 'admin' && <button onClick={() => setShowSettings(b)} style={{ background: 'none', border: 'none', color: '#888' }}><Settings size={20} /></button>}
+                                {b.role === 'admin' && (
+                                    <div style={{ position: 'relative' }}>
+                                        <button onClick={() => setShowSettings(b)} style={{ background: 'none', border: 'none', color: '#888' }} title="Configurações da banda"><Settings size={20} /></button>
+                                        {(pendingJoinCounts[b.id] || 0) > 0 && (
+                                            <span title="Pedidos de entrada pendentes" style={{
+                                                position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9,
+                                                background: '#ff3b30', color: '#fff', fontSize: 10, fontWeight: 900,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
+                                            }}>
+                                                {pendingJoinCounts[b.id] > 9 ? '9+' : pendingJoinCounts[b.id]}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <div style={{ padding: '15px 20px', borderTop: '1px solid #222', display: 'flex', gap: '8px', background: '#161618' }}>
@@ -331,16 +449,49 @@ export const BandView = ({ session, styles, onSelectShow }) => {
             
             {showSettings && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
-                    <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '550px', borderRadius: '28px', border: '1px solid #444', overflow: 'hidden' }}>
-                        <div style={{ padding: '20px 25px', background: '#252529', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between' }}>
+                    <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '580px', maxHeight: '90vh', borderRadius: '28px', border: '1px solid #444', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ padding: '20px 25px', background: '#252529', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', flexShrink: 0 }}>
                             <h2 style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>EDITAR BANDA</h2>
                             <X onClick={() => setShowSettings(null)} style={{ cursor: 'pointer' }} color="#888" />
                         </div>
-                        <div style={{ padding: '25px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                        <div style={{ padding: '25px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '18px' }}>
                             <input style={styles.inputField} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nome da Banda" />
                             <textarea style={{ ...styles.inputField, height: '80px' }} value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Observações..." />
+                            {showSettings.role === 'admin' && !showSettings.is_solo && (
+                                <div style={{ borderTop: '1px solid #333', paddingTop: '18px' }}>
+                                    <h3 style={{ color: '#ff9500', fontSize: '11px', fontWeight: 900, margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <UserPlus size={14} /> PEDIDOS DE ENTRADA
+                                    </h3>
+                                    {joinRequests.length === 0 ? (
+                                        <p style={{ color: '#666', fontSize: '12px', margin: 0 }}>Nenhum pedido pendente.</p>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                            {joinRequests.map((req) => {
+                                                const prof = req.profiles;
+                                                const nome = prof?.full_name || prof?.email || `Usuário ${String(req.profile_id).slice(0, 8)}…`;
+                                                return (
+                                                    <div key={req.id} style={{ background: '#111', border: '1px solid #333', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                                                        <div style={{ flex: 1, minWidth: 140 }}>
+                                                            <div style={{ color: '#fff', fontSize: '13px', fontWeight: 700 }}>{nome}</div>
+                                                            {prof?.email && <div style={{ color: '#888', fontSize: '11px' }}>{prof.email}</div>}
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                                            <button type="button" disabled={loading} onClick={() => acceptJoinRequest(req)} style={{ ...styles.headerBtn, color: '#34c759', borderColor: '#34c75955', padding: '8px 12px', fontSize: '11px' }}>
+                                                                <Check size={14} /> ACEITAR
+                                                            </button>
+                                                            <button type="button" disabled={loading} onClick={() => rejectJoinRequest(req)} style={{ ...styles.headerBtn, color: '#ff3b30', borderColor: '#ff3b3055', padding: '8px 12px', fontSize: '11px' }}>
+                                                                <Ban size={14} /> RECUSAR
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
-                        <div style={{ padding: '20px', background: '#252529' }}>
+                        <div style={{ padding: '20px', background: '#252529', flexShrink: 0 }}>
                             <button onClick={handleUpdateBand} style={{ ...styles.saveBtn, width: '100%', background: '#34c759' }}><Save size={18}/> SALVAR ALTERAÇÕES</button>
                         </div>
                     </div>

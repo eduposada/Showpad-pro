@@ -29,3 +29,23 @@
 - [ ] Um **admin** consegue `UPDATE` em pedidos/propostas (quando testares com o cliente SQL ou com a app na Fase B).
 
 Quando isto estiver ok, avisa para avançarmos com a **Fase B** (app: pedido de entrada + aprovação do admin).
+
+---
+
+## Fase B — App: pedido de entrada e aprovação do admin
+
+**Código:** [src/BandView.jsx](../src/BandView.jsx) — botão **PEDIR ENTRADA**, secção **PEDIDOS DE ENTRADA** nas configurações (ícone de engrenagem), badge vermelho com contagem no ícone quando há pendentes.
+
+### Opcional — FK para `profiles` (nome/e-mail no painel)
+
+Se a query com `profiles(full_name, email)` falhar no log, executa também:
+
+[migrations/20260412130000_band_join_requests_profile_fk.sql](migrations/20260412130000_band_join_requests_profile_fk.sql)
+
+(Isto exige tabela `public.profiles` com `id` alinhado ao utilizador.)
+
+### Testar
+
+1. Utilizador A cria banda (admin). Utilizador B pede entrada com o código — deve ver mensagem de aguardar aprovação.
+2. A abre **Configurações** da banda → vê o pedido → **ACEITAR** ou **RECUSAR**.
+3. Após aceitar, B atualiza a lista de bandas (**ATUALIZAR**) e deve ver a banda.
