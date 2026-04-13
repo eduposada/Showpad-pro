@@ -14,7 +14,10 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const [showBandShows, setShowBandShows] = useState(null); 
     
     const [allSongs, setAllSongs] = useState([]);
-    const [bandSongs, setBandSongs] = useState([]);
+    const [officialRepertoire, setOfficialRepertoire] = useState([]);
+    const [pendingProposals, setPendingProposals] = useState([]);
+    const [proposalQueueIds, setProposalQueueIds] = useState([]);
+    const [repertoireSortBy, setRepertoireSortBy] = useState('title');
     const [members, setMembers] = useState([]);
 
     // v7.1.5: Estados para controle de Broadcast
@@ -28,6 +31,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     /** Pedidos de entrada pendentes (Fase B) — só admins veem todos da banda via RLS */
     const [joinRequests, setJoinRequests] = useState([]);
     const [pendingJoinCounts, setPendingJoinCounts] = useState({});
+    const [pendingProposalCounts, setPendingProposalCounts] = useState({});
 
     useEffect(() => { 
         fetchBands(); 
@@ -48,7 +52,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
 
     useEffect(() => {
         if (showRepertoire) refreshRepertoire();
-    }, [showRepertoire]);
+    }, [showRepertoire, repertoireSortBy]);
 
     useEffect(() => {
         if (showSettings) {
@@ -114,6 +118,7 @@ export const BandView = ({ session, styles, onSelectShow }) => {
             localBands.sort((a, b) => (a.is_solo ? -1 : b.is_solo ? 1 : 0));
             setBands(localBands);
             await loadPendingJoinCounts();
+            await loadPendingProposalCounts();
         } catch (err) { console.error(err); }
         setLoading(false);
     };
@@ -125,6 +130,15 @@ export const BandView = ({ session, styles, onSelectShow }) => {
             counts[r.band_id] = (counts[r.band_id] || 0) + 1;
         });
         setPendingJoinCounts(counts);
+    };
+
+    const loadPendingProposalCounts = async () => {
+        const { data } = await supabase.from('band_repertoire_proposals').select('band_id').eq('status', 'pending');
+        const counts = {};
+        (data || []).forEach((r) => {
+            counts[r.band_id] = (counts[r.band_id] || 0) + 1;
+        });
+        setPendingProposalCounts(counts);
     };
 
     const fetchJoinRequests = async (bandId) => {
@@ -274,23 +288,76 @@ export const BandView = ({ session, styles, onSelectShow }) => {
     const refreshRepertoire = async () => {
         if (!showRepertoire) return;
         const total = await db.songs.toArray();
-        const relations = await db.band_songs.where('band_id').equals(showRepertoire.id).toArray();
-        const songIds = relations.map(r => r.song_id);
-        setAllSongs(total);
-        setBandSongs(total.filter(s => songIds.includes(s.id)));
+        const sorted = [...total].sort((a, b) => {
+            const va = (repertoireSortBy === 'artist' ? a.artist : a.title) || '';
+            const vb = (repertoireSortBy === 'artist' ? b.artist : b.title) || '';
+            return va.localeCompare(vb, 'pt-BR', { sensitivity: 'base' });
+        });
+        setAllSongs(sorted);
+
+        const { data: official } = await supabase
+            .from('band_repertoire')
+            .select('title, artist, content, bpm, last_updated_by')
+            .eq('band_id', showRepertoire.id)
+            .order('title', { ascending: true });
+        setOfficialRepertoire(official || []);
+
+        const { data: pending } = await supabase
+            .from('band_repertoire_proposals')
+            .select('id, title, artist, content, bpm, proposer_id, created_at')
+            .eq('band_id', showRepertoire.id)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: true });
+        setPendingProposals(pending || []);
     };
 
-    const addSongToBand = async (songId) => {
-        if (!showRepertoire) return;
-        await db.band_songs.put({ band_id: showRepertoire.id, song_id: songId, custom_tone: 0 });
-        refreshRepertoire();
+    const addSongToProposalQueue = (songId) => {
+        if (!proposalQueueIds.includes(songId)) {
+            setProposalQueueIds((prev) => [...prev, songId]);
+        }
     };
 
-    const removeSongFromBand = async (songId) => {
-        if (!showRepertoire) return;
-        const rel = await db.band_songs.where({ band_id: showRepertoire.id, song_id: songId }).first();
-        if (rel) await db.band_songs.delete(rel.id);
-        refreshRepertoire();
+    const removeSongFromProposalQueue = (songId) => {
+        setProposalQueueIds((prev) => prev.filter((id) => id !== songId));
+    };
+
+    const submitRepertoireProposals = async () => {
+        if (!showRepertoire || proposalQueueIds.length === 0) return;
+        setLoading(true);
+        try {
+            const selected = allSongs.filter((s) => proposalQueueIds.includes(s.id));
+            if (selected.length === 0) throw new Error('Nenhuma música para enviar.');
+            const payload = selected.map((s) => ({
+                band_id: showRepertoire.id,
+                proposer_id: session.user.id,
+                title: s.title,
+                artist: s.artist,
+                content: s.content || '',
+                bpm: s.bpm || 120,
+            }));
+            const { error } = await supabase.from('band_repertoire_proposals').insert(payload);
+            if (error) throw new Error(error.message || 'Erro ao enviar propostas.');
+
+            let bErr = null;
+            const ins = await supabase.from('band_broadcasts').insert({
+                band_id: showRepertoire.id,
+                sender_id: session.user.id,
+                kind: 'proposals',
+            });
+            bErr = ins.error;
+            if (bErr && (bErr.message || '').toLowerCase().includes('kind')) {
+                await supabase.from('band_broadcasts').insert({ band_id: showRepertoire.id, sender_id: session.user.id });
+            }
+
+            setProposalQueueIds([]);
+            await refreshRepertoire();
+            await loadPendingProposalCounts();
+            alert('Propostas enviadas para aprovação do administrador.');
+        } catch (e) {
+            alert(e.message || String(e));
+        } finally {
+            setLoading(false);
+        }
     };
 
     const createBand = async () => {
@@ -310,6 +377,18 @@ export const BandView = ({ session, styles, onSelectShow }) => {
         await supabase.from('bands').update({ name: editName, description: editDesc, logo_url: editLogo, created_at: editDate }).eq('id', showSettings.id);
         await fetchBands(); setShowSettings(null); setLoading(false);
     };
+
+    const toSongKey = (title, artist) => `${(title || '').trim()}::${(artist || '').trim()}`;
+    const queuedSongs = allSongs.filter((s) => proposalQueueIds.includes(s.id));
+    const pendingKeys = new Set([
+        ...pendingProposals.map((p) => toSongKey(p.title, p.artist)),
+        ...queuedSongs.map((s) => toSongKey(s.title, s.artist)),
+    ]);
+    const officialKeys = new Set(officialRepertoire.map((s) => toSongKey(s.title, s.artist)));
+    const availableLocalSongs = allSongs.filter((s) => {
+        const key = toSongKey(s.title, s.artist);
+        return !officialKeys.has(key) && !pendingKeys.has(key);
+    });
 
     return (
         <div style={styles.garimpoPanel}>
@@ -387,6 +466,15 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                                                 {pendingJoinCounts[b.id] > 9 ? '9+' : pendingJoinCounts[b.id]}
                                             </span>
                                         )}
+                                        {(pendingProposalCounts[b.id] || 0) > 0 && (
+                                            <span title="Propostas de repertório pendentes" style={{
+                                                position: 'absolute', bottom: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9,
+                                                background: '#ff9500', color: '#111', fontSize: 10, fontWeight: 900,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
+                                            }}>
+                                                {pendingProposalCounts[b.id] > 9 ? '9+' : pendingProposalCounts[b.id]}
+                                            </span>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -418,26 +506,58 @@ export const BandView = ({ session, styles, onSelectShow }) => {
                             ) : (
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
                                     <div>
-                                        <h4 style={{ color: '#888', fontSize: '11px', marginBottom: '15px' }}>BIBLIOTECA LOCAL</h4>
-                                        <div style={{ background: '#111', borderRadius: '12px', padding: '10px', border: '1px solid #222' }}>
-                                            {allSongs.filter(s => !bandSongs.find(bs => bs.id === s.id)).map(s => (
-                                                <div key={s.id} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between' }}>
-                                                    <span style={{ color: '#fff' }}>{s.title}</span>
-                                                    <Plus onClick={() => addSongToBand(s.id)} size={18} color="#34c759" style={{ cursor: 'pointer' }} />
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', gap: '10px' }}>
+                                            <h4 style={{ color: '#888', fontSize: '11px', margin: 0 }}>BIBLIOTECA LOCAL</h4>
+                                            <select value={repertoireSortBy} onChange={(e) => setRepertoireSortBy(e.target.value)} style={{ background: '#111', color: '#ddd', border: '1px solid #333', borderRadius: 8, padding: '5px 8px', fontSize: 11 }}>
+                                                <option value="title">Ordenar: título</option>
+                                                <option value="artist">Ordenar: artista</option>
+                                            </select>
+                                        </div>
+                                        <div style={{ background: '#111', borderRadius: '12px', padding: '10px', border: '1px solid #222', minHeight: '220px' }}>
+                                            {availableLocalSongs.length === 0 ? (
+                                                <p style={{ color: '#666', fontSize: '12px', margin: '8px' }}>Sem músicas disponíveis para propor.</p>
+                                            ) : availableLocalSongs.map((s) => (
+                                                <div key={s.id} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center' }}>
+                                                    <div>
+                                                        <div style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>{s.title}</div>
+                                                        <div style={{ color: '#8a8a8a', fontSize: 11 }}>{s.artist || 'Artista'}</div>
+                                                    </div>
+                                                    <Plus onClick={() => addSongToProposalQueue(s.id)} size={18} color="#34c759" style={{ cursor: 'pointer', flexShrink: 0 }} />
                                                 </div>
                                             ))}
                                         </div>
                                     </div>
                                     <div>
                                         <h4 style={{ color: '#FFD700', fontSize: '11px', marginBottom: '15px' }}>REPERTÓRIO DA BANDA</h4>
-                                        <div style={{ background: '#000', borderRadius: '12px', padding: '10px', border: '1px solid #FFD70033' }}>
-                                            {bandSongs.map(s => (
-                                                <div key={s.id} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between' }}>
-                                                    <span style={{ color: '#FFD700' }}>{s.title}</span>
-                                                    <MinusCircle onClick={() => removeSongFromBand(s.id)} size={18} color="#ff3b30" style={{ cursor: 'pointer' }} />
+                                        <div style={{ background: '#000', borderRadius: '12px', padding: '10px', border: '1px solid #FFD70033', minHeight: '220px' }}>
+                                            {officialRepertoire.map((s, idx) => (
+                                                <div key={`off-${s.title}-${s.artist}-${idx}`} style={{ padding: '12px', borderBottom: '1px solid #222' }}>
+                                                    <div style={{ color: '#FFD700', fontSize: 13, fontWeight: 700 }}>{s.title}</div>
+                                                    <div style={{ color: '#b8992d', fontSize: 11 }}>{s.artist || 'Artista'} • Oficial</div>
                                                 </div>
                                             ))}
+                                            {pendingProposals.map((p) => (
+                                                <div key={p.id} style={{ padding: '12px', borderBottom: '1px solid #222' }}>
+                                                    <div style={{ color: '#9ea3aa', fontSize: 13, fontWeight: 700 }}>{p.title}</div>
+                                                    <div style={{ color: '#7d858f', fontSize: 11 }}>{p.artist || 'Artista'} • Pendente</div>
+                                                </div>
+                                            ))}
+                                            {queuedSongs.map((s) => (
+                                                <div key={`q-${s.id}`} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                                                    <div>
+                                                        <div style={{ color: '#9ea3aa', fontSize: 13, fontWeight: 700 }}>{s.title}</div>
+                                                        <div style={{ color: '#7d858f', fontSize: 11 }}>{s.artist || 'Artista'} • Pendente (não enviado)</div>
+                                                    </div>
+                                                    <MinusCircle onClick={() => removeSongFromProposalQueue(s.id)} size={18} color="#ff9500" style={{ cursor: 'pointer', flexShrink: 0 }} />
+                                                </div>
+                                            ))}
+                                            {officialRepertoire.length === 0 && pendingProposals.length === 0 && queuedSongs.length === 0 && (
+                                                <p style={{ color: '#666', fontSize: '12px', margin: '8px' }}>Repertório vazio.</p>
+                                            )}
                                         </div>
+                                        <button type="button" disabled={loading || proposalQueueIds.length === 0} onClick={submitRepertoireProposals} style={{ ...styles.primaryButton, width: '100%', marginTop: '12px', backgroundColor: proposalQueueIds.length ? '#ff9500' : '#3a3a3a', color: proposalQueueIds.length ? '#111' : '#888' }}>
+                                            ENVIAR PROPOSTAS ({proposalQueueIds.length})
+                                        </button>
                                     </div>
                                 </div>
                             )}

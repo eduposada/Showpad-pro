@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.5.1] - 2026-04-12
+
+### Adicionado
+
+- **Fase C (repertório):** modal da aba Bandas com ordenação da biblioteca local por título/artista, exibição de título+artista, fila de propostas pendentes em cinza, repertório oficial em amarelo, botão **ENVIAR PROPOSTAS** para `band_repertoire_proposals` e badge de pendências no card da banda.
+
 ## [8.5.0] - 2026-04-12
 
 ### Adicionado
