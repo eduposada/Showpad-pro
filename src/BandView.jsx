@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, RefreshCw, Trash2, Layout, Music, X, Settings, Save, UserMinus, Zap, MinusCircle, Hash, Radio, Bell, UserPlus, Check, Ban } from 'lucide-react';
+import { Plus, RefreshCw, Trash2, Layout, Music, X, Settings, Save, UserMinus, Zap, MinusCircle, Hash, Radio, Bell, UserPlus, Check, Ban, Download } from 'lucide-react';
 import { supabase, db, deleteBandComplete, broadcastBandChanges, pullFromCloud } from './ShowPadCore';
 import { BandShowManager } from './BandShowManager';
 
@@ -396,6 +396,35 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     });
     const isRepertoireAdmin = showRepertoire?.role === 'admin';
 
+    /** Fase E: cópia do repertório oficial → biblioteca pessoal (Dexie), sem duplicar título+artista. */
+    const copyOfficialToPersonalLibrary = async (row) => {
+        if (!row?.title || !session?.user?.id) return;
+        setLoading(true);
+        try {
+            const key = toSongKey(row.title, row.artist);
+            const localSnap = await db.songs.toArray();
+            const dup = localSnap.find((s) => toSongKey(s.title, s.artist) === key);
+            if (dup) {
+                alert('Já existe na tua biblioteca local uma música com o mesmo título e artista. Altera um deles na origem ou na biblioteca para poder copiar.');
+                return;
+            }
+            await db.songs.add({
+                title: row.title,
+                artist: row.artist || 'Artista',
+                content: row.content || '',
+                bpm: row.bpm || 120,
+                creator_id: session.user.id,
+            });
+            await refreshRepertoire();
+            if (typeof refreshData === 'function') await refreshData();
+            alert('Música copiada para a tua biblioteca. Abre a aba MÚSICAS para ver ou editar.');
+        } catch (e) {
+            alert(e.message || String(e));
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const saveOfficialSong = async (song) => {
         const { error } = await supabase.from('band_repertoire').upsert([{
             band_id: showRepertoire.id,
@@ -639,7 +668,11 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                                         </div>
                                     </div>
                                     <div>
-                                        <h4 style={{ color: '#FFD700', fontSize: '11px', marginBottom: '15px' }}>REPERTÓRIO DA BANDA</h4>
+                                        <h4 style={{ color: '#FFD700', fontSize: '11px', marginBottom: '6px' }}>REPERTÓRIO DA BANDA</h4>
+                                        <p style={{ color: '#666', fontSize: '10px', margin: '0 0 12px 0', lineHeight: 1.35 }}>
+                                            <Download size={10} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
+                                            Copiar para a biblioteca pessoal (aba MÚSICAS); não duplica se título e artista forem iguais.
+                                        </p>
                                         <div style={{ background: '#000', borderRadius: '12px', padding: '10px', border: '1px solid #FFD70033', minHeight: '220px' }}>
                                             {officialRepertoire.map((s, idx) => (
                                                 <div key={`off-${s.title}-${s.artist}-${idx}`} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
@@ -647,9 +680,20 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                                                         <div style={{ color: '#FFD700', fontSize: 13, fontWeight: 700 }}>{s.title}</div>
                                                         <div style={{ color: '#b8992d', fontSize: 11 }}>{s.artist || 'Artista'} • Oficial</div>
                                                     </div>
-                                                    {isRepertoireAdmin && (
-                                                        <MinusCircle onClick={() => removeOfficialSong(s)} size={18} color="#ff3b30" style={{ cursor: 'pointer', flexShrink: 0 }} />
-                                                    )}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                                                        <button
+                                                            type="button"
+                                                            title="Copiar para a minha biblioteca"
+                                                            disabled={loading}
+                                                            onClick={() => copyOfficialToPersonalLibrary(s)}
+                                                            style={{ background: 'none', border: 'none', padding: 0, cursor: loading ? 'default' : 'pointer', color: '#34c759' }}
+                                                        >
+                                                            <Download size={18} />
+                                                        </button>
+                                                        {isRepertoireAdmin && (
+                                                            <MinusCircle onClick={() => removeOfficialSong(s)} size={18} color="#ff3b30" style={{ cursor: 'pointer' }} />
+                                                        )}
+                                                    </div>
                                                 </div>
                                             ))}
                                             {pendingProposals.map((p) => (

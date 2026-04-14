@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.6.0] - 2026-04-14
+
+### Adicionado
+
+- **Fase E — Repertório oficial → biblioteca pessoal:** no modal **Repertório** da banda, cada música oficial tem o ícone **download** para copiar para `db.songs` (aba MÚSICAS). Não cria duplicata se já existir o mesmo par **título + artista** na biblioteca local (comparação com a mesma chave que o resto do modal); `creator_id` = utilizador atual. Atualiza a lista local do modal e chama `refreshData` quando existir.
+
 ## [8.5.9] - 2026-04-14
 
 ### Corrigido
