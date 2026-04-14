@@ -2,6 +2,16 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.6.2] - 2026-04-14
+
+### Documentação
+
+- **ROADMAP.md:** incluído no repositório com prioridade explícita para o próximo ciclo — botão **Disseminar** só verde quando houver alterações pendentes a disseminar; caso contrário, cinza (desabilitado).
+
+### Notas de release
+
+- Tag **v8.6.2** marca este ponto como **baseline estável** para retomar o desenvolvimento; código da aplicação inalterado face à v8.6.1.
+
 ## [8.6.1] - 2026-04-14
 
 ### Alterado
