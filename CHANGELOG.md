@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.6.1] - 2026-04-14
+
+### Alterado
+
+- **Repertório da banda:** o ícone de **copiar para a biblioteca pessoal** só aparece nas músicas oficiais que **ainda não existem** na biblioteca local com o mesmo par **título + artista**; texto de ajuda da coluna atualizado.
+
 ## [8.6.0] - 2026-04-14
 
 ### Adicionado

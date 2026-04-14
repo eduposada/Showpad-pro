@@ -394,6 +394,8 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
         const key = toSongKey(s.title, s.artist);
         return !officialKeys.has(key) && !pendingKeys.has(key);
     });
+    /** Chaves já presentes na biblioteca pessoal local (para esconder o botão de copiar quando não faz sentido). */
+    const personalLibraryKeys = new Set(allSongs.map((s) => toSongKey(s.title, s.artist)));
     const isRepertoireAdmin = showRepertoire?.role === 'admin';
 
     /** Fase E: cópia do repertório oficial → biblioteca pessoal (Dexie), sem duplicar título+artista. */
@@ -671,31 +673,39 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                                         <h4 style={{ color: '#FFD700', fontSize: '11px', marginBottom: '6px' }}>REPERTÓRIO DA BANDA</h4>
                                         <p style={{ color: '#666', fontSize: '10px', margin: '0 0 12px 0', lineHeight: 1.35 }}>
                                             <Download size={10} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
-                                            Copiar para a biblioteca pessoal (aba MÚSICAS); não duplica se título e artista forem iguais.
+                                            Ícone de download só nas músicas que ainda não tens na biblioteca pessoal (mesmo título e artista).
                                         </p>
                                         <div style={{ background: '#000', borderRadius: '12px', padding: '10px', border: '1px solid #FFD70033', minHeight: '220px' }}>
-                                            {officialRepertoire.map((s, idx) => (
+                                            {officialRepertoire.map((s, idx) => {
+                                                const offKey = toSongKey(s.title, s.artist);
+                                                const showImportBtn = !personalLibraryKeys.has(offKey);
+                                                return (
                                                 <div key={`off-${s.title}-${s.artist}-${idx}`} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
                                                     <div>
                                                         <div style={{ color: '#FFD700', fontSize: 13, fontWeight: 700 }}>{s.title}</div>
                                                         <div style={{ color: '#b8992d', fontSize: 11 }}>{s.artist || 'Artista'} • Oficial</div>
                                                     </div>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                                                        <button
-                                                            type="button"
-                                                            title="Copiar para a minha biblioteca"
-                                                            disabled={loading}
-                                                            onClick={() => copyOfficialToPersonalLibrary(s)}
-                                                            style={{ background: 'none', border: 'none', padding: 0, cursor: loading ? 'default' : 'pointer', color: '#34c759' }}
-                                                        >
-                                                            <Download size={18} />
-                                                        </button>
+                                                        {showImportBtn ? (
+                                                            <button
+                                                                type="button"
+                                                                title="Copiar para a minha biblioteca"
+                                                                disabled={loading}
+                                                                onClick={() => copyOfficialToPersonalLibrary(s)}
+                                                                style={{ background: 'none', border: 'none', padding: 0, cursor: loading ? 'default' : 'pointer', color: '#34c759' }}
+                                                            >
+                                                                <Download size={18} />
+                                                            </button>
+                                                        ) : (
+                                                            <span title="Já está na tua biblioteca pessoal (mesmo título e artista)" style={{ width: 22, height: 22, display: 'inline-block', flexShrink: 0 }} aria-hidden />
+                                                        )}
                                                         {isRepertoireAdmin && (
                                                             <MinusCircle onClick={() => removeOfficialSong(s)} size={18} color="#ff3b30" style={{ cursor: 'pointer' }} />
                                                         )}
                                                     </div>
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                             {pendingProposals.map((p) => (
                                                 <div key={p.id} style={{ padding: '12px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
                                                     <div>
