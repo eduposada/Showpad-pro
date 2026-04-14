@@ -73,9 +73,13 @@ Poucos concorrentes combinam colaboração real entre membros, governança de re
 
 A prioridade imediata é consolidar bandas e repertório colaborativo. O restante deste documento serve de referência até essa base estar estável em produção.
 
-### Próxima sessão — prioridade alta
+### Em curso na aba Bandas
 
-1. **Botão Disseminar (admin):** ficar **verde** e clicável só quando houver alterações a enviar aos membros; sem pendências, **cinza** e desativado. Implementação prevista em `BandView.jsx`, alinhada ao fluxo que grava em `band_repertoire` e `band_broadcasts` (ver `broadcastBandChanges` em `ShowPadCore.jsx`).
+1. **Fase F — governança de BPM / tom (repertório colaborativo):** definir regras mínimas para quem pode alterar BPM e tom no repertório oficial, como refletir isso nas propostas e na sincronização, sem quebrar o fluxo atual de aprovação (admin) e propostas (membro). *(Escopo exacto a fechar contigo no arranque da fase.)*
+
+### Concluído (referência)
+
+- **Disseminar (admin):** botão **verde** só quando há pendência neste aparelho — diferença entre `band_songs` + `db.songs` e `band_repertoire` na nuvem (`bandHasDexieRepertoireDiffersFromCloud`), ou edição de repertório oficial na Fase D ainda não seguida de disseminação (`sessionStorage` + recálculo ao fechar o modal / após broadcast). Cinza e desativado caso contrário.
 
 ### Backlog futuro (triagem)
 

@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.6.3] - 2026-04-14
+
+### Alterado
+
+- **Bandas (admin):** o botão **DISSEMINAR** só fica verde e clicável quando há alterações pendentes neste aparelho: diferença entre o repertório em `band_songs` + `db.songs` e o `band_repertoire` na nuvem (`bandHasDexieRepertoireDiffersFromCloud` em `ShowPadCore.jsx`), ou repertório oficial editado na Fase D sem ter sido disseminado depois (marca em `sessionStorage`). Após disseminar com sucesso, a marca é limpa e o estado recalculado.
+
 ## [8.6.2] - 2026-04-14
 
 ### Documentação

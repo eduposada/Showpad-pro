@@ -102,6 +102,54 @@ function repertoireMapKey(title, artist) {
     return `${String(title ?? '').trim()}::${String(artist ?? '').trim()}`;
 }
 
+function normRepertoireBpm(v) {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : 120;
+}
+
+function normRepertoireContent(v) {
+    return String(v ?? '');
+}
+
+/**
+ * Indica se o payload que `broadcastBandChanges` enviaria a partir de `band_songs` + `db.songs`
+ * difere do `band_repertoire` atual na nuvem (mesma chave título+artista: conteúdo e BPM).
+ * Com repertório só na nuvem (Fase D), este caminho costuma ser falso — `BandView` usa `sessionStorage` para marcar edições locais pendentes de disseminar.
+ */
+export async function bandHasDexieRepertoireDiffersFromCloud(bandId) {
+    if (!supabase || !bandId) return false;
+    const relations = await db.band_songs.where('band_id').equals(bandId).toArray();
+    const songIds = [...new Set(relations.map((r) => r.song_id).filter((id) => id != null))];
+    if (songIds.length === 0) return false;
+    const songs = await db.songs.where('id').anyOf(songIds).toArray();
+    if (songs.length === 0) return false;
+    const localByKey = new Map();
+    for (const s of songs) {
+        const key = repertoireMapKey(s.title, s.artist);
+        localByKey.set(key, {
+            content: normRepertoireContent(s.content),
+            bpm: normRepertoireBpm(s.bpm),
+        });
+    }
+    const { data: rows, error } = await supabase
+        .from('band_repertoire')
+        .select('title, artist, content, bpm')
+        .eq('band_id', bandId);
+    if (error) {
+        console.warn('bandHasDexieRepertoireDiffersFromCloud:', error.message);
+        return false;
+    }
+    const cloudByKey = new Map((rows || []).map((r) => [repertoireMapKey(r.title, r.artist), r]));
+    if (localByKey.size !== cloudByKey.size) return true;
+    for (const [key, loc] of localByKey) {
+        const c = cloudByKey.get(key);
+        if (!c) return true;
+        if (normRepertoireContent(c.content) !== loc.content) return true;
+        if (normRepertoireBpm(c.bpm) !== loc.bpm) return true;
+    }
+    return false;
+}
+
 /** `setlists.songs` no Postgres (jsonb) por vezes chega como string JSON; garante sempre array. */
 function normalizeSetlistSongsFromApi(raw) {
     if (raw == null) return [];
