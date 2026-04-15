@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, RefreshCw, Trash2, Layout, Music, X, Settings, Save, UserMinus, Zap, MinusCircle, Hash, Radio, Bell, UserPlus, Check, Ban, Download } from 'lucide-react';
+import { Plus, RefreshCw, Trash2, Layout, Music, X, Settings, Save, UserMinus, Zap, MinusCircle, Hash, Radio, Bell, UserPlus, Check, Ban, Download, Info } from 'lucide-react';
 import { supabase, db, deleteBandComplete, broadcastBandChanges, pullFromCloud } from './ShowPadCore';
 import { BandShowManager } from './BandShowManager';
 
@@ -418,6 +418,7 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     /** Chaves já presentes na biblioteca pessoal local (para esconder o botão de copiar quando não faz sentido). */
     const personalLibraryKeys = new Set(allSongs.map((s) => toSongKey(s.title, s.artist)));
     const isRepertoireAdmin = showRepertoire?.role === 'admin';
+    const canEditBandSettings = showSettings?.role === 'admin';
 
     /** Fase E: cópia do repertório oficial → biblioteca pessoal (Dexie), sem duplicar título+artista. */
     const copyOfficialToPersonalLibrary = async (row) => {
@@ -621,6 +622,16 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                                         </div>
                                     </div>
                                 )}
+                                {b.role !== 'admin' && !b.is_solo && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowSettings(b)}
+                                        style={{ background: 'none', border: 'none', color: '#7da8ff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                                        title="Informações da banda"
+                                    >
+                                        <Info size={18} />
+                                    </button>
+                                )}
                             </div>
                         </div>
                         <div style={{ padding: '15px 20px', borderTop: '1px solid #222', display: 'flex', gap: '8px', background: '#161618' }}>
@@ -779,12 +790,12 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
                     <div style={{ backgroundColor: '#1c1c1e', width: '100%', maxWidth: '580px', maxHeight: '90vh', borderRadius: '28px', border: '1px solid #444', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                         <div style={{ padding: '20px 25px', background: '#252529', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', flexShrink: 0 }}>
-                            <h2 style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>EDITAR BANDA</h2>
+                            <h2 style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>{canEditBandSettings ? 'EDITAR BANDA' : 'INFORMAÇÕES DA BANDA'}</h2>
                             <X onClick={() => setShowSettings(null)} style={{ cursor: 'pointer' }} color="#888" />
                         </div>
                         <div style={{ padding: '25px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                            <input style={styles.inputField} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nome da Banda" />
-                            <textarea style={{ ...styles.inputField, height: '80px' }} value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Observações..." />
+                            <input disabled={!canEditBandSettings} style={{ ...styles.inputField, opacity: canEditBandSettings ? 1 : 0.85 }} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nome da Banda" />
+                            <textarea disabled={!canEditBandSettings} style={{ ...styles.inputField, height: '80px', opacity: canEditBandSettings ? 1 : 0.85 }} value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Observações..." />
                             {!showSettings.is_solo && (
                                 <div style={{ borderTop: '1px solid #333', paddingTop: '18px' }}>
                                     <h3 style={{ color: '#9ea3aa', fontSize: '11px', fontWeight: 900, margin: '0 0 12px 0' }}>
@@ -857,8 +868,12 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                                 </div>
                             )}
                         </div>
-                        <div style={{ padding: '20px', background: '#252529', flexShrink: 0 }}>
-                            <button onClick={handleUpdateBand} style={{ ...styles.saveBtn, width: '100%', background: '#34c759' }}><Save size={18}/> SALVAR ALTERAÇÕES</button>
+                        <div style={{ padding: '20px', background: '#252529', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                            {canEditBandSettings ? (
+                                <button onClick={handleUpdateBand} style={{ ...styles.saveBtn, width: '100%', background: '#34c759' }}><Save size={18}/> SALVAR ALTERAÇÕES</button>
+                            ) : (
+                                <button type="button" onClick={() => setShowSettings(null)} style={styles.saveBtn}>FECHAR</button>
+                            )}
                         </div>
                     </div>
                 </div>
