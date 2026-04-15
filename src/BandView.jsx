@@ -290,7 +290,24 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     };
 
     const fetchMembers = async (bandId) => {
-        const { data } = await supabase.from('band_members').select('profile_id, role, profiles(full_name, email)').eq('band_id', bandId);
+        let { data, error } = await supabase
+            .from('band_members')
+            .select('profile_id, role, profiles(full_name, email)')
+            .eq('band_id', bandId);
+
+        // Fallback para ambientes onde a relação com `profiles` não está disponível.
+        if (error && (error.message || '').includes('relationship')) {
+            ({ data, error } = await supabase
+                .from('band_members')
+                .select('profile_id, role')
+                .eq('band_id', bandId));
+        }
+
+        if (error) {
+            console.error('fetchMembers:', error);
+            setMembers([]);
+            return;
+        }
         setMembers(data || []);
     };
 
@@ -573,16 +590,16 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                                     )}
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                 {!b.is_solo && (
                                     b.role === 'admin' ? 
-                                    <button onClick={() => handleDeleteBand(b)} style={{ background: 'none', border: 'none', color: '#ff3b30' }} title="Excluir"><Trash2 size={18} /></button> :
-                                    <button onClick={() => leaveBand(b.id)} style={{ background: 'none', border: 'none', color: '#ff9500' }} title="Sair"><UserMinus size={18} /></button>
+                                    <button type="button" onClick={() => handleDeleteBand(b)} style={{ background: 'none', border: 'none', color: '#ff3b30', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 }} title="Excluir"><Trash2 size={18} /></button> :
+                                    <button type="button" onClick={() => leaveBand(b.id)} style={{ background: 'none', border: 'none', color: '#ff9500', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 }} title="Sair"><UserMinus size={18} /></button>
                                 )}
                                 {b.role === 'admin' && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                                        <button type="button" onClick={() => setShowSettings(b)} style={{ background: 'none', border: 'none', color: '#888' }} title="Configurações da banda"><Settings size={20} /></button>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', minHeight: 18, alignItems: 'center' }}>
+                                    <div style={{ position: 'relative', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <button type="button" onClick={() => setShowSettings(b)} style={{ background: 'none', border: 'none', color: '#888', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 }} title="Configurações da banda"><Settings size={20} /></button>
+                                        <div style={{ position: 'absolute', top: -8, right: -18, display: 'flex', flexDirection: 'column', gap: 4, pointerEvents: 'none' }}>
                                             {(pendingJoinCounts[b.id] || 0) > 0 && (
                                                 <span title="Pedidos de entrada pendentes" style={{
                                                     minWidth: 18, height: 18, borderRadius: 9,
@@ -768,6 +785,32 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                         <div style={{ padding: '25px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '18px' }}>
                             <input style={styles.inputField} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nome da Banda" />
                             <textarea style={{ ...styles.inputField, height: '80px' }} value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Observações..." />
+                            {!showSettings.is_solo && (
+                                <div style={{ borderTop: '1px solid #333', paddingTop: '18px' }}>
+                                    <h3 style={{ color: '#9ea3aa', fontSize: '11px', fontWeight: 900, margin: '0 0 12px 0' }}>
+                                        MEMBROS DA BANDA
+                                    </h3>
+                                    {members.length === 0 ? (
+                                        <p style={{ color: '#666', fontSize: '12px', margin: 0 }}>Nenhum membro encontrado.</p>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                            {members.map((m) => {
+                                                const prof = m.profiles;
+                                                const nome = prof?.full_name || prof?.email || `Usuário ${String(m.profile_id).slice(0, 8)}…`;
+                                                return (
+                                                    <div key={`${m.profile_id}-${m.role}`} style={{ background: '#111', border: '1px solid #2f2f32', borderRadius: '10px', padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                                                        <div style={{ color: '#ddd', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nome}</div>
+                                                        <span style={{ color: m.role === 'admin' ? '#34c759' : '#888', fontSize: 10, fontWeight: 900, flexShrink: 0 }}>
+                                                            {String(m.role || '').toUpperCase()}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {showSettings.role === 'admin' && !showSettings.is_solo && (
                                 <div style={{ borderTop: '1px solid #333', paddingTop: '18px' }}>
                                     <h3 style={{ color: '#ff9500', fontSize: '11px', fontWeight: 900, margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
