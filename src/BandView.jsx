@@ -292,8 +292,15 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     const fetchMembers = async (bandId) => {
         let { data, error } = await supabase
             .from('band_members')
-            .select('profile_id, role, profiles(full_name, email)')
+            .select('profile_id, role, profiles(full_name, email, avatar_url)')
             .eq('band_id', bandId);
+
+        if (error && ((error.message || '').includes('relationship') || (error.message || '').includes('avatar_url'))) {
+            ({ data, error } = await supabase
+                .from('band_members')
+                .select('profile_id, role, profiles(full_name, email)')
+                .eq('band_id', bandId));
+        }
 
         // Fallback para ambientes onde a relação com `profiles` não está disponível.
         if (error && (error.message || '').includes('relationship')) {
@@ -807,11 +814,38 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                             {members.map((m) => {
                                                 const prof = m.profiles;
-                                                const nome = prof?.full_name || prof?.email || `Usuário ${String(m.profile_id).slice(0, 8)}…`;
+                                                const nomeRegistado = prof?.full_name != null && String(prof.full_name).trim() !== ''
+                                                    ? String(prof.full_name).trim()
+                                                    : null;
+                                                const email = prof?.email != null && String(prof.email).trim() !== ''
+                                                    ? String(prof.email).trim()
+                                                    : null;
+                                                const avatarUrl = prof?.avatar_url;
+                                                const idCurto = String(m.profile_id || '').slice(0, 8);
                                                 return (
-                                                    <div key={`${m.profile_id}-${m.role}`} style={{ background: '#111', border: '1px solid #2f2f32', borderRadius: '10px', padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                                                        <div style={{ color: '#ddd', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nome}</div>
-                                                        <span style={{ color: m.role === 'admin' ? '#34c759' : '#888', fontSize: 10, fontWeight: 900, flexShrink: 0 }}>
+                                                    <div key={`${m.profile_id}-${m.role}`} style={{ background: '#111', border: '1px solid #2f2f32', borderRadius: '10px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                                                            <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#222', border: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                {avatarUrl ? (
+                                                                    <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                ) : (
+                                                                    <UserPlus size={18} color="#555" />
+                                                                )}
+                                                            </div>
+                                                            <div style={{ minWidth: 0, flex: 1 }}>
+                                                                <div style={{ color: '#666', fontSize: 9, fontWeight: 800, letterSpacing: '0.04em', marginBottom: 2 }}>NOME REGISTADO</div>
+                                                                <div style={{ color: '#eee', fontSize: 13, fontWeight: 700, lineHeight: 1.25, wordBreak: 'break-word' }}>
+                                                                    {nomeRegistado || '—'}
+                                                                </div>
+                                                                {email && (
+                                                                    <div style={{ color: '#888', fontSize: 11, marginTop: 4, wordBreak: 'break-all' }}>{email}</div>
+                                                                )}
+                                                                {!nomeRegistado && !email && idCurto && (
+                                                                    <div style={{ color: '#666', fontSize: 10, marginTop: 4 }}>ID: …{idCurto}</div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <span style={{ color: m.role === 'admin' ? '#34c759' : '#888', fontSize: 10, fontWeight: 900, flexShrink: 0, alignSelf: 'flex-start', paddingTop: 2 }}>
                                                             {String(m.role || '').toUpperCase()}
                                                         </span>
                                                     </div>
