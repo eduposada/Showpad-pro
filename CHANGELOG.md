@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.6.4] - 2026-04-14
+
+### Alterado
+
+- **Bandas — Disseminar (admin):** removido o botão dos cartões na grelha de bandas. A disseminação (`broadcastBandChanges` + `band_broadcasts`) passa a ser **só no rodapé do modal Repertório**, com texto de ajuda. Edições ao repertório oficial **deixam de inserir** `band_broadcasts` em cada add/remove/aprovação; membros são avisados quando o admin clica em **Disseminar**. Removidos o estado verde/cinza, `sessionStorage` e `bandHasDexieRepertoireDiffersFromCloud` (evita comportamento errático).
+
 ## [8.6.3] - 2026-04-14
 
 ### Alterado

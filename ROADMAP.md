@@ -79,7 +79,7 @@ A prioridade imediata é consolidar bandas e repertório colaborativo. O restant
 
 ### Concluído (referência)
 
-- **Disseminar (admin):** botão **verde** só quando há pendência neste aparelho — diferença entre `band_songs` + `db.songs` e `band_repertoire` na nuvem (`bandHasDexieRepertoireDiffersFromCloud`), ou edição de repertório oficial na Fase D ainda não seguida de disseminação (`sessionStorage` + recálculo ao fechar o modal / após broadcast). Cinza e desativado caso contrário.
+- **Disseminar (admin):** removido dos cartões da lista de bandas; fica **só no rodapé do modal Repertório**. As edições ao oficial continuam a gravar-se na nuvem ao atuar; o admin **notifica os membros** (`band_broadcasts`) apenas quando clica em **Disseminar** antes de fechar (fechar sem disseminar não envia esse aviso).
 
 ### Backlog futuro (triagem)
 

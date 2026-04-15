@@ -1,30 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, RefreshCw, Trash2, Layout, Music, X, Settings, Save, UserMinus, Zap, MinusCircle, Hash, Radio, Bell, UserPlus, Check, Ban, Download } from 'lucide-react';
-import { supabase, db, deleteBandComplete, broadcastBandChanges, pullFromCloud, bandHasDexieRepertoireDiffersFromCloud } from './ShowPadCore';
+import { supabase, db, deleteBandComplete, broadcastBandChanges, pullFromCloud } from './ShowPadCore';
 import { BandShowManager } from './BandShowManager';
-
-const disseminatePendingStorageKey = (bandId) => `showpad_disseminate_pending_${bandId}`;
-function readDisseminatePending(bandId) {
-    try {
-        return sessionStorage.getItem(disseminatePendingStorageKey(bandId)) === '1';
-    } catch {
-        return false;
-    }
-}
-function writeDisseminatePending(bandId) {
-    try {
-        sessionStorage.setItem(disseminatePendingStorageKey(bandId), '1');
-    } catch {
-        /* ignore */
-    }
-}
-function clearDisseminatePending(bandId) {
-    try {
-        sessionStorage.removeItem(disseminatePendingStorageKey(bandId));
-    } catch {
-        /* ignore */
-    }
-}
 
 export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     const [loading, setLoading] = useState(false);
@@ -56,25 +33,6 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     const [pendingJoinCounts, setPendingJoinCounts] = useState({});
     const [pendingProposalCounts, setPendingProposalCounts] = useState({});
 
-    /** Admin: disseminar só ativo quando há diff Dexie→nuvem ou edição de repertório (Fase D) ainda não “disseminada” neste aparelho. */
-    const [canDisseminateByBandId, setCanDisseminateByBandId] = useState({});
-    const prevShowRepertoireRef = useRef(null);
-
-    const refreshCanDisseminateForBands = useCallback(async (bandList) => {
-        const next = {};
-        for (const b of bandList) {
-            if (b.role !== 'admin' || b.is_solo) continue;
-            try {
-                const dexieDiff = await bandHasDexieRepertoireDiffersFromCloud(b.id);
-                next[b.id] = Boolean(dexieDiff || readDisseminatePending(b.id));
-            } catch (e) {
-                console.warn(e);
-                next[b.id] = readDisseminatePending(b.id);
-            }
-        }
-        setCanDisseminateByBandId(next);
-    }, []);
-
     useEffect(() => { 
         fetchBands(); 
         
@@ -95,14 +53,6 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     useEffect(() => {
         if (showRepertoire) refreshRepertoire();
     }, [showRepertoire, repertoireSortBy]);
-
-    useEffect(() => {
-        const prev = prevShowRepertoireRef.current;
-        prevShowRepertoireRef.current = showRepertoire;
-        if (prev && !showRepertoire) {
-            db.my_bands.toArray().then((list) => refreshCanDisseminateForBands(list));
-        }
-    }, [showRepertoire, refreshCanDisseminateForBands]);
 
     useEffect(() => {
         if (showSettings) {
@@ -169,7 +119,6 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
             setBands(localBands);
             await loadPendingJoinCounts();
             await loadPendingProposalCounts();
-            await refreshCanDisseminateForBands(localBands);
         } catch (err) { console.error(err); }
         setLoading(false);
     };
@@ -224,30 +173,18 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
         setJoinRequests(data || []);
     };
 
-    // v7.1.5: DISSEMINAR (ADMIN)
-    const handleBroadcast = async (band) => {
-        let can = canDisseminateByBandId[band.id] === true;
-        if (!can) {
-            try {
-                const dexieDiff = await bandHasDexieRepertoireDiffersFromCloud(band.id);
-                can = Boolean(dexieDiff || readDisseminatePending(band.id));
-            } catch {
-                can = readDisseminatePending(band.id);
-            }
-        }
-        if (!can) {
-            alert('Não há alterações pendentes para disseminar a partir deste aparelho.');
-            return;
-        }
+    /** Admin: só a partir do modal de repertório — notifica membros (`band_broadcasts`) e envia `band_songs`→nuvem se existir. */
+    const handleRepertoireDisseminate = async () => {
+        if (!showRepertoire || showRepertoire.is_solo || showRepertoire.role !== 'admin') return;
         setLoading(true);
         try {
-            await broadcastBandChanges(band.id, session.user.id);
-            clearDisseminatePending(band.id);
-            alert("📢 Mudanças disseminadas com sucesso para todos os membros!");
-            const list = await db.my_bands.toArray();
-            await refreshCanDisseminateForBands(list);
-        } catch (e) { alert("Erro no Broadcast: " + e.message); }
-        setLoading(false);
+            await broadcastBandChanges(showRepertoire.id, session.user.id);
+            alert('📢 Repertório disseminado. Os membros podem usar «Sincronizar» ou «Atualizar» na aba Bandas para puxar novidades.');
+        } catch (e) {
+            alert(e.message || String(e));
+        } finally {
+            setLoading(false);
+        }
     };
 
     // v7.1.5: CAPTURAR MUDANÇAS (MEMBRO)
@@ -506,20 +443,6 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
         if (error) throw new Error(error.message || 'Erro ao salvar repertório oficial.');
     };
 
-    const notifyBandChange = async (kind = 'repertoire') => {
-        const res = await supabase.from('band_broadcasts').insert({
-            band_id: showRepertoire.id,
-            sender_id: session.user.id,
-            kind,
-        });
-        if (res.error && (res.error.message || '').toLowerCase().includes('kind')) {
-            await supabase.from('band_broadcasts').insert({
-                band_id: showRepertoire.id,
-                sender_id: session.user.id,
-            });
-        }
-    };
-
     const addSongToRepertoire = async (songId) => {
         if (!showRepertoire) return;
         if (!isRepertoireAdmin) return addSongToProposalQueue(songId);
@@ -528,11 +451,7 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
             const song = allSongs.find((s) => s.id === songId);
             if (!song) throw new Error('Música não encontrada.');
             await saveOfficialSong(song);
-            await notifyBandChange('repertoire');
-            writeDisseminatePending(showRepertoire.id);
-            setCanDisseminateByBandId((prev) => ({ ...prev, [showRepertoire.id]: true }));
             await refreshRepertoire();
-            setHasUpdates(true);
         } catch (e) {
             alert(e.message || String(e));
         } finally {
@@ -551,9 +470,6 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                 .eq('title', song.title)
                 .eq('artist', song.artist);
             if (error) throw new Error(error.message || 'Erro ao remover música oficial.');
-            await notifyBandChange('repertoire');
-            writeDisseminatePending(showRepertoire.id);
-            setCanDisseminateByBandId((prev) => ({ ...prev, [showRepertoire.id]: true }));
             await refreshRepertoire();
         } catch (e) {
             alert(e.message || String(e));
@@ -571,9 +487,6 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                 .update({ status: 'accepted', resolved_at: new Date().toISOString() })
                 .eq('id', proposal.id);
             if (error) throw new Error(error.message || 'Erro ao aprovar proposta.');
-            await notifyBandChange('repertoire');
-            writeDisseminatePending(showRepertoire.id);
-            setCanDisseminateByBandId((prev) => ({ ...prev, [showRepertoire.id]: true }));
             await refreshRepertoire();
             await loadPendingProposalCounts();
         } catch (e) {
@@ -642,9 +555,7 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
 
             {/* Cards de Bandas */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
-                {bands.map((b) => {
-                    const canDisseminate = canDisseminateByBandId[b.id] === true;
-                    return (
+                {bands.map((b) => (
                     <div key={b.id} style={{ ...styles.settingsCard, maxWidth: 'none', background: '#1c1c1e', border: '1px solid #333' }}>
                         <div style={{ padding: '20px', display: 'flex', gap: '15px', alignItems: 'center' }}>
                             <div style={{ width: '60px', height: '60px', borderRadius: '12px', background: '#000', border: '1px solid #444', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -696,30 +607,11 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                             </div>
                         </div>
                         <div style={{ padding: '15px 20px', borderTop: '1px solid #222', display: 'flex', gap: '8px', background: '#161618' }}>
-                            <button onClick={() => setShowRepertoire(b)} style={{ ...styles.headerBtn, flex: 1, color: '#FFD700' }}><Music size={14}/> REPERTÓRIO</button>
-                            <button onClick={() => setShowBandShows(b)} style={{ ...styles.headerBtn, flex: 1, color: '#fff' }}><Layout size={14}/> SHOWS</button>
-                            {b.role === 'admin' && !b.is_solo && (
-                                <button
-                                    type="button"
-                                    disabled={loading || !canDisseminate}
-                                    title={canDisseminate ? 'Enviar repertório local (se houver) e notificar membros' : 'Sem alterações pendentes para disseminar neste aparelho'}
-                                    onClick={() => handleBroadcast(b)}
-                                    style={{
-                                        ...styles.headerBtn,
-                                        flex: 1,
-                                        opacity: canDisseminate && !loading ? 1 : 0.45,
-                                        cursor: canDisseminate && !loading ? 'pointer' : 'default',
-                                        color: canDisseminate ? '#4cd964' : '#888',
-                                        borderColor: canDisseminate ? '#4cd96444' : '#333',
-                                    }}
-                                >
-                                    <Radio size={14}/> DISSEMINAR
-                                </button>
-                            )}
+                            <button type="button" onClick={() => setShowRepertoire(b)} style={{ ...styles.headerBtn, flex: 1, color: '#FFD700' }}><Music size={14}/> REPERTÓRIO</button>
+                            <button type="button" onClick={() => setShowBandShows(b)} style={{ ...styles.headerBtn, flex: 1, color: '#fff' }}><Layout size={14}/> SHOWS</button>
                         </div>
                     </div>
-                    );
-                })}
+                ))}
             </div>
             </div>
 
@@ -833,7 +725,35 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                                 </div>
                             )}
                         </div>
-                        <div style={{ padding: '20px', background: '#252529', textAlign: 'right' }}><button onClick={() => setShowRepertoire(null)} style={styles.saveBtn}>FECHAR</button></div>
+                        <div style={{ padding: '16px 20px', background: '#252529', borderTop: '1px solid #333', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                            {!showRepertoire.is_solo && showRepertoire.role === 'admin' && (
+                                <p style={{ color: '#888', fontSize: 10, margin: 0, lineHeight: 1.45, flex: '1 1 220px', maxWidth: '100%' }}>
+                                    As alterações ao repertório oficial gravam-se na nuvem ao editar. Para avisar os membros para sincronizarem, usa <strong style={{ color: '#ccc' }}>Disseminar</strong> antes de fechar; ao fechar sem disseminar, não é enviado esse aviso.
+                                </p>
+                            )}
+                            <div style={{ display: 'flex', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
+                                {!showRepertoire.is_solo && showRepertoire.role === 'admin' && (
+                                    <button
+                                        type="button"
+                                        disabled={loading}
+                                        onClick={handleRepertoireDisseminate}
+                                        title="Notificar membros e enviar repertório Dexie local (se existir) para a nuvem"
+                                        style={{
+                                            ...styles.headerBtn,
+                                            color: '#4cd964',
+                                            borderColor: '#4cd96444',
+                                            padding: '10px 16px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 8,
+                                        }}
+                                    >
+                                        <Radio size={16} /> DISSEMINAR
+                                    </button>
+                                )}
+                                <button type="button" onClick={() => setShowRepertoire(null)} style={styles.saveBtn}>FECHAR</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
