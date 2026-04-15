@@ -75,7 +75,7 @@ A prioridade imediata é consolidar bandas e repertório colaborativo. O restant
 
 ### Em curso na aba Bandas
 
-1. **Fase F — governança de BPM / tom (repertório colaborativo):** definir regras mínimas para quem pode alterar BPM e tom no repertório oficial, como refletir isso nas propostas e na sincronização, sem quebrar o fluxo atual de aprovação (admin) e propostas (membro). *(Escopo exacto a fechar contigo no arranque da fase.)*
+1. **Fase F — governança de BPM / tom (repertório colaborativo):** é esta a fase acordada; o desenho de execução ainda **não está fechado** — desenvolvimento em conjunto com o mantenedor (regras: quem altera BPM/tom no oficial vs. propostas, impacto em sync e shows, sem quebrar aprovação admin / proposta membro). **Aguardando** retorno após testes na prática do fluxo **Disseminar** (v8.6.3); só então retomamos com instruções explícitas.
 
 ### Concluído (referência)
 
