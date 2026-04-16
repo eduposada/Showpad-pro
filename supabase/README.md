@@ -52,6 +52,35 @@ Se a query com `profiles(full_name, email)` falhar no log, executa também:
 
 ---
 
+## Fase Perfis — `profiles` + onboarding obrigatório
+
+**Ficheiro:** [migrations/20260415090000_profiles_onboarding_base.sql](migrations/20260415090000_profiles_onboarding_base.sql)
+
+### O que esta fase cria
+
+- Tabela `public.profiles` (com `id = auth.users.id`) para dados do utilizador.
+- Campos de perfil: `full_name`, `main_instrument`, `instruments`, `city`, `bio`, `avatar_url`.
+- Trigger de `updated_at`.
+- RLS:
+  - utilizador lê/escreve o próprio profile;
+  - leitura entre membros da mesma banda (para lista de membros na aba Bandas).
+- Backfill inicial para utilizadores já existentes no `auth.users`.
+
+### Ordem recomendada de deploy (sem regressão)
+
+1. **Aplicar SQL no Supabase** (migration acima).
+2. **Deploy da UI com onboarding** (gate no primeiro login para `full_name` + `main_instrument`).
+3. **Validar aba Bandas** (lista de membros com `profiles.full_name/email/avatar_url` e fallback).
+4. Só depois remover fallbacks legados, se desejado.
+
+### Checklist rápido
+
+- [ ] Cada utilizador antigo tem linha em `public.profiles`.
+- [ ] Novo login sem profile abre onboarding e salva com sucesso.
+- [ ] Lista de membros nas bandas mostra nome/e-mail/avatar quando existir.
+
+---
+
 ## Shows da banda (`setlists.band_id`) e SYNC
 
 ### Membro vê o show mas a lista “Músicas no Show” vem vazia

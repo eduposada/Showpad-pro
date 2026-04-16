@@ -3,7 +3,7 @@ import { WebMidi } from 'webmidi';
 import { 
   Plus, Music, Trash2, Save, Monitor, Settings, Zap, 
   LogOut, SortAsc, UserRound, Cloud, RefreshCw, User,
-  CloudUpload, CloudDownload, Info, Download
+  CloudUpload, CloudDownload, Info, Download, Loader2
 } from 'lucide-react';
 
 import { db, transposeContent, supabase, triggerDL, pushToCloud, pullFromCloud, soloInviteCodeForBandId } from './ShowPadCore';
@@ -14,6 +14,7 @@ import { AuthView } from './AuthView';
 import { BandView } from './BandView';
 import { GarimpoView } from './GarimpoView';
 import { InfoModal } from './InfoModal';
+import { ProfileOnboardingView } from './ProfileOnboardingView';
 import { styles } from './Styles';
 
 export default function App() {
@@ -38,6 +39,10 @@ export default function App() {
   const [midiLearning, setMidiLearning] = useState(null);
   const [isScraping, setIsScraping] = useState(false);
   const [isServerOnline, setIsServerOnline] = useState(false);
+  const [profileRecord, setProfileRecord] = useState(null);
+  const [profileReady, setProfileReady] = useState(false);
+  const [profileNeedsOnboarding, setProfileNeedsOnboarding] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   const midiLearningRef = useRef(null);
   const showScrollRef = useRef(null);
@@ -45,8 +50,67 @@ export default function App() {
 
   const getUserDisplayName = () => {
     if (!session?.user) return "Usuário";
+    if (profileRecord?.full_name) return profileRecord.full_name;
     const meta = session.user.user_metadata;
     return meta?.full_name || meta?.name || session.user.email.split('@')[0];
+  };
+
+  const loadProfileGate = async (user) => {
+    if (!user || !supabase) {
+      setProfileRecord(null);
+      setProfileNeedsOnboarding(false);
+      setProfileReady(true);
+      return;
+    }
+    setProfileLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, main_instrument, instruments, city, bio, avatar_url')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        // Enquanto a migration não estiver aplicada, não travar acesso.
+        console.warn('profiles gate:', error.message || error);
+        setProfileRecord(null);
+        setProfileNeedsOnboarding(false);
+        setProfileReady(true);
+        return;
+      }
+
+      const rec = data || null;
+      const missingFullName = !(rec?.full_name && String(rec.full_name).trim());
+      const missingMainInstrument = !(rec?.main_instrument && String(rec.main_instrument).trim());
+      setProfileRecord(rec);
+      setProfileNeedsOnboarding(!rec || missingFullName || missingMainInstrument);
+      setProfileReady(true);
+    } catch (e) {
+      console.error('Erro ao verificar profile:', e);
+      setProfileRecord(null);
+      setProfileNeedsOnboarding(false);
+      setProfileReady(true);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const handleSaveProfileOnboarding = async (payload) => {
+    if (!session?.user || !supabase) return;
+    const row = {
+      id: session.user.id,
+      ...payload,
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = await supabase
+      .from('profiles')
+      .upsert(row, { onConflict: 'id' })
+      .select('id, full_name, main_instrument, instruments, city, bio, avatar_url')
+      .single();
+    if (error) throw new Error(error.message || 'Erro ao salvar perfil.');
+    setProfileRecord(data || row);
+    setProfileNeedsOnboarding(false);
+    setProfileReady(true);
   };
 
   useEffect(() => {
@@ -59,11 +123,24 @@ export default function App() {
           setSetlists([]);
           setBands([]);
           setSelectedItem(null);
+          setProfileRecord(null);
+          setProfileNeedsOnboarding(false);
+          setProfileReady(false);
         }
       });
       return () => subscription.unsubscribe();
     }
   }, []);
+
+  useEffect(() => {
+    if (!session) {
+      setProfileRecord(null);
+      setProfileNeedsOnboarding(false);
+      setProfileReady(false);
+      return;
+    }
+    loadProfileGate(session.user);
+  }, [session]);
 
   const checkSoloBandV3 = async (user) => {
     if (!user) return;
@@ -100,18 +177,18 @@ export default function App() {
 
   // Garantir banda solo só quando a sessão muda — não ao trocar ordenação (sortBy).
   useEffect(() => {
-    if (session) {
+    if (session && profileReady && !profileNeedsOnboarding) {
       checkSoloBandV3(session.user);
       initMidi();
       checkServer();
     }
-  }, [session]);
+  }, [session, profileReady, profileNeedsOnboarding]);
 
   useEffect(() => {
-    if (session) {
+    if (session && profileReady && !profileNeedsOnboarding) {
       refreshData();
     }
-  }, [session, sortBy]);
+  }, [session, sortBy, profileReady, profileNeedsOnboarding]);
 
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
 
@@ -272,6 +349,26 @@ export default function App() {
   };
 
   if (!session) return <AuthView styles={styles} />;
+  if (profileLoading || !profileReady) {
+    return (
+      <div style={styles.wizard}>
+        <div style={{ ...styles.authCard, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, minHeight: 220 }}>
+          <Loader2 size={22} className="spin" />
+          <span style={{ color: '#aaa', fontSize: 13 }}>Carregando perfil...</span>
+        </div>
+      </div>
+    );
+  }
+  if (profileNeedsOnboarding) {
+    return (
+      <ProfileOnboardingView
+        styles={styles}
+        email={session.user.email}
+        initialValues={profileRecord}
+        onSubmit={handleSaveProfileOnboarding}
+      />
+    );
+  }
 
   const filteredSongs = filterArtist
     ? songs.filter((s) => (s.artist || '').trim() === filterArtist)

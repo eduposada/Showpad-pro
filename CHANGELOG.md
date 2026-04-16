@@ -2,6 +2,18 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.7.0] - 2026-04-15
+
+### Adicionado
+
+- **Perfis de utilizador (base Supabase):** nova migration `20260415090000_profiles_onboarding_base.sql` para criar/normalizar `public.profiles` (`full_name`, `main_instrument`, `instruments`, `city`, `bio`, `avatar_url`), trigger de `updated_at`, RLS (self-service + leitura entre membros da mesma banda) e backfill inicial a partir de `auth.users`.
+- **Onboarding obrigatório no primeiro login:** novo fluxo de perfil no cliente (`ProfileOnboardingView`) quando `full_name` ou `main_instrument` estiverem em falta; grava com `upsert` em `profiles` antes de liberar uso completo do app.
+
+### Alterado
+
+- **App (nome do utilizador):** `getUserDisplayName()` passa a priorizar `profiles.full_name` (com fallback para `user_metadata` e e-mail durante transição).
+- **Documentação Supabase:** `supabase/README.md` inclui secção de perfis com ordem de deploy segura (DB -> UI onboarding -> validação Bandas).
+
 ## [8.6.4] - 2026-04-14
 
 ### Alterado
