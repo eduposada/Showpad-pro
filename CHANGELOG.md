@@ -2,6 +2,59 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.7.7] - 2026-04-17
+
+### Adicionado (Supabase)
+
+- **`supabase/FIX_DATABASE_ERROR_GRANTING_USER.sql`:** script único para colar no SQL Editor (vários `DROP TRIGGER` / `DROP FUNCTION` + `SELECT` de diagnóstico no fim). Migração `20260417120000_auth_users_drop_profile_triggers.sql`; `20260416220000_profiles_remove_auth_users_trigger.sql` alinhada aos mesmos drops.
+
+### Alterado
+
+- **Auth:** alerta «Database error granting user» referencia `FIX_DATABASE_ERROR_GRANTING_USER.sql` e o resultado do `SELECT` se o erro continuar.
+
+## [8.7.6] - 2026-04-16
+
+### Alterado
+
+- **Auth Google:** `signInWithOAuth` passa a usar `queryParams.prompt=select_account` e `redirectTo` com origem + pathname, para o Google **mostrar o seletor de conta** em vez de reutilizar silenciosamente outra sessão já aberta no browser.
+- **Auth e-mail/senha:** `signUp` com `emailRedirectTo`; mensagem distinta se a conta fica a aguardar confirmação por e-mail; alerta orientado ao SQL de remoção do trigger se a mensagem for «Database error granting user».
+
+## [8.7.5] - 2026-04-16
+
+### Alterado (Supabase + app)
+
+- **Auth "Database error granting user":** migration `20260416220000_profiles_remove_auth_users_trigger.sql` remove o trigger `on_auth_user_sync` e a função (causa típica de falha no GoTrue). A migration `20260416180000_profiles_email_auth_sync.sql` no repositório fica **só** com coluna `email` + backfill SQL (sem trigger).
+- **App:** após carregar `profiles`, faz `update` de `email` alinhado ao utilizador autenticado (com JWT), já com RLS permissiva para o próprio.
+
+### Corrigido (Supabase)
+
+- **Hotfix documentação:** prioridade à remoção do trigger em `supabase/README.md`.
+
+## [8.7.4] - 2026-04-16
+
+### Corrigido (Supabase)
+
+- **Auth "Database error granting user":** nova migration `20260416210000_profiles_trigger_bypass_rls.sql` — `ALTER FUNCTION handle_auth_user_sync() OWNER TO postgres` e política RLS `profiles_auth_admin_maintain` para `supabase_auth_admin`, para o trigger de sync `auth.users` → `profiles` não falhar no registo/OAuth.
+
+## [8.7.3] - 2026-04-16
+
+### Corrigido
+
+- **Contas no mesmo navegador:** o Dexie (`ShowPadProWeb`) é **um IndexedDB por origem**, não por utilizador. Ao criar ou entrar com **outra conta** na mesma máquina/navegador, a biblioteca local do utilizador anterior aparecia porque `refreshData` carregava **todas** as linhas de `db.songs` / `db.setlists` sem filtrar por `creator_id`. Agora: (1) ao detetar mudança de `auth.uid` (via `sessionStorage`), **limpa** músicas, shows, bandas e `band_songs` locais; (2) a UI e o **push para a nuvem** só consideram músicas do utilizador atual e setlists coerentes com as bandas locais; (3) o modal Repertório e a cópia para biblioteca pessoal usam só músicas do `creator_id` atual.
+
+## [8.7.2] - 2026-04-16
+
+### Adicionado
+
+- **Supabase — `profiles.email` + trigger `on_auth_user_sync`:** migration `20260416180000_profiles_email_auth_sync.sql` para guardar e-mail na tabela pública, backfill a partir de `auth.users` e sincronizar nome/avatar dos metadados OAuth (ex.: Google `picture`, `name`) em cada insert/update de utilizador.
+- **Onboarding:** pré-preenchimento a partir de `user_metadata` (Google); botão **Escolher foto…** com recorte quadrado e compressão JPEG (além do campo URL).
+- **App:** `ensureProfileRowFromAuth` + `upsert` tolerante se a coluna `email` ainda não existir; leitura de perfil com fallback de `select` sem `email`.
+
+### Alterado
+
+- **Bandas — lista de membros:** removido o rótulo em caixa alta que parecia dado em falta; linha principal com nome ou e-mail; instrumentos quando existirem; texto de ajuda se não houver nome nem e-mail na linha `profiles`.
+- **Auth (e-mail):** no primeiro `signUp`, envia `user_metadata` mínimo (`full_name` / `name` a partir da parte local do e-mail) para alinhar com o trigger/backfill.
+
 ## [8.7.1] - 2026-04-16
 
 ### Alterado

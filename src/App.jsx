@@ -6,7 +6,19 @@ import {
   CloudUpload, CloudDownload, Info, Download, Loader2
 } from 'lucide-react';
 
-import { db, transposeContent, supabase, triggerDL, pushToCloud, pullFromCloud, soloInviteCodeForBandId } from './ShowPadCore';
+import {
+  db,
+  transposeContent,
+  supabase,
+  triggerDL,
+  pushToCloud,
+  pullFromCloud,
+  soloInviteCodeForBandId,
+  SHOWPAD_LAST_UID_KEY,
+  clearAllLocalDexieStores,
+  filterDexieSongsForCreator,
+  filterDexieSetlistsForSession,
+} from './ShowPadCore';
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
 import { SettingsView } from './SettingsView';
@@ -55,6 +67,52 @@ export default function App() {
     return meta?.full_name || meta?.name || session.user.email.split('@')[0];
   };
 
+  const profileSelectColumns =
+    'id, email, full_name, main_instrument, instruments, city, bio, avatar_url';
+
+  const selectProfileRow = async (userId) => {
+    let r = await supabase
+      .from('profiles')
+      .select(profileSelectColumns)
+      .eq('id', userId)
+      .maybeSingle();
+    const em = (r.error?.message || '').toLowerCase();
+    if (r.error && em.includes('email')) {
+      r = await supabase
+        .from('profiles')
+        .select('id, full_name, main_instrument, instruments, city, bio, avatar_url')
+        .eq('id', userId)
+        .maybeSingle();
+    }
+    return r;
+  };
+
+  const ensureProfileRowFromAuth = async (user) => {
+    const meta = user.user_metadata || {};
+    const hintName = [meta.full_name, meta.name, meta.given_name]
+      .map((s) => (s != null ? String(s).trim() : ''))
+      .find(Boolean);
+    const hintAvatar = [meta.avatar_url, meta.picture]
+      .map((s) => (s != null ? String(s).trim() : ''))
+      .find(Boolean);
+    const localPart = user.email ? String(user.email).split('@')[0] : '';
+    const base = {
+      id: user.id,
+      full_name: hintName || localPart || null,
+      avatar_url: hintAvatar || null,
+      instruments: [],
+      updated_at: new Date().toISOString(),
+    };
+    let { error } = await supabase.from('profiles').upsert(
+      { ...base, email: user.email || null },
+      { onConflict: 'id' }
+    );
+    if (error && (error.message || '').toLowerCase().includes('email')) {
+      ({ error } = await supabase.from('profiles').upsert(base, { onConflict: 'id' }));
+    }
+    if (error) console.warn('ensureProfileRowFromAuth:', error.message || error);
+  };
+
   const loadProfileGate = async (user) => {
     if (!user || !supabase) {
       setProfileRecord(null);
@@ -64,11 +122,7 @@ export default function App() {
     }
     setProfileLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, main_instrument, instruments, city, bio, avatar_url')
-        .eq('id', user.id)
-        .maybeSingle();
+      let { data, error } = await selectProfileRow(user.id);
 
       if (error) {
         // Enquanto a migration não estiver aplicada, não travar acesso.
@@ -79,7 +133,31 @@ export default function App() {
         return;
       }
 
-      const rec = data || null;
+      if (!data) {
+        await ensureProfileRowFromAuth(user);
+        const again = await selectProfileRow(user.id);
+        data = again.data;
+        error = again.error;
+        if (error) {
+          console.warn('profiles gate (refetch):', error.message || error);
+        }
+      }
+
+      let rec = data || null;
+      // Sem trigger no Auth: alinhar e-mail na linha `profiles` com JWT (RLS update self).
+      if (rec && user.email) {
+        const { error: emailErr } = await supabase
+          .from('profiles')
+          .update({
+            email: user.email,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id);
+        if (!emailErr) {
+          rec = { ...rec, email: user.email };
+        }
+      }
+
       const missingFullName = !(rec?.full_name && String(rec.full_name).trim());
       const missingMainInstrument = !(rec?.main_instrument && String(rec.main_instrument).trim());
       setProfileRecord(rec);
@@ -99,14 +177,23 @@ export default function App() {
     if (!session?.user || !supabase) return;
     const row = {
       id: session.user.id,
+      email: session.user.email || null,
       ...payload,
       updated_at: new Date().toISOString(),
     };
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('profiles')
       .upsert(row, { onConflict: 'id' })
-      .select('id, full_name, main_instrument, instruments, city, bio, avatar_url')
+      .select(profileSelectColumns)
       .single();
+    if (error && (error.message || '').toLowerCase().includes('email')) {
+      const { email: _omit, ...rest } = row;
+      ({ data, error } = await supabase
+        .from('profiles')
+        .upsert(rest, { onConflict: 'id' })
+        .select('id, full_name, main_instrument, instruments, city, bio, avatar_url')
+        .single());
+    }
     if (error) throw new Error(error.message || 'Erro ao salvar perfil.');
     setProfileRecord(data || row);
     setProfileNeedsOnboarding(false);
@@ -140,6 +227,27 @@ export default function App() {
       return;
     }
     loadProfileGate(session.user);
+  }, [session]);
+
+  /** Dexie (`ShowPadProWeb`) é partilhado no mesmo navegador: ao entrar com outro `auth.uid`, apagar dados locais. */
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    const id = session.user.id;
+    let cancelled = false;
+    (async () => {
+      try {
+        const prev = sessionStorage.getItem(SHOWPAD_LAST_UID_KEY);
+        if (prev && prev !== id) {
+          await clearAllLocalDexieStores();
+        }
+        if (!cancelled) sessionStorage.setItem(SHOWPAD_LAST_UID_KEY, id);
+      } catch (e) {
+        console.error('Troca de conta / Dexie:', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [session]);
 
   const checkSoloBandV3 = async (user) => {
@@ -195,10 +303,12 @@ export default function App() {
   const refreshData = async () => { 
     if (!session) return;
     try {
-        const s = await db.songs.toArray();
-        const sl = await db.setlists.toArray();
-        const allBands = await db.my_bands.toArray(); 
-        const filteredBands = allBands.filter(b => b.owner_id === session.user.id || b.role);
+        const uid = session.user.id;
+        const allBands = await db.my_bands.toArray();
+        const filteredBands = allBands.filter((b) => b.owner_id === uid || b.role);
+        const bandIds = new Set(filteredBands.map((b) => b.id));
+        const s = filterDexieSongsForCreator(await db.songs.toArray(), uid);
+        const sl = filterDexieSetlistsForSession(await db.setlists.toArray(), uid, bandIds);
 
         s.sort((a,b) => {
             const valA = (sortBy === 'artist' ? a.artist : a.title) || "";
@@ -364,6 +474,7 @@ export default function App() {
       <ProfileOnboardingView
         styles={styles}
         email={session.user.email}
+        authMeta={session.user.user_metadata || {}}
         initialValues={profileRecord}
         onSubmit={handleSaveProfileOnboarding}
       />

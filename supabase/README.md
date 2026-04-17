@@ -79,6 +79,19 @@ Se a query com `profiles(full_name, email)` falhar no log, executa também:
 - [ ] Novo login sem profile abre onboarding e salva com sucesso.
 - [ ] Lista de membros nas bandas mostra nome/e-mail/avatar quando existir.
 
+### Atualização — e-mail em `profiles` + sync com Google / auth
+
+**Ficheiro:** [migrations/20260416180000_profiles_email_auth_sync.sql](migrations/20260416180000_profiles_email_auth_sync.sql)
+
+- Coluna `email` em `public.profiles` (preenchida a partir de `auth.users` e mantida por trigger em `INSERT`/`UPDATE` em `auth.users`).
+- Backfill de `email`, `full_name` e `avatar_url` (metadados OAuth: `picture`, `name`, etc.).
+- **Aplica este SQL no Dashboard** depois da migration base de perfis; sem isto, a app continua a funcionar, mas o embed `profiles(..., email)` pode não devolver e-mail até a coluna existir.
+
+**Erro "Database error granting user" ao registar/login:** quase sempre é um **trigger** (ou função) em `auth.users` a falhar ao escrever em `public.profiles`. **Copia e executa no SQL Editor** o ficheiro único [FIX_DATABASE_ERROR_GRANTING_USER.sql](FIX_DATABASE_ERROR_GRANTING_USER.sql) (remove vários triggers/funções comuns e inclui um `SELECT` de diagnóstico no fim). Equivalente em migrações: [migrations/20260416220000_profiles_remove_auth_users_trigger.sql](migrations/20260416220000_profiles_remove_auth_users_trigger.sql) + [migrations/20260417120000_auth_users_drop_profile_triggers.sql](migrations/20260417120000_auth_users_drop_profile_triggers.sql).
+
+**Google com várias contas no mesmo PC:** o cliente usa `prompt=select_account` no OAuth para forçar o ecrã de escolha de conta; se ainda entrar a conta “errada”, em `chrome://settings/content/cookies` ou em janela anónima testa só uma sessão Google.
+
+
 ---
 
 ## Shows da banda (`setlists.band_id`) e SYNC

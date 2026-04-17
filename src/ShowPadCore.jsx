@@ -14,6 +14,37 @@ db.version(14).stores({
     band_songs: '++id, [band_id+song_id], band_id, song_id, custom_tone' 
 });
 
+/** `sessionStorage`: último utilizador que usou o Dexie nesta origem (evita misturar contas no mesmo navegador). */
+export const SHOWPAD_LAST_UID_KEY = 'showpad_last_signed_in_uid';
+
+/** O IndexedDB `ShowPadProWeb` é um só por origem — ao mudar de conta, limpar para não ver biblioteca do utilizador anterior. */
+export async function clearAllLocalDexieStores() {
+    await db.transaction('rw', db.songs, db.setlists, db.my_bands, db.band_songs, async () => {
+        await db.songs.clear();
+        await db.setlists.clear();
+        await db.my_bands.clear();
+        await db.band_songs.clear();
+    });
+}
+
+/** Músicas locais só do `creator_id` atual (Dexie partilhado no mesmo browser). */
+export function filterDexieSongsForCreator(songs, userId) {
+    const u = String(userId);
+    return (songs || []).filter((x) => x != null && String(x.creator_id) === u);
+}
+
+/** Shows locais: pessoais do utilizador ou de bandas presentes em `my_bands` filtrado. */
+export function filterDexieSetlistsForSession(setlists, userId, bandIdsSet) {
+    const u = String(userId);
+    const bands = bandIdsSet instanceof Set ? bandIdsSet : new Set(bandIdsSet || []);
+    return (setlists || []).filter((row) => {
+        if (!row) return false;
+        if (String(row.creator_id) === u) return true;
+        if (row.band_id && bands.has(row.band_id)) return true;
+        return false;
+    });
+}
+
 export const runFullBackup = async () => {
     try {
         const songs = await db.songs.toArray();
@@ -308,15 +339,19 @@ export const pushToCloud = async (userId) => {
     if (!supabase) {
         throw new Error('Supabase não configurado (variáveis de ambiente).');
     }
-    // 1. Músicas
-    const s = await db.songs.toArray();
+    // 1. Músicas — só as do utilizador atual (Dexie pode conter dados de outra sessão até à troca de conta).
+    const s = filterDexieSongsForCreator(await db.songs.toArray(), userId);
     if (s.length > 0) {
         const cleanSongs = dedupeSongsForCloudUpsert(s, userId);
         const r = await supabase.from('songs').upsert(cleanSongs, { onConflict: 'title,artist,creator_id' });
         throwIfSupabaseError(r.error, 'Envio de músicas');
     }
-    // 2. Setlists — garantir cifra em `songs` nos shows de banda antes do upsert (ignora cópias revogadas só-locais)
-    let sl = await db.setlists.toArray();
+    // 2. Setlists — só do utilizador atual (+ shows de banda conhecidas em `my_bands` local).
+    const allBandsPush = await db.my_bands.toArray();
+    const bandIdsPush = new Set(
+        allBandsPush.filter((b) => b && (b.owner_id === userId || b.role)).map((b) => b.id)
+    );
+    let sl = filterDexieSetlistsForSession(await db.setlists.toArray(), userId, bandIdsPush);
     const slPushable = sl.filter((r) => !r.revoked_by_admin);
     for (const row of slPushable) {
         if (!row.band_id) continue;
@@ -325,7 +360,11 @@ export const pushToCloud = async (userId) => {
             await db.setlists.update(row.id, { songs: h.songs });
         }
     }
-    sl = (await db.setlists.toArray()).filter((r) => !r.revoked_by_admin);
+    sl = filterDexieSetlistsForSession(
+        (await db.setlists.toArray()).filter((r) => !r.revoked_by_admin),
+        userId,
+        bandIdsPush
+    );
     if (sl.length > 0) {
         const cleanSl = dedupeSetlistsForCloudUpsert(sl, userId);
         const r = await supabase.from('setlists').upsert(cleanSl, { onConflict: 'title,creator_id' });

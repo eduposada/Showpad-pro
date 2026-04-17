@@ -22,9 +22,23 @@ export const AuthView = ({ styles }) => {
                 
                 if (res.error && res.error.message.includes("Invalid login credentials")) {
                     // Se as credenciais falharem, tentamos o Sign Up (Auto-cadastro)
-                    const signUp = await supabase.auth.signUp({ email, password });
+                    const localPart = email.trim().split('@')[0] || email.trim();
+                    const signUp = await supabase.auth.signUp({
+                        email,
+                        password,
+                        options: {
+                            emailRedirectTo: window.location.origin,
+                            data: { full_name: localPart, name: localPart },
+                        },
+                    });
                     if (signUp.error) throw signUp.error;
-                    alert("Conta criada com sucesso! Você já está logado.");
+                    if (signUp.data?.session) {
+                        alert('Conta criada com sucesso! Você já está logado.');
+                    } else {
+                        alert(
+                            'Conta criada. Se o projeto exige confirmação por e-mail, abre a mensagem da caixa de entrada para ativar a conta antes de entrar.'
+                        );
+                    }
                     setLoading(false);
                     return;
                 }
@@ -38,7 +52,18 @@ export const AuthView = ({ styles }) => {
                 alert('Verifique seu e-mail! Enviamos um link de acesso.');
             }
         } catch (err) {
-            alert("Erro no acesso: " + err.message);
+            const msg = err.message || String(err);
+            if (msg.includes('Database error granting user')) {
+                alert(
+                    'Erro no acesso: falha na base ao criar o utilizador (quase sempre um trigger em auth.users).\n\n' +
+                    '1) Abre o ficheiro no repositório: supabase/FIX_DATABASE_ERROR_GRANTING_USER.sql\n' +
+                    '2) Copia TODO o conteúdo\n' +
+                    '3) Supabase Dashboard → SQL Editor do TEU projeto → cola → Run\n\n' +
+                    'Se continuar a falhar, no final desse script há um SELECT: envia o resultado. Detalhe: ' + msg
+                );
+            } else {
+                alert('Erro no acesso: ' + msg);
+            }
         } finally {
             setLoading(false);
         }
@@ -49,7 +74,12 @@ export const AuthView = ({ styles }) => {
         setLoading(true);
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
-            options: { redirectTo: window.location.origin }
+            options: {
+                redirectTo: `${window.location.origin}${window.location.pathname || '/'}`,
+                queryParams: {
+                    prompt: 'select_account',
+                },
+            },
         });
         if (error) alert("Erro ao logar com Google: " + error.message);
         setLoading(false);

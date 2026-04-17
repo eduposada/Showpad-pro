@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, RefreshCw, Trash2, Layout, Music, X, Settings, Save, UserMinus, Zap, MinusCircle, Hash, Radio, Bell, UserPlus, Check, Ban, Download, Info } from 'lucide-react';
-import { supabase, db, deleteBandComplete, broadcastBandChanges, pullFromCloud } from './ShowPadCore';
+import { supabase, db, deleteBandComplete, broadcastBandChanges, pullFromCloud, filterDexieSongsForCreator } from './ShowPadCore';
 import { BandShowManager } from './BandShowManager';
 
 export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
@@ -307,10 +307,17 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     const fetchMembers = async (bandId) => {
         let { data, error } = await supabase
             .from('band_members')
-            .select('profile_id, role, profiles(full_name, email, avatar_url)')
+            .select('profile_id, role, profiles(full_name, email, main_instrument, instruments, avatar_url)')
             .eq('band_id', bandId);
 
         if (error && ((error.message || '').includes('relationship') || (error.message || '').includes('avatar_url'))) {
+            ({ data, error } = await supabase
+                .from('band_members')
+                .select('profile_id, role, profiles(full_name, email, main_instrument)')
+                .eq('band_id', bandId));
+        }
+
+        if (error && ((error.message || '').includes('relationship') || (error.message || '').toLowerCase().includes('instruments'))) {
             ({ data, error } = await supabase
                 .from('band_members')
                 .select('profile_id, role, profiles(full_name, email)')
@@ -335,7 +342,7 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
 
     const refreshRepertoire = async () => {
         if (!showRepertoire) return;
-        const total = await db.songs.toArray();
+        const total = filterDexieSongsForCreator(await db.songs.toArray(), session.user.id);
         const sorted = [...total].sort((a, b) => {
             const va = (repertoireSortBy === 'artist' ? a.artist : a.title) || '';
             const vb = (repertoireSortBy === 'artist' ? b.artist : b.title) || '';
@@ -448,7 +455,7 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
         setLoading(true);
         try {
             const key = toSongKey(row.title, row.artist);
-            const localSnap = await db.songs.toArray();
+            const localSnap = filterDexieSongsForCreator(await db.songs.toArray(), session.user.id);
             const dup = localSnap.find((s) => toSongKey(s.title, s.artist) === key);
             if (dup) {
                 alert('Já existe na tua biblioteca local uma música com o mesmo título e artista. Altera um deles na origem ou na biblioteca para poder copiar.');
@@ -847,8 +854,16 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                                                 const email = prof?.email != null && String(prof.email).trim() !== ''
                                                     ? String(prof.email).trim()
                                                     : null;
+                                                const mainInst = prof?.main_instrument != null && String(prof.main_instrument).trim() !== ''
+                                                    ? String(prof.main_instrument).trim()
+                                                    : null;
+                                                const insRaw = prof?.instruments;
+                                                const outrosInst = Array.isArray(insRaw) && insRaw.length
+                                                    ? insRaw.map((x) => String(x)).join(', ')
+                                                    : '';
                                                 const avatarUrl = prof?.avatar_url;
                                                 const idCurto = String(m.profile_id || '').slice(0, 8);
+                                                const displayName = nomeRegistado || email || (idCurto ? `Membro (${idCurto}…)` : 'Membro');
                                                 return (
                                                     <div key={`${m.profile_id}-${m.role}`} style={{ background: '#111', border: '1px solid #2f2f32', borderRadius: '10px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
@@ -860,15 +875,19 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                                                                 )}
                                                             </div>
                                                             <div style={{ minWidth: 0, flex: 1 }}>
-                                                                <div style={{ color: '#666', fontSize: 9, fontWeight: 800, letterSpacing: '0.04em', marginBottom: 2 }}>NOME REGISTADO</div>
-                                                                <div style={{ color: '#eee', fontSize: 13, fontWeight: 700, lineHeight: 1.25, wordBreak: 'break-word' }}>
-                                                                    {nomeRegistado || '—'}
+                                                                <div style={{ color: '#eee', fontSize: 14, fontWeight: 700, lineHeight: 1.25, wordBreak: 'break-word' }}>
+                                                                    {displayName}
                                                                 </div>
-                                                                {email && (
+                                                                {nomeRegistado && email && (
                                                                     <div style={{ color: '#888', fontSize: 11, marginTop: 4, wordBreak: 'break-all' }}>{email}</div>
                                                                 )}
+                                                                {(mainInst || outrosInst) && (
+                                                                    <div style={{ color: '#7d858f', fontSize: 11, marginTop: 4 }}>
+                                                                        {mainInst}{mainInst && outrosInst ? ' · ' : ''}{outrosInst}
+                                                                    </div>
+                                                                )}
                                                                 {!nomeRegistado && !email && idCurto && (
-                                                                    <div style={{ color: '#666', fontSize: 10, marginTop: 4 }}>ID: …{idCurto}</div>
+                                                                    <div style={{ color: '#666', fontSize: 10, marginTop: 4 }}>Convida o membro a completar o perfil no primeiro login.</div>
                                                                 )}
                                                             </div>
                                                         </div>
