@@ -33,6 +33,9 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     const [pendingJoinCounts, setPendingJoinCounts] = useState({});
     const [pendingProposalCounts, setPendingProposalCounts] = useState({});
 
+    /** Admin no modal Repertório: «SALVAR E DISSEMINAR» só verde após alteração nesta sessão (fecha no X sem mudanças → repõe). */
+    const [repertoireDirtyForBroadcast, setRepertoireDirtyForBroadcast] = useState(false);
+
     useEffect(() => { 
         fetchBands(); 
         
@@ -53,6 +56,16 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     useEffect(() => {
         if (showRepertoire) refreshRepertoire();
     }, [showRepertoire, repertoireSortBy]);
+
+    useEffect(() => {
+        if (!showRepertoire) {
+            setRepertoireDirtyForBroadcast(false);
+            return;
+        }
+        if (!showRepertoire.is_solo && showRepertoire.role === 'admin') {
+            setRepertoireDirtyForBroadcast(false);
+        }
+    }, [showRepertoire?.id, showRepertoire?.role, showRepertoire?.is_solo]);
 
     useEffect(() => {
         if (showSettings) {
@@ -176,10 +189,12 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     /** Admin: só a partir do modal de repertório — notifica membros (`band_broadcasts`) e envia `band_songs`→nuvem se existir. */
     const handleRepertoireDisseminate = async () => {
         if (!showRepertoire || showRepertoire.is_solo || showRepertoire.role !== 'admin') return;
+        if (!repertoireDirtyForBroadcast) return;
         setLoading(true);
         try {
             await broadcastBandChanges(showRepertoire.id, session.user.id);
-            alert('📢 Repertório disseminado. Os membros podem usar «Sincronizar» ou «Atualizar» na aba Bandas para puxar novidades.');
+            setRepertoireDirtyForBroadcast(false);
+            alert('📢 Alterações disseminadas. Os membros podem usar «Sincronizar» ou «Atualizar» na aba Bandas para puxar novidades.');
         } catch (e) {
             alert(e.message || String(e));
         } finally {
@@ -476,6 +491,7 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
             const song = allSongs.find((s) => s.id === songId);
             if (!song) throw new Error('Música não encontrada.');
             await saveOfficialSong(song);
+            setRepertoireDirtyForBroadcast(true);
             await refreshRepertoire();
         } catch (e) {
             alert(e.message || String(e));
@@ -495,6 +511,7 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                 .eq('title', song.title)
                 .eq('artist', song.artist);
             if (error) throw new Error(error.message || 'Erro ao remover música oficial.');
+            setRepertoireDirtyForBroadcast(true);
             await refreshRepertoire();
         } catch (e) {
             alert(e.message || String(e));
@@ -512,6 +529,7 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                 .update({ status: 'accepted', resolved_at: new Date().toISOString() })
                 .eq('id', proposal.id);
             if (error) throw new Error(error.message || 'Erro ao aprovar proposta.');
+            setRepertoireDirtyForBroadcast(true);
             await refreshRepertoire();
             await loadPendingProposalCounts();
         } catch (e) {
@@ -530,6 +548,7 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                 .update({ status: 'rejected', resolved_at: new Date().toISOString() })
                 .eq('id', proposal.id);
             if (error) throw new Error(error.message || 'Erro ao recusar proposta.');
+            setRepertoireDirtyForBroadcast(true);
             await refreshRepertoire();
             await loadPendingProposalCounts();
         } catch (e) {
@@ -763,27 +782,35 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
                         <div style={{ padding: '16px 20px', background: '#252529', borderTop: '1px solid #333', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                             {!showRepertoire.is_solo && showRepertoire.role === 'admin' && (
                                 <p style={{ color: '#888', fontSize: 10, margin: 0, lineHeight: 1.45, flex: '1 1 220px', maxWidth: '100%' }}>
-                                    As alterações ao repertório oficial gravam-se na nuvem ao editar. Para avisar os membros para sincronizarem, usa <strong style={{ color: '#ccc' }}>Disseminar</strong> antes de fechar; ao fechar sem disseminar, não é enviado esse aviso.
+                                    As alterações ao repertório oficial gravam-se na nuvem ao editar. O botão <strong style={{ color: '#ccc' }}>SALVAR E DISSEMINAR</strong> só fica verde depois de fazeres uma alteração nesta sessão; serve para avisar os membros a sincronizarem. Se fechares no X sem alterar nada, não há aviso extra a enviar.
                                 </p>
                             )}
                             <div style={{ display: 'flex', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
                                 {!showRepertoire.is_solo && showRepertoire.role === 'admin' && (
                                     <button
                                         type="button"
-                                        disabled={loading}
+                                        disabled={loading || !repertoireDirtyForBroadcast}
                                         onClick={handleRepertoireDisseminate}
-                                        title="Notificar membros e enviar repertório Dexie local (se existir) para a nuvem"
+                                        title={
+                                            repertoireDirtyForBroadcast
+                                                ? 'Notificar membros e enviar repertório Dexie local (se existir) para a nuvem'
+                                                : 'Altera o repertório nesta sessão para ativar'
+                                        }
                                         style={{
                                             ...styles.headerBtn,
-                                            color: '#4cd964',
-                                            borderColor: '#4cd96444',
-                                            padding: '10px 16px',
+                                            opacity: repertoireDirtyForBroadcast && !loading ? 1 : 0.45,
+                                            cursor: repertoireDirtyForBroadcast && !loading ? 'pointer' : 'default',
+                                            color: repertoireDirtyForBroadcast ? '#4cd964' : '#888',
+                                            borderColor: repertoireDirtyForBroadcast ? '#4cd96444' : '#333',
+                                            padding: '10px 14px',
                                             display: 'flex',
                                             alignItems: 'center',
                                             gap: 8,
+                                            fontSize: 10,
+                                            fontWeight: 900,
                                         }}
                                     >
-                                        <Radio size={16} /> DISSEMINAR
+                                        <Radio size={16} /> SALVAR E DISSEMINAR
                                     </button>
                                 )}
                                 <button type="button" onClick={() => setShowRepertoire(null)} style={styles.saveBtn}>FECHAR</button>

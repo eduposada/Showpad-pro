@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.7.1] - 2026-04-16
+
+### Alterado
+
+- **Bandas — modal Repertório (admin):** o botão de disseminação chama-se **SALVAR E DISSEMINAR**, fica cinza e desativado ao abrir o modal e só passa a verde e clicável depois de uma alteração nesta sessão (adicionar/remover oficial, aprovar ou recusar proposta). Ao fechar no X sem mudanças, não fica “pendente” de disseminar; após disseminar com sucesso, o estado repõe-se.
+
 ## [8.7.0] - 2026-04-15
 
 ### Adicionado
