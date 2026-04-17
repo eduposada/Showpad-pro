@@ -1,16 +1,52 @@
-# React + Vite
+# ShowPad Pro
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicação web para músicos: **repertórios**, **cifras**, **setlists**, **transposição**, **bandas** e **sincronização** entre o dispositivo e a nuvem (Dexie + Supabase).
 
-Currently, two official plugins are available:
+## Versão atual
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+**8.8.0** — ver [`CHANGELOG.md`](CHANGELOG.md) e a tag Git **`v8.8.0`**.
 
-## React Compiler
+## Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Camada | Tecnologia |
+|--------|------------|
+| Frontend | React + Vite (SPA) |
+| Dados locais | Dexie (IndexedDB) |
+| Backend | Supabase (Auth + PostgreSQL) |
+| Deploy | Vercel (CI a partir de `main`) |
 
-## Expanding the ESLint configuration
+## Documentação do software
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+| Documento | Conteúdo |
+|-----------|-----------|
+| [`CHANGELOG.md`](CHANGELOG.md) | Histórico de versões e alterações por release |
+| [`GIT_WORKFLOW.md`](GIT_WORKFLOW.md) | Branches, tags, releases e boas práticas Git |
+| [`supabase/README.md`](supabase/README.md) | Migrações SQL, ordem de deploy e troubleshooting |
+| [`AGENTS.md`](AGENTS.md) | Orientação para assistentes de IA no repositório |
+| [`.cursorrules`](.cursorrules) | Regras de negócio, código e limites do projeto |
+
+## Desenvolvimento local
+
+Requer **Node.js 20.x** (ver `engines` em `package.json`).
+
+```bash
+npm install
+npm run dev
+```
+
+## Variáveis de ambiente
+
+Para Supabase no cliente:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+Definir em `.env` local e no painel da **Vercel** para produção.
+
+## Deploy (Vercel)
+
+Push na branch **`main`** dispara build e deploy. Garantir que as variáveis `VITE_*` estão configuradas no projeto Vercel.
+
+## Backup local
+
+Na app: fluxo de backup exporta JSON com metadados de versão (campo `version` alinhado à release). Ver `runFullBackup` em `src/ShowPadCore.jsx`.

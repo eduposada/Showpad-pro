@@ -42,3 +42,7 @@ Ao marcar uma **versão estável** com tag `vX.Y.Z`:
 6. Enviar: `git push origin main` e `git push origin vX.Y.Z` quando for para publicar.
 
 Assim a tag, o log de desenvolvimento e a informação visível ao utilizador permanecem consistentes.
+
+### Marco recente
+
+- **v8.8.0** (2026-04-18): release estável documentada em `CHANGELOG.md`; push em `main` dispara deploy na Vercel (com variáveis `VITE_SUPABASE_*` configuradas).

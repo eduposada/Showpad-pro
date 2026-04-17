@@ -1,5 +1,7 @@
 # Supabase — migrações (ShowPad Pro)
 
+**Referência de release na app:** v8.8.0 (ver `CHANGELOG.md` na raiz do repositório).
+
 ## Fase A — `band_join_requests`, `band_repertoire_proposals`, RLS
 
 **Ficheiro:** [migrations/20260412120000_phase_a_join_requests_and_proposals.sql](migrations/20260412120000_phase_a_join_requests_and_proposals.sql)

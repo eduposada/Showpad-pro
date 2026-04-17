@@ -587,7 +587,33 @@ export default function App() {
                       {view === 'library' && (
                         <div style={{cursor:'pointer'}} title="Exportar .showpad" onClick={(e) => { e.stopPropagation(); handleExportShowpadSong(item); }}><Download size={20} color="#34c759"/></div>
                       )}
-                      <div style={{cursor:'pointer'}} onClick={async (e) => { e.stopPropagation(); if(confirm("Excluir?")) { if(view==='library') await db.songs.delete(item.id); else await db.setlists.delete(item.id); refreshData(); setSelectedItem(null); }}}><Trash2 size={20} color="#444"/></div>
+                      <button
+                        type="button"
+                        title="Excluir"
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#ff3b30' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!window.confirm('Excluir?')) return;
+                          const pk = item?.id;
+                          if (pk === undefined || pk === null) {
+                            alert('Não foi possível excluir: registo sem identificador local.');
+                            return;
+                          }
+                          void (async () => {
+                            try {
+                              if (view === 'library') await db.songs.delete(pk);
+                              else await db.setlists.delete(pk);
+                              await refreshData();
+                              setSelectedItem(null);
+                            } catch (err) {
+                              console.error(err);
+                              alert('Não foi possível excluir: ' + (err?.message || String(err)));
+                            }
+                          })();
+                        }}
+                      >
+                        <Trash2 size={20} color="#ff3b30" />
+                      </button>
                   </div>
                 </div>
               )

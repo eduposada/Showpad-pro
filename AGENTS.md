@@ -25,6 +25,8 @@ Antes ou no mesmo commit da tag:
 
 React + Vite, Dexie local, Supabase na nuvem. Convenções detalhadas de código e negócio: **`.cursorrules`**.
 
+Versão de referência publicada na UI e nos metadados de backup: **8.8.0** (tag **`v8.8.0`**); pormenores em **`CHANGELOG.md`**.
+
 ## Estabilidade
 
 Se uma alteração **puder afetar** recursos, menus ou fluxos **já estáveis**, a IA deve **consultar o mantenedor**, pedir **ratificação** e explicar **em detalhe** as **consequências** antes de implementar. Sem esse ok, não avançar.

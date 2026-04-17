@@ -239,7 +239,21 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
             <h3 style={{color:'#fff', marginBottom:'10px'}}>EXCLUIR MÚSICA?</h3>
             <div style={{display:'flex', gap:'15px', justifyContent:'center'}}>
               <button onClick={()=>setConfirmDelete(false)} style={{...styles.saveBtn, backgroundColor:'#444'}}>CANCELAR</button>
-              <button onClick={async ()=>{await db.songs.delete(item.data.id); refresh(); onClose();}} style={{...styles.saveBtn, backgroundColor:'#ff3b30'}}>EXCLUIR</button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await db.songs.delete(item.data.id);
+                    await refresh();
+                    onClose();
+                  } catch (err) {
+                    alert('Não foi possível excluir: ' + (err?.message || String(err)));
+                  }
+                }}
+                style={{...styles.saveBtn, backgroundColor:'#ff3b30'}}
+              >
+                EXCLUIR
+              </button>
             </div>
           </div>
         </div>

@@ -50,7 +50,7 @@ export const runFullBackup = async () => {
         const songs = await db.songs.toArray();
         const setlists = await db.setlists.toArray();
         const my_bands = await db.my_bands.toArray();
-        const backup = { type: "FULL_BACKUP", version: "8.1.1", date: new Date().toISOString(), songs, setlists, my_bands };
+        const backup = { type: "FULL_BACKUP", version: "8.8.0", date: new Date().toISOString(), songs, setlists, my_bands };
         const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

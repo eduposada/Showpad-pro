@@ -2,6 +2,31 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.8.0] - 2026-04-18
+
+### Resumo da release
+
+- **Baseline estável** para produção (Vercel) e desenvolvimento local: perfis em `public.profiles`, onboarding obrigatório, auth (e-mail + Google com seletor de conta), coluna `email` em perfis e script **`supabase/FIX_DATABASE_ERROR_GRANTING_USER.sql`** para o erro GoTrue «Database error granting user» (remoção de triggers problemáticos em `auth.users`).
+- **Dexie (`ShowPadProWeb`):** ao mudar de utilizador na mesma origem, limpeza de dados locais e listagens / push só com `creator_id` (e setlists coerentes com bandas locais) — evita misturar biblioteca entre contas.
+- **Bandas:** «SALVAR E DISSEMINAR» no modal Repertório; lista de membros com nome/e-mail/instrumentos; lixeira na UI.
+- **Músicas / Shows:** exclusão na lista lateral fiável (`confirm` síncrono, `await refreshData()`); ícone de lixeira **`#ff3b30`** alinhado às Bandas.
+- **Documentação:** `README.md` na raiz descreve o produto (stack, links, deploy); `AGENTS.md`, `GIT_WORKFLOW.md`, `supabase/README.md` e `.cursorrules` com referência a **v8.8.0**; backup JSON (`runFullBackup`) com `version: "8.8.0"`.
+
+### Notas de release
+
+- **Tag `v8.8.0`:** marco estável; acumula as alterações documentadas em **8.7.0**–**8.7.8** neste ficheiro. Para novos ambientes Supabase, seguir **`supabase/README.md`** (ordem de migrações e troubleshooting).
+
+## [8.7.8] - 2026-04-17
+
+### Corrigido
+
+- **Lista lateral (Músicas / Shows):** exclusão deixou de depender de `async` no primeiro handler do clique — `confirm` corre síncrono no gesto do utilizador e o apagar chama `await refreshData()` com `try/catch` e validação de `id`; ícone de lixo passou a `<button type="button">` (melhor em touch e acessibilidade).
+- **Editor de música:** botão EXCLUIR no modal usa `await refresh()` e `try/catch`.
+
+### Alterado
+
+- **UI — Músicas / Shows:** ícone de lixeira na lista lateral na cor **`#ff3b30`**, igual às ações de remover na aba Bandas.
+
 ## [8.7.7] - 2026-04-17
 
 ### Adicionado (Supabase)
