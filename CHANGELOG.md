@@ -8,6 +8,10 @@ Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
 - **Bandas — modal Repertório (admin):** o botão de disseminação chama-se **SALVAR E DISSEMINAR**, fica cinza e desativado ao abrir o modal e só passa a verde e clicável depois de uma alteração nesta sessão (adicionar/remover oficial, aprovar ou recusar proposta). Ao fechar no X sem mudanças, não fica “pendente” de disseminar; após disseminar com sucesso, o estado repõe-se.
 
+### Notas de release
+
+- **Tag `v8.7.1`:** ponto marcado como **estável** para testes local e Vercel. Inclui o conjunto **8.7.0** (migration `20260415090000_profiles_onboarding_base.sql`, onboarding `ProfileOnboardingView`, `getUserDisplayName()` com `profiles.full_name`, `supabase/README.md` perfis) e **8.7.1** (UX «Salvar e disseminar» no modal Repertório).
+
 ## [8.7.0] - 2026-04-15
 
 ### Adicionado
