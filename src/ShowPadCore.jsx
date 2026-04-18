@@ -50,7 +50,7 @@ export const runFullBackup = async () => {
         const songs = await db.songs.toArray();
         const setlists = await db.setlists.toArray();
         const my_bands = await db.my_bands.toArray();
-        const backup = { type: "FULL_BACKUP", version: "8.8.0", date: new Date().toISOString(), songs, setlists, my_bands };
+        const backup = { type: "FULL_BACKUP", version: "8.8.1", date: new Date().toISOString(), songs, setlists, my_bands };
         const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -393,6 +393,27 @@ export const pushToCloud = async (userId) => {
     }
     console.log('✅ Sync Out Ok');
 };
+
+/**
+ * Remove uma linha da biblioteca do utilizador em `public.songs` (nuvem).
+ * Corresponde por `title` + `artist` (normaliza null vs string vazia) e apaga por `id` (UUID).
+ */
+export async function deleteSongFromCloudForUser(userId, title, artist) {
+    if (!supabase || !userId || title == null) {
+        return { error: null, removed: false };
+    }
+    const norm = (a) => (a == null ? '' : String(a));
+    const { data: rows, error: selErr } = await supabase
+        .from('songs')
+        .select('id, artist')
+        .eq('creator_id', userId)
+        .eq('title', title);
+    if (selErr) return { error: selErr, removed: false };
+    const match = (rows || []).find((row) => norm(row.artist) === norm(artist));
+    if (!match) return { error: null, removed: false };
+    const { error } = await supabase.from('songs').delete().eq('id', match.id);
+    return { error: error || null, removed: !error };
+}
 
 export const pullFromCloud = async (userId) => {
     if (!supabase) {

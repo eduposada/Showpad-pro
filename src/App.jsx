@@ -3,7 +3,7 @@ import { WebMidi } from 'webmidi';
 import { 
   Plus, Music, Trash2, Save, Monitor, Settings, Zap, 
   LogOut, SortAsc, UserRound, Cloud, RefreshCw, User,
-  CloudUpload, CloudDownload, Info, Download, Loader2
+  CloudUpload, CloudDownload, Info, Download, Loader2, PanelLeft, X
 } from 'lucide-react';
 
 import {
@@ -18,6 +18,7 @@ import {
   clearAllLocalDexieStores,
   filterDexieSongsForCreator,
   filterDexieSetlistsForSession,
+  deleteSongFromCloudForUser,
 } from './ShowPadCore';
 import { MainEditor } from './EditorComponents';
 import { ShowModeView } from './ShowModeView';
@@ -42,7 +43,14 @@ export default function App() {
   const [view, setView] = useState('library'); 
   const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30);
   const [sortBy, setSortBy] = useState(localStorage.getItem('sortBy') || 'title');
+  const [setlistSortBy, setSetlistSortBy] = useState(localStorage.getItem('setlistSortBy') || 'title');
   const [filterArtist, setFilterArtist] = useState('');
+  const [compactLayout, setCompactLayout] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches
+  );
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => !(typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches)
+  );
 
   const [midiStatus, setMidiStatus] = useState("off");
   const [midiFlash, setMidiFlash] = useState(false);
@@ -296,7 +304,24 @@ export default function App() {
     if (session && profileReady && !profileNeedsOnboarding) {
       refreshData();
     }
-  }, [session, sortBy, profileReady, profileNeedsOnboarding]);
+  }, [session, sortBy, setlistSortBy, profileReady, profileNeedsOnboarding]);
+
+  useEffect(() => {
+    localStorage.setItem('setlistSortBy', setlistSortBy);
+  }, [setlistSortBy]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 900px)');
+    const apply = () => {
+      const compact = mq.matches;
+      setCompactLayout(compact);
+      if (!compact) setSidebarOpen(true);
+    };
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
 
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
 
@@ -315,14 +340,35 @@ export default function App() {
             const valB = (sortBy === 'artist' ? b.artist : b.title) || "";
             return valA.toLowerCase().localeCompare(valB.toLowerCase());
         });
-        
-        setSongs(s); 
-        setSetlists(sl);
+
+        const slSorted = [...sl];
+        if (setlistSortBy === 'title') {
+          slSorted.sort((a, b) => {
+            const ta = (a.title || '').toLowerCase();
+            const tb = (b.title || '').toLowerCase();
+            return ta.localeCompare(tb);
+          });
+        } else {
+          const hasTime = (row) => String(row?.time || '').trim() !== '';
+          slSorted.sort((a, b) => {
+            const ha = hasTime(a);
+            const hb = hasTime(b);
+            if (ha !== hb) return ha ? -1 : 1;
+            if (ha && hb) {
+              const cmp = String(b.time).localeCompare(String(a.time));
+              if (cmp !== 0) return cmp;
+            }
+            return (a.title || '').toLowerCase().localeCompare((b.title || '').toLowerCase());
+          });
+        }
+
+        setSongs(s);
+        setSetlists(slSorted);
         setBands(filteredBands); 
 
         if (selectedItem) {
             const id = selectedItem.data.id;
-            const upd = (selectedItem.type === 'song') ? s.find(x => x.id === id) : sl.find(x => x.id === id);
+            const upd = (selectedItem.type === 'song') ? s.find(x => x.id === id) : slSorted.find(x => x.id === id);
             if (upd) setSelectedItem({type: selectedItem.type, data: upd});
         }
     } catch (e) { console.error("Erro ao atualizar dados:", e); }
@@ -339,11 +385,13 @@ export default function App() {
     await refreshData();
     const savedItem = await (isSetlist ? db.setlists.get(id) : db.songs.get(id));
     setSelectedItem({ type: isSetlist ? 'setlist' : 'song', data: savedItem });
+    if (compactLayout) setSidebarOpen(false);
   };
 
   const openBandShow = (item) => {
     setSelectedItem(item);
-    setView('setlists'); 
+    setView('setlists');
+    if (compactLayout) setSidebarOpen(false);
   };
 
   const checkServer = () => {
@@ -491,6 +539,16 @@ export default function App() {
     <div style={styles.appContainer}>
       <header style={styles.mainHeader}>
         <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
+          {compactLayout && (
+            <button
+              type="button"
+              title="Abrir lista"
+              onClick={() => setSidebarOpen(true)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#007aff', padding: '4px', display: 'flex', alignItems: 'center' }}
+            >
+              <PanelLeft size={22} />
+            </button>
+          )}
           <Music color="#007aff" />
           <h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
           <div style={getMidiStyle()}>
@@ -537,14 +595,48 @@ export default function App() {
         </div>
       </header>
 
-      <div style={{ display:'flex', flex: 1, overflow:'hidden', width: '100%' }}>
-        <div style={styles.sidebar}>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', width: '100%', position: 'relative' }}>
+        {compactLayout && sidebarOpen && (
+          <button type="button" aria-label="Fechar lista" onClick={() => setSidebarOpen(false)} style={styles.sidebarScrim} />
+        )}
+        <div
+          style={
+            compactLayout
+              ? {
+                  ...styles.sidebar,
+                  ...styles.sidebarDrawer,
+                  position: 'fixed',
+                  top: '60px',
+                  left: 0,
+                  height: 'calc(100% - 60px)',
+                  width: 'min(320px, 92vw)',
+                  zIndex: 4310,
+                  transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+                  pointerEvents: sidebarOpen ? 'auto' : 'none',
+                }
+              : styles.sidebar
+          }
+        >
+          {compactLayout && (
+            <div style={{ padding: '6px 10px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', backgroundColor: '#1a1a1a', flexShrink: 0 }}>
+              <button type="button" title="Fechar lista" onClick={() => setSidebarOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ff3b30', padding: '4px', display: 'flex' }}>
+                <X size={22} />
+              </button>
+            </div>
+          )}
           <div style={styles.navTabs}>
             <button onClick={() => setView('library')} style={view === 'library' ? styles.activeTab : styles.tab}>MÚSICAS</button>
             <button onClick={() => setView('setlists')} style={view === 'setlists' ? styles.activeTab : styles.tab}>SHOWS</button>
             <button onClick={() => setView('bands')} style={view === 'bands' ? styles.activeTab : styles.tab}>BANDAS</button>
             <button onClick={() => setView('garimpo')} style={view === 'garimpo' ? styles.activeTab : styles.tab}>GARIMPAR</button>
           </div>
+
+          {view === 'setlists' && (
+            <div style={{ padding: '8px', borderBottom: '1px solid #333', display: 'flex', gap: '6px' }}>
+              <button type="button" onClick={() => setSetlistSortBy('title')} style={{ ...styles.headerBtn, flex: 1, fontSize: '9px', ...(setlistSortBy === 'title' ? { borderColor: '#007aff', color: '#007aff' } : {}) }}>A–Z SHOW</button>
+              <button type="button" onClick={() => setSetlistSortBy('time')} style={{ ...styles.headerBtn, flex: 1, fontSize: '9px', ...(setlistSortBy === 'time' ? { borderColor: '#007aff', color: '#007aff' } : {}) }}>DATA</button>
+            </div>
+          )}
 
           {view === 'library' && (
             <div style={{ padding: '8px', borderBottom: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -575,7 +667,11 @@ export default function App() {
                   ...(selectedItem && selectedItem.data.id === item.id ? styles.selectedItem : styles.listItem),
                   ...(revokedShow ? { opacity: 0.75, borderLeft: '3px solid #ff9500' } : {}),
                 }}
-                     onClick={() => setSelectedItem({type: view==='library'?'song':'setlist', data: item})}>
+                     onClick={() => {
+                       setSelectedItem({ type: view === 'library' ? 'song' : 'setlist', data: item });
+                       if (compactLayout) setSidebarOpen(false);
+                     }}
+                >
                   <div style={{flex:1, overflow:'hidden'}}>
                       <strong style={{color: revokedShow ? '#999' : '#fff', display:'block'}}>{item.title}</strong>
                       {band && <span style={styles.bandTagOrange}>{band.name}</span>}
@@ -583,7 +679,12 @@ export default function App() {
                       <small style={styles.artistYellow}>{item.artist || item.location || "---"}</small>
                   </div>
                   <div style={{display:'flex', gap:'6px', alignItems:'center'}}>
-                      <div style={{cursor:'pointer'}} onClick={(e) => { e.stopPropagation(); setSelectedItem({type: view==='library'?'song':'setlist', data: item}); setShowMode(true); }}><Monitor size={20} color="#007aff"/></div>
+                      <div style={{cursor:'pointer'}} onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedItem({ type: view === 'library' ? 'song' : 'setlist', data: item });
+                        setShowMode(true);
+                        if (compactLayout) setSidebarOpen(false);
+                      }}><Monitor size={20} color="#007aff"/></div>
                       {view === 'library' && (
                         <div style={{cursor:'pointer'}} title="Exportar .showpad" onClick={(e) => { e.stopPropagation(); handleExportShowpadSong(item); }}><Download size={20} color="#34c759"/></div>
                       )}
@@ -601,8 +702,23 @@ export default function App() {
                           }
                           void (async () => {
                             try {
-                              if (view === 'library') await db.songs.delete(pk);
-                              else await db.setlists.delete(pk);
+                              if (view === 'library') {
+                                const { error: cloudErr } = await deleteSongFromCloudForUser(
+                                  session.user.id,
+                                  item.title,
+                                  item.artist
+                                );
+                                await db.songs.delete(pk);
+                                if (cloudErr) {
+                                  alert(
+                                    'Música removida neste aparelho, mas a remoção na nuvem falhou: '
+                                      + (cloudErr.message || String(cloudErr))
+                                      + '. Verifica a rede ou as permissões (RLS DELETE em songs).'
+                                  );
+                                }
+                              } else {
+                                await db.setlists.delete(pk);
+                              }
                               await refreshData();
                               setSelectedItem(null);
                             } catch (err) {
@@ -639,7 +755,7 @@ export default function App() {
         <div style={styles.mainEditor}>
           {view === 'garimpo' ? <GarimpoView isServerOnline={isServerOnline} styles={styles} refresh={refreshData} session={session} />
           : view === 'bands' ? <BandView session={session} styles={styles} onSelectShow={openBandShow} refreshData={refreshData} />
-          : selectedItem ? <MainEditor key={selectedItem.data.id} item={selectedItem} songs={songs} bands={bands} triggerDL={triggerDL} onClose={()=>setSelectedItem(null)} onShow={()=>setShowMode(true)} refresh={refreshData} styles={styles} />
+          : selectedItem ? <MainEditor key={selectedItem.data.id} item={selectedItem} songs={songs} bands={bands} triggerDL={triggerDL} onClose={()=>setSelectedItem(null)} onShow={()=>setShowMode(true)} refresh={refreshData} styles={styles} session={session} />
           : <div style={styles.empty}>
               <Music size={120} color="#111" />
               <h1 style={{fontSize:'40px', fontWeight:'900', color:'#111', margin:0}}>SHOWPAD PRO</h1>

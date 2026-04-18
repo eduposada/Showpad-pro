@@ -4,7 +4,7 @@ Aplicação web para músicos: **repertórios**, **cifras**, **setlists**, **tra
 
 ## Versão atual
 
-**8.8.0** — ver [`CHANGELOG.md`](CHANGELOG.md) e a tag Git **`v8.8.0`**.
+**8.8.1** — ver [`CHANGELOG.md`](CHANGELOG.md); a tag Git de release segue o número indicado no changelog (ex.: **`v8.8.1`**).
 
 ## Stack
 

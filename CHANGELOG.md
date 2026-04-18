@@ -2,6 +2,18 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.8.1] - 2026-04-18
+
+### Adicionado
+
+- **Shows:** ordenação na lista lateral — **A–Z SHOW** (título) ou **DATA** (campo `time` do `datetime-local`; shows sem data no fim), preferência em `localStorage` (`setlistSortBy`).
+- **Mobile (retrato / viewport estreito):** lista Músicas/Shows como **gaveta** recolhível (`max-width: 900px`), botão **Abrir lista** no header, toque fora ou **X** para fechar; ao escolher item ou criar novo, a gaveta fecha para maximizar o editor.
+- **Sync — músicas:** ao excluir na biblioteca (lista ou editor), tentativa de **`DELETE` em `public.songs`** na nuvem para a música não voltar no próximo pull; migração **`20260418120000_songs_delete_own_rls.sql`** (política RLS `songs_delete_own`).
+
+### Notas
+
+- Outro aparelho com cópia local antiga ainda pode **recriar** a música na nuvem no próximo upload; convergência total entre dispositivos exigiria soft delete ou tombstones (fora desta entrega).
+
 ## [8.8.0] - 2026-04-18
 
 ### Resumo da release

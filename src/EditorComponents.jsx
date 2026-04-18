@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2, ArrowUp, ArrowDown, Plus, X, Monitor, Music, ChevronUp, ChevronDown } from 'lucide-react';
-import { db, transposeContent, supabase, hydrateBandSetlistSongsFromRepertoire } from './ShowPadCore';
+import { db, transposeContent, supabase, hydrateBandSetlistSongsFromRepertoire, deleteSongFromCloudForUser } from './ShowPadCore';
 
-export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, refresh, styles }) => {
+export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, refresh, styles, session }) => {
   const [lC, setLC] = useState(item.data.content || "");
   const [lT, setLT] = useState(item.data.title || "");
   const [lA, setLA] = useState(item.data.artist || "");
@@ -243,7 +243,21 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
                 type="button"
                 onClick={async () => {
                   try {
-                    await db.songs.delete(item.data.id);
+                    await save();
+                    const uid = session?.user?.id;
+                    if (uid) {
+                      const { error: cloudErr } = await deleteSongFromCloudForUser(uid, lT, lA);
+                      await db.songs.delete(item.data.id);
+                      if (cloudErr) {
+                        alert(
+                          'Música removida neste aparelho, mas a remoção na nuvem falhou: '
+                            + (cloudErr.message || String(cloudErr))
+                            + '. Verifica a rede ou as permissões (RLS DELETE em songs).'
+                        );
+                      }
+                    } else {
+                      await db.songs.delete(item.data.id);
+                    }
                     await refresh();
                     onClose();
                   } catch (err) {

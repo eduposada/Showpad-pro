@@ -46,3 +46,4 @@ Assim a tag, o log de desenvolvimento e a informação visível ao utilizador pe
 ### Marco recente
 
 - **v8.8.0** (2026-04-18): release estável documentada em `CHANGELOG.md`; push em `main` dispara deploy na Vercel (com variáveis `VITE_SUPABASE_*` configuradas).
+- **v8.8.1** (2026-04-18): mobile gaveta ≤900px, ordenação de shows, exclusão de música na nuvem + RLS `songs_delete_own` (`supabase/migrations/20260418120000_songs_delete_own_rls.sql`).

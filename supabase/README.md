@@ -1,6 +1,12 @@
 # Supabase — migrações (ShowPad Pro)
 
-**Referência de release na app:** v8.8.0 (ver `CHANGELOG.md` na raiz do repositório).
+**Referência de release na app:** v8.8.1 (ver `CHANGELOG.md` na raiz do repositório).
+
+## Músicas — DELETE na nuvem (RLS)
+
+**Ficheiro:** [migrations/20260418120000_songs_delete_own_rls.sql](migrations/20260418120000_songs_delete_own_rls.sql)
+
+Política **`songs_delete_own`**: utilizador autenticado pode apagar linhas em `public.songs` com `creator_id = auth.uid()`. Necessária para a app remover da nuvem ao excluir da biblioteca (evita que a música reapareça no pull).
 
 ## Fase A — `band_join_requests`, `band_repertoire_proposals`, RLS
 

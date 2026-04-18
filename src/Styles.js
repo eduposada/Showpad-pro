@@ -13,6 +13,13 @@ export const styles = {
     mainHeader: { height: '60px', backgroundColor:'#000', display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0 40px 0 20px', borderBottom:'1px solid #333' },
     headerBtn: { backgroundColor: '#2c2c2e', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', border:'1px solid #444' },
     sidebar: { width: '320px', minWidth: '320px', display: 'flex', flexDirection: 'column', borderRight: '1px solid #333', backgroundColor:'#1c1c1e' },
+    /** Lista Músicas/Shows em modo compacto (mobile): transição e sombra sobre o editor. */
+    sidebarDrawer: { transition: 'transform 0.22s ease-out', willChange: 'transform', boxShadow: '6px 0 28px rgba(0,0,0,0.45)' },
+    /** Toque fora para fechar a gaveta; z-index abaixo de settings (5000) e auth wizard (9999). */
+    sidebarScrim: {
+        position: 'fixed', top: '60px', left: 0, right: 0, bottom: 0, margin: 0, padding: 0, border: 'none',
+        cursor: 'pointer', backgroundColor: 'rgba(0,0,0,0.48)', zIndex: 4305,
+    },
     navTabs: { display: 'flex', borderBottom:'1px solid #333', backgroundColor: '#1a1a1a' },
     tab: { flex: 1, padding: '12px 5px', border: 'none', background: 'none', color: '#888', cursor:'pointer', fontSize:'10px', fontWeight:'bold' },
     activeTab: { flex: 1, padding: '12px 5px', border: 'none', background: '#2c2c2e', color: '#007aff', borderBottom: '2px solid #007aff', fontSize:'10px', fontWeight:'bold' },
