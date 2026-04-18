@@ -30,6 +30,15 @@ import { InfoModal } from './InfoModal';
 import { ProfileOnboardingView } from './ProfileOnboardingView';
 import { styles } from './Styles';
 
+/** Valor de `datetime-local` no editor de show → texto legível na lista lateral (pt-BR). */
+function formatSetlistListDate(timeRaw) {
+  const t = String(timeRaw ?? '').trim();
+  if (!t) return '';
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return t;
+  return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [songs, setSongs] = useState([]);
@@ -676,7 +685,21 @@ export default function App() {
                       <strong style={{color: revokedShow ? '#999' : '#fff', display:'block'}}>{item.title}</strong>
                       {band && <span style={styles.bandTagOrange}>{band.name}</span>}
                       {revokedShow && <span style={{ display: 'block', fontSize: '9px', color: '#ff9500', fontWeight: 800, marginTop: '2px' }}>FORA DA AGENDA OFICIAL</span>}
-                      <small style={styles.artistYellow}>{item.artist || item.location || "---"}</small>
+                      {view === 'setlists' ? (
+                        <>
+                          {(() => {
+                            const when = formatSetlistListDate(item.time);
+                            return when ? (
+                              <small style={{ display: 'block', color: '#5ac8fa', fontSize: '11px', fontWeight: 700, marginTop: '2px' }}>
+                                {when}
+                              </small>
+                            ) : null;
+                          })()}
+                          <small style={styles.artistYellow}>{item.location?.trim() ? item.location : '---'}</small>
+                        </>
+                      ) : (
+                        <small style={styles.artistYellow}>{item.artist || '---'}</small>
+                      )}
                   </div>
                   <div style={{display:'flex', gap:'6px', alignItems:'center'}}>
                       <div style={{cursor:'pointer'}} onClick={(e) => {
