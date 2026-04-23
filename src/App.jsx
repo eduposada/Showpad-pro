@@ -204,6 +204,8 @@ export default function App() {
       .upsert(row, { onConflict: 'id' })
       .select(profileSelectColumns)
       .single();
+
+    // Coluna `email` ausente no schema (migration não aplicada).
     if (error && (error.message || '').toLowerCase().includes('email')) {
       const { email: _omit, ...rest } = row;
       ({ data, error } = await supabase
@@ -212,6 +214,30 @@ export default function App() {
         .select('id, full_name, main_instrument, instruments, city, bio, avatar_url')
         .single());
     }
+
+    // Coluna estendida ausente no schema (bio, city, avatar_url, main_instrument, instruments…).
+    // Fallback: salva apenas os campos nucleares para não bloquear o usuário.
+    const isColumnMissing = (error?.message || '').includes("column of 'profiles'") ||
+      (error?.message || '').includes("schema cache");
+    if (isColumnMissing) {
+      console.warn('profiles — coluna ausente no schema; salvando campos nucleares. Aplique as migrations pendentes no Supabase.', error?.message);
+      const coreRow = {
+        id: session.user.id,
+        full_name: payload.full_name,
+        updated_at: new Date().toISOString(),
+      };
+      ({ data, error } = await supabase
+        .from('profiles')
+        .upsert(coreRow, { onConflict: 'id' })
+        .select('id, full_name')
+        .single());
+      if (!error) {
+        throw new Error(
+          'Perfil salvo parcialmente (nome atualizado). As colunas de bio, cidade e avatar ainda não existem no banco — aplique as migrations pendentes no painel do Supabase para salvar todos os campos.'
+        );
+      }
+    }
+
     if (error) throw new Error(error.message || 'Erro ao salvar perfil.');
     setProfileRecord(data || row);
     setProfileNeedsOnboarding(false);

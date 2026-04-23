@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.9.1] - 2026-04-23
+
+### Corrigido
+
+- **Edição de perfil — schema cache:** quando colunas como `bio`, `city`, `avatar_url` ainda não existem no banco remoto (migration pendente), o save não bloqueia o usuário — salva os campos nucleares (`id`, `full_name`) e exibe mensagem clara instruindo a aplicar as migrations pendentes no painel do Supabase.
+
 ## [8.9.0] - 2026-04-23
 
 ### Adicionado
