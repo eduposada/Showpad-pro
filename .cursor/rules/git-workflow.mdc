@@ -1,18 +1,27 @@
 ---
-description: Git workflow — main, tags e evitar detached HEAD
+description: Git workflow — main, tags, Vercel e evitar detached HEAD
 alwaysApply: true
 ---
 
 # Git (ShowPad Pro)
 
-- **Branch de trabalho:** orientar o usuário a trabalhar na branch **`main`** como padrão.
-- **Tags:** nunca sugerir `git checkout <tag>` como forma de **trabalhar** no código (isso leva a *detached HEAD* e risco de perda de commits).
-- **Criar tags:** **só** após o usuário **confirmar por escrito** que está tudo ok e que quer marcar uma versão estável. Não criar nem enviar tags ao fim de tarefas sem essa confirmação. Quando autorizado, usar:
-  - `git tag -a <nome> -m "descrição"`
-  - `git push origin <tag>` (ou `--tags` se combinado)
-- **Antes da tag de release:** sincronizar `CHANGELOG.md`, `package.json` (e lockfile se necessário), versão na UI (`InfoModal.jsx`) — ver `.cursor/rules/release-versioning.mdc`.
-- **Ratificação de release:** quando o usuário disser que uma versão está **estável** e pronta para release, **lembrá-lo** de criar a tag (sem criar a tag até ele pedir explicitamente, alinhado à regra anterior).
-- **Recuperar uma versão antiga para desenvolver:** sugerir `git checkout -b <nova-branch> <tag>` em vez de *checkout* direto na tag.
-- **Antes de operações Git mais complexas** (merge, rebase, reset, force push, etc.): lembrar de verificar o estado com `git status` e `git branch` (e, se útil, `git log --oneline -5`).
+## Fluxo padrão de entrega
+
+- **Branch de trabalho:** sempre na branch **`main`**.
+- **Push para Vercel:** após **qualquer** entrega (nova feature, correção, ajuste) fazer `git push origin main`. O Vercel faz deploy automático a partir de `main`. Isso permite testar a interação entre dois perfis — um no `localhost` e outro no Vercel — na mesma máquina, sem precisar de dois dispositivos.
+- **Versão antes do push:** sempre atualizar a versão (`CHANGELOG.md`, `package.json`, `InfoModal.jsx`, `AGENTS.md`) antes do push — ver `.cursor/rules/release-versioning.mdc` para o critério de qual dígito incrementar.
+
+## Tags de release
+
+- **Nunca** sugerir `git checkout <tag>` para **trabalhar** no código (leva a *detached HEAD*).
+- **Criar tags:** **só** após o mantenedor **confirmar por escrito** que quer marcar uma versão estável. Quando autorizado:
+  - `git tag -a vX.Y.Z -m "Release vX.Y.Z: …"`
+  - `git push origin vX.Y.Z`
+- **Ratificação:** quando o mantenedor disser que uma versão está estável, lembrar de criar a tag — mas não criar até ele pedir.
+- **Recuperar versão antiga:** sugerir `git checkout -b <nova-branch> <tag>` em vez de checkout direto na tag.
+
+## Operações complexas
+
+Antes de merge, rebase, reset ou force push: verificar estado com `git status` e `git branch` (e `git log --oneline -5` se útil).
 
 Referência humana: `GIT_WORKFLOW.md` na raiz do repositório.

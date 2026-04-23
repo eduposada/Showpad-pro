@@ -5,14 +5,27 @@ alwaysApply: true
 
 # Versão, CHANGELOG e tag de release (ShowPad Pro)
 
-Sempre que o mantenedor pedir **criar uma tag de release** (só após confirmação explícita; ver regras de Git em `git-workflow.mdc`):
+## Critério de incremento de versão (semver simplificado)
 
-1. **`CHANGELOG.md`:** garantir que existe uma secção `## [X.Y.Z] - AAAA-MM-DD` com as alterações que essa release inclui (log de desenvolvimento visível no repositório).
-2. **Versão na UI:** alinhar o texto mostrado ao utilizador (ex.: `src/InfoModal.jsx` — «Versão atual: vX.Y.Z») com `X.Y.Z`.
-3. **`package.json`:** campo `"version"` = `X.Y.Z` (semver, **sem** prefixo `v`). Atualizar também as entradas de versão do pacote em `package-lock.json` se o projeto as mantiver sincronizadas.
-4. **Commit:** incluir estas alterações no mesmo commit da release (ou num commit dedicado imediatamente antes da tag), para o histórico bater certo com a etiqueta.
-5. **Tag:** `git tag -a vX.Y.Z -m "Release vX.Y.Z: …"` no commit correto.
-6. **Push:** quando combinado, `git push origin main` (ou a branch de release) e `git push origin vX.Y.Z`.
+| Tipo de alteração | Dígito a incrementar | Exemplo |
+|---|---|---|
+| Correção/fix pontual, ajuste de UI, melhoria de feedback | **Patch** (terceiro) | 8.9.0 → 8.9.1 |
+| Nova funcionalidade, nova tela, novo fluxo | **Minor** (segundo) | 8.9.0 → 8.10.0 |
+| Refatoração profunda, quebra de compatibilidade, marco de estabilidade | **Major** (primeiro) | 8.9.0 → 9.0.0 |
+
+- **A versão deve ser atualizada a cada entrega** (commit que vai para o Vercel), não só em tags de release.
+- Agrupar múltiplas correções do mesmo deploy num único bump de patch é aceitável.
+- Sempre fechar a secção `[Unreleased]` do `CHANGELOG.md` com a versão real e a data antes do push.
+
+## Checklist ao atualizar a versão
+
+1. **`CHANGELOG.md`:** garantir secção `## [X.Y.Z] - AAAA-MM-DD` com as alterações (fechar `[Unreleased]` se existir).
+2. **`package.json`:** campo `"version"` = `X.Y.Z` (semver, **sem** prefixo `v`).
+3. **Versão na UI:** `src/InfoModal.jsx` — texto «Versão atual: vX.Y.Z».
+4. **`AGENTS.md`:** linha «Versão de referência» atualizada.
+5. **Commit:** incluir todos os ficheiros de versão no mesmo commit.
+6. **Push para `main`** (Vercel faz deploy automático a partir daí).
+7. **Tag:** `git tag -a vX.Y.Z -m "Release vX.Y.Z: …"` — **só** quando o mantenedor confirmar explicitamente.
 
 Não deixar tag, interface e changelog com números diferentes. Não criar tag sem pedido explícito do mantenedor.
 

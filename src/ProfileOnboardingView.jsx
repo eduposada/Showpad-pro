@@ -8,7 +8,15 @@ function parseInstrumentsCsv(input) {
     .filter(Boolean);
 }
 
-export const ProfileOnboardingView = ({ styles, email, authMeta = {}, initialValues, onSubmit }) => {
+export const ProfileOnboardingView = ({
+  styles,
+  email,
+  authMeta = {},
+  initialValues,
+  onSubmit,
+  isEditMode = false,
+  onCancel,
+}) => {
   const [fullName, setFullName] = useState(initialValues?.full_name || '');
   const [mainInstrument, setMainInstrument] = useState(initialValues?.main_instrument || '');
   const [instrumentsCsv, setInstrumentsCsv] = useState(
@@ -18,6 +26,7 @@ export const ProfileOnboardingView = ({ styles, email, authMeta = {}, initialVal
   const [bio, setBio] = useState(initialValues?.bio || '');
   const [avatarUrl, setAvatarUrl] = useState(initialValues?.avatar_url || '');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const fileInputRef = useRef(null);
   const skipMetaOnce = useRef(false);
 
@@ -87,10 +96,15 @@ export const ProfileOnboardingView = ({ styles, email, authMeta = {}, initialVal
     reader.readAsDataURL(file);
   };
 
+  const isNameValid = Boolean(fullName.trim());
+  const isMainInstrumentValid = Boolean(mainInstrument.trim());
+  const canSubmit = isEditMode ? isNameValid : (isNameValid && isMainInstrumentValid);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!fullName.trim() || !mainInstrument.trim()) return;
+    if (!canSubmit) return;
     setSaving(true);
+    setSaveError('');
     try {
       await onSubmit({
         full_name: fullName.trim(),
@@ -100,6 +114,8 @@ export const ProfileOnboardingView = ({ styles, email, authMeta = {}, initialVal
         bio: bio.trim() || null,
         avatar_url: avatarUrl.trim() || null,
       });
+    } catch (err) {
+      setSaveError(err?.message || 'Erro ao salvar. Tente novamente.');
     } finally {
       setSaving(false);
     }
@@ -113,9 +129,13 @@ export const ProfileOnboardingView = ({ styles, email, authMeta = {}, initialVal
             <UserRound size={24} color="#007aff" />
           </div>
           <div>
-            <h2 style={{ ...styles.authTitle, margin: 0 }}>Complete seu perfil</h2>
+            <h2 style={{ ...styles.authTitle, margin: 0 }}>
+              {isEditMode ? 'Editar perfil' : 'Complete seu perfil'}
+            </h2>
             <p style={{ ...styles.authSubtitle, margin: '6px 0 0 0' }}>
-              Dados mínimos para identificação na banda (nome, instrumento e, se quiser, foto).
+              {isEditMode
+                ? 'Atualize seu nome artístico, instrumentos e dados do perfil.'
+                : 'Dados mínimos para identificação na banda (nome, instrumento e, se quiser, foto).'}
             </p>
           </div>
         </div>
@@ -180,9 +200,27 @@ export const ProfileOnboardingView = ({ styles, email, authMeta = {}, initialVal
             onChange={(e) => setAvatarUrl(e.target.value)}
           />
 
-          <button style={styles.primaryButton} disabled={saving || !fullName.trim() || !mainInstrument.trim()}>
-            {saving ? <Loader2 size={18} className="spin" /> : 'SALVAR E CONTINUAR'}
-          </button>
+          {saveError && (
+            <div style={{ color: '#ff3b30', fontSize: 12, fontWeight: 600, padding: '8px 10px', background: 'rgba(255,59,48,0.10)', borderRadius: 8, border: '1px solid rgba(255,59,48,0.25)' }}>
+              {saveError}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            {isEditMode && (
+              <button
+                type="button"
+                style={{ ...styles.headerBtn, flex: 1, padding: '12px 14px' }}
+                onClick={onCancel}
+                disabled={saving}
+              >
+                CANCELAR
+              </button>
+            )}
+            <button style={{ ...styles.primaryButton, flex: 1 }} disabled={saving || !canSubmit}>
+              {saving ? <Loader2 size={18} className="spin" /> : isEditMode ? 'SALVAR' : 'SALVAR E CONTINUAR'}
+            </button>
+          </div>
         </form>
       </div>
     </div>

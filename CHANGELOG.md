@@ -2,13 +2,18 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
-## [Unreleased] - 2026-04-22
+## [8.9.0] - 2026-04-23
+
+### Adicionado
+
+- **Perfil do utilizador (header):** clicar no nome no topo agora abre um modal de edição de perfil; o fluxo reutiliza o formulário de onboarding com modo de edição (`Editar perfil`), permite atualizar nome artístico (`full_name`), foto/avatar, bio e instrumentos, com ações `SALVAR` e `CANCELAR`.
 
 ### Corrigido
 
 - **Bandas — nomes dos membros:** migração `20260422120000_band_members_profile_fk_and_backfill.sql` resolve dois problemas combinados que faziam os membros aparecerem como "Membro (id…)" em vez do nome/e-mail:
   1. **FK ausente** — adicionada `band_members_profile_id_fkey` (`band_members.profile_id → profiles.id`), necessária para o PostgREST resolver o embed `profiles(full_name, email, …)` na query `fetchMembers`.
   2. **Linhas em falta em `profiles`** — backfill de utilizadores criados antes da migration de perfis, preenchendo `full_name` (a partir de metadados OAuth ou parte local do e-mail) e `email`; também preenche campos vazios em linhas já existentes.
+- **Edição de perfil — feedback de erro:** `ProfileOnboardingView.handleSubmit` passou a ter bloco `catch` explícito; erros de rede ou Supabase agora aparecem numa faixa vermelha no formulário em vez de serem engolidos silenciosamente. `handleSaveProfileEdit` em `App.jsx` também faz `console.error` antes de relançar a exceção.
 
 ## [8.8.1] - 2026-04-18
 

@@ -49,6 +49,7 @@ export default function App() {
   const [showMode, setShowMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [showProfileEdit, setShowProfileEdit] = useState(false);
   const [view, setView] = useState('library'); 
   const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('fontSize')) || 30);
   const [sortBy, setSortBy] = useState(localStorage.getItem('sortBy') || 'title');
@@ -215,6 +216,16 @@ export default function App() {
     setProfileRecord(data || row);
     setProfileNeedsOnboarding(false);
     setProfileReady(true);
+  };
+
+  const handleSaveProfileEdit = async (payload) => {
+    try {
+      await handleSaveProfileOnboarding(payload);
+      setShowProfileEdit(false);
+    } catch (err) {
+      console.error('handleSaveProfileEdit:', err);
+      throw err;
+    }
   };
 
   useEffect(() => {
@@ -567,10 +578,31 @@ export default function App() {
         </div>
 
         <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
-            <div style={{display:'flex', alignItems:'center', gap:'8px', backgroundColor:'rgba(255,255,255,0.05)', padding:'5px 12px', borderRadius:'15px', border:'1px solid rgba(255,255,255,0.1)'}}>
-              <User size={14} color="#007aff" />
+            <button
+              type="button"
+              onClick={() => setShowProfileEdit(true)}
+              title="Editar perfil"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                backgroundColor: 'rgba(255,255,255,0.05)',
+                padding: '5px 12px',
+                borderRadius: '15px',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: '#fff',
+                cursor: 'pointer',
+              }}
+            >
+              {profileRecord?.avatar_url ? (
+                <span style={{ width: 20, height: 20, borderRadius: '50%', overflow: 'hidden', border: '1px solid #2f2f32', flexShrink: 0 }}>
+                  <img src={profileRecord.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </span>
+              ) : (
+                <User size={14} color="#007aff" />
+              )}
               <span style={{fontSize:'12px', fontWeight:'600', color:'#fff'}}>{getUserDisplayName()}</span>
-            </div>
+            </button>
 
             <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
               <button type="button" title="Informações" onClick={() => setShowInfo(true)} style={{background:'none', border:'none', cursor:'pointer', color:'#8e8e93', padding:'5px'}}><Info size={20}/></button>
@@ -790,6 +822,46 @@ export default function App() {
       {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} onClose={()=>setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} styles={styles} midiStatus={midiStatus} />}
       {showSettings && <SettingsView onClose={()=>setShowSettings(false)} inputs={allInputs} setMidiLearning={setMidiLearning} midiLearning={midiLearning} midiStatus={midiStatus} handleImport={handleImport} styles={styles} />}
       {showInfo && <InfoModal onClose={() => setShowInfo(false)} />}
+      {showProfileEdit && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0, 0, 0, 0.72)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Fechar edição de perfil"
+            onClick={() => setShowProfileEdit(false)}
+            style={{ position: 'absolute', inset: 0, border: 'none', background: 'transparent', cursor: 'default' }}
+          />
+          <div style={{ width: '100%', maxWidth: 620, position: 'relative', zIndex: 1 }}>
+            <button
+              type="button"
+              onClick={() => setShowProfileEdit(false)}
+              style={{ position: 'absolute', right: 12, top: 12, background: 'none', border: 'none', color: '#888', cursor: 'pointer', zIndex: 2 }}
+              title="Fechar"
+            >
+              <X size={20} />
+            </button>
+            <ProfileOnboardingView
+              styles={styles}
+              email={session?.user?.email}
+              authMeta={session?.user?.user_metadata || {}}
+              initialValues={profileRecord}
+              onSubmit={handleSaveProfileEdit}
+              isEditMode
+              onCancel={() => setShowProfileEdit(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
