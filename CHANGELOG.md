@@ -2,6 +2,14 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [Unreleased] - 2026-04-22
+
+### Corrigido
+
+- **Bandas — nomes dos membros:** migração `20260422120000_band_members_profile_fk_and_backfill.sql` resolve dois problemas combinados que faziam os membros aparecerem como "Membro (id…)" em vez do nome/e-mail:
+  1. **FK ausente** — adicionada `band_members_profile_id_fkey` (`band_members.profile_id → profiles.id`), necessária para o PostgREST resolver o embed `profiles(full_name, email, …)` na query `fetchMembers`.
+  2. **Linhas em falta em `profiles`** — backfill de utilizadores criados antes da migration de perfis, preenchendo `full_name` (a partir de metadados OAuth ou parte local do e-mail) e `email`; também preenche campos vazios em linhas já existentes.
+
 ## [8.8.1] - 2026-04-18
 
 ### Adicionado

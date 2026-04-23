@@ -305,39 +305,30 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     };
 
     const fetchMembers = async (bandId) => {
-        let { data, error } = await supabase
-            .from('band_members')
-            .select('profile_id, role, profiles(full_name, email, main_instrument, instruments, avatar_url)')
-            .eq('band_id', bandId);
+        // Tentativas em cascata: reduz colunas pedidas até encontrar o que o banco suporta.
+        const queries = [
+            'profile_id, role, profiles(full_name, email, main_instrument, instruments, avatar_url)',
+            'profile_id, role, profiles(full_name, email, main_instrument)',
+            'profile_id, role, profiles(full_name, email)',
+            'profile_id, role, profiles(full_name)',
+            'profile_id, role',
+        ];
 
-        if (error && ((error.message || '').includes('relationship') || (error.message || '').includes('avatar_url'))) {
-            ({ data, error } = await supabase
+        for (const q of queries) {
+            const { data, error } = await supabase
                 .from('band_members')
-                .select('profile_id, role, profiles(full_name, email, main_instrument)')
-                .eq('band_id', bandId));
+                .select(q)
+                .eq('band_id', bandId);
+
+            if (!error) {
+                setMembers(data || []);
+                return;
+            }
+            console.warn('fetchMembers tentativa falhou, tentando próximo fallback:', error.message);
         }
 
-        if (error && ((error.message || '').includes('relationship') || (error.message || '').toLowerCase().includes('instruments'))) {
-            ({ data, error } = await supabase
-                .from('band_members')
-                .select('profile_id, role, profiles(full_name, email)')
-                .eq('band_id', bandId));
-        }
-
-        // Fallback para ambientes onde a relação com `profiles` não está disponível.
-        if (error && (error.message || '').includes('relationship')) {
-            ({ data, error } = await supabase
-                .from('band_members')
-                .select('profile_id, role')
-                .eq('band_id', bandId));
-        }
-
-        if (error) {
-            console.error('fetchMembers:', error);
-            setMembers([]);
-            return;
-        }
-        setMembers(data || []);
+        console.error('fetchMembers: todos os fallbacks falharam');
+        setMembers([]);
     };
 
     const refreshRepertoire = async () => {
