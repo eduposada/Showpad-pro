@@ -58,6 +58,11 @@ export default function App() {
   const [compactLayout, setCompactLayout] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches
   );
+  const [phoneLayout, setPhoneLayout] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia('(max-width: 500px), (max-width: 900px) and (max-height: 440px)').matches
+  );
   const [sidebarOpen, setSidebarOpen] = useState(
     () => !(typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches)
   );
@@ -358,15 +363,22 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(max-width: 900px)');
+    const mqCompact = window.matchMedia('(max-width: 900px)');
+    const mqPhone = window.matchMedia('(max-width: 500px), (max-width: 900px) and (max-height: 440px)');
     const apply = () => {
-      const compact = mq.matches;
+      const compact = mqCompact.matches;
+      const phone = mqPhone.matches;
       setCompactLayout(compact);
+      setPhoneLayout(phone);
       if (!compact) setSidebarOpen(true);
     };
     apply();
-    mq.addEventListener('change', apply);
-    return () => mq.removeEventListener('change', apply);
+    mqCompact.addEventListener('change', apply);
+    mqPhone.addEventListener('change', apply);
+    return () => {
+      mqCompact.removeEventListener('change', apply);
+      mqPhone.removeEventListener('change', apply);
+    };
   }, []);
 
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
@@ -580,11 +592,15 @@ export default function App() {
     : songs;
   const uniqueArtists = [...new Set(songs.map((s) => (s.artist || '').trim()).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  const phoneTabStyle = phoneLayout ? { padding: '8px 5px', fontSize: '9px' } : {};
+  const phoneSidebarControlsStyle = phoneLayout ? { padding: '5px', gap: '5px' } : {};
+  const phoneSidebarFooterStyle = phoneLayout ? { padding: '8px', gap: '8px' } : {};
+  const phoneSidebarActionBtnStyle = phoneLayout ? { height: '32px', fontSize: '10px', padding: '6px 8px' } : {};
 
   return (
     <div style={styles.appContainer}>
-      <header style={styles.mainHeader}>
-        <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
+      <header style={phoneLayout ? { ...styles.mainHeader, padding: '0 8px' } : styles.mainHeader}>
+        <div style={{display:'flex', alignItems:'center', gap: phoneLayout ? '8px' : '12px'}}>
           {compactLayout && (
             <button
               type="button"
@@ -595,15 +611,17 @@ export default function App() {
               <PanelLeft size={22} />
             </button>
           )}
-          <Music color="#007aff" />
-          <h1 style={{fontSize:'16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
-          <div style={getMidiStyle()}>
-            <Zap size={10} fill={midiStatus === 'ready' ? "#fff" : "none"}/> 
-            {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}
-          </div>
+          <Music color="#007aff" size={phoneLayout ? 16 : 20} />
+          <h1 style={{fontSize: phoneLayout ? '12px' : '16px', fontWeight:'800', margin:0}}>SHOWPAD PRO</h1>
+          {!phoneLayout && (
+            <div style={getMidiStyle()}>
+              <Zap size={10} fill={midiStatus === 'ready' ? "#fff" : "none"}/> 
+              {midiStatus === 'ready' ? "MIDI OK" : "MIDI OFF"}
+            </div>
+          )}
         </div>
 
-        <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
+        <div style={{display:'flex', gap: phoneLayout ? '8px' : '15px', alignItems:'center'}}>
             <button
               type="button"
               onClick={() => setShowProfileEdit(true)}
@@ -611,9 +629,9 @@ export default function App() {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: phoneLayout ? '0' : '8px',
                 backgroundColor: 'rgba(255,255,255,0.05)',
-                padding: '5px 12px',
+                padding: phoneLayout ? '5px 8px' : '5px 12px',
                 borderRadius: '15px',
                 border: '1px solid rgba(255,255,255,0.1)',
                 color: '#fff',
@@ -627,37 +645,39 @@ export default function App() {
               ) : (
                 <User size={14} color="#007aff" />
               )}
-              <span style={{fontSize:'12px', fontWeight:'600', color:'#fff'}}>{getUserDisplayName()}</span>
+              {!phoneLayout && (
+                <span style={{fontSize:'12px', fontWeight:'600', color:'#fff'}}>{getUserDisplayName()}</span>
+              )}
             </button>
 
-            <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
-              <button type="button" title="Informações" onClick={() => setShowInfo(true)} style={{background:'none', border:'none', cursor:'pointer', color:'#8e8e93', padding:'5px'}}><Info size={20}/></button>
+            <div style={{display:'flex', gap: phoneLayout ? '4px' : '8px', alignItems:'center'}}>
+              <button type="button" title="Informações" onClick={() => setShowInfo(true)} style={{background:'none', border:'none', cursor:'pointer', color:'#8e8e93', padding: phoneLayout ? '3px' : '5px'}}><Info size={phoneLayout ? 18 : 20}/></button>
               <button 
                 title="Backup na Nuvem" 
-                style={{...styles.headerBtn, display:'flex', gap:'6px', color:'#4cd964', borderColor:'#4cd96466'}} 
+                style={{...styles.headerBtn, display:'flex', gap:'6px', color:'#4cd964', borderColor:'#4cd96466', padding: phoneLayout ? '5px 7px' : undefined}} 
                 onClick={handleCloudPush}
               >
                 <div style={{position:'relative', display:'flex', alignItems:'center'}}>
                   <Cloud size={16}/>
                   <Plus size={8} style={{position:'absolute', top:'-2px', right:'-4px'}} strokeWidth={4}/>
                 </div>
-                <span style={{fontSize:'9px', fontWeight:'900'}}>UPLOAD</span>
+                {!phoneLayout && <span style={{fontSize:'9px', fontWeight:'900'}}>UPLOAD</span>}
               </button>
 
               <button 
                 title="Sincronizar Nuvem" 
-                style={{...styles.headerBtn, display:'flex', gap:'6px', color:'#007aff', borderColor:'#007aff66'}} 
+                style={{...styles.headerBtn, display:'flex', gap:'6px', color:'#007aff', borderColor:'#007aff66', padding: phoneLayout ? '5px 7px' : undefined}} 
                 onClick={handleCloudPull}
               >
                 <div style={{position:'relative', display:'flex', alignItems:'center'}}>
                   <Cloud size={16}/>
                   <RefreshCw size={8} style={{position:'absolute', bottom:'-2px', right:'-4px'}} strokeWidth={4}/>
                 </div>
-                <span style={{fontSize:'9px', fontWeight:'900'}}>SYNC</span>
+                {!phoneLayout && <span style={{fontSize:'9px', fontWeight:'900'}}>SYNC</span>}
               </button>
 
-              <button onClick={() => setShowSettings(true)} style={{background:'none', border:'none', cursor:'pointer', color:'#fff', padding:'5px'}}><Settings size={20}/></button>
-              <button onClick={() => supabase.auth.signOut()} style={{background:'none', border:'none', cursor:'pointer', color:'#ff3b30', padding:'5px'}}><LogOut size={20}/></button>
+              <button onClick={() => setShowSettings(true)} style={{background:'none', border:'none', cursor:'pointer', color:'#fff', padding: phoneLayout ? '3px' : '5px'}}><Settings size={phoneLayout ? 18 : 20}/></button>
+              <button onClick={() => supabase.auth.signOut()} style={{background:'none', border:'none', cursor:'pointer', color:'#ff3b30', padding: phoneLayout ? '3px' : '5px'}}><LogOut size={phoneLayout ? 18 : 20}/></button>
             </div>
         </div>
       </header>
@@ -692,30 +712,30 @@ export default function App() {
             </div>
           )}
           <div style={styles.navTabs}>
-            <button onClick={() => setView('library')} style={view === 'library' ? styles.activeTab : styles.tab}>MÚSICAS</button>
-            <button onClick={() => setView('setlists')} style={view === 'setlists' ? styles.activeTab : styles.tab}>SHOWS</button>
-            <button onClick={() => setView('bands')} style={view === 'bands' ? styles.activeTab : styles.tab}>BANDAS</button>
-            <button onClick={() => setView('garimpo')} style={view === 'garimpo' ? styles.activeTab : styles.tab}>GARIMPAR</button>
+            <button onClick={() => setView('library')} style={{ ...(view === 'library' ? styles.activeTab : styles.tab), ...phoneTabStyle }}>MÚSICAS</button>
+            <button onClick={() => setView('setlists')} style={{ ...(view === 'setlists' ? styles.activeTab : styles.tab), ...phoneTabStyle }}>SHOWS</button>
+            <button onClick={() => setView('bands')} style={{ ...(view === 'bands' ? styles.activeTab : styles.tab), ...phoneTabStyle }}>BANDAS</button>
+            <button onClick={() => setView('garimpo')} style={{ ...(view === 'garimpo' ? styles.activeTab : styles.tab), ...phoneTabStyle }}>GARIMPAR</button>
           </div>
 
           {view === 'setlists' && (
-            <div style={{ padding: '8px', borderBottom: '1px solid #333', display: 'flex', gap: '6px' }}>
-              <button type="button" onClick={() => setSetlistSortBy('title')} style={{ ...styles.headerBtn, flex: 1, fontSize: '9px', ...(setlistSortBy === 'title' ? { borderColor: '#007aff', color: '#007aff' } : {}) }}>A–Z SHOW</button>
-              <button type="button" onClick={() => setSetlistSortBy('time')} style={{ ...styles.headerBtn, flex: 1, fontSize: '9px', ...(setlistSortBy === 'time' ? { borderColor: '#007aff', color: '#007aff' } : {}) }}>DATA</button>
+            <div style={{ padding: '8px', borderBottom: '1px solid #333', display: 'flex', gap: '6px', ...phoneSidebarControlsStyle }}>
+              <button type="button" onClick={() => setSetlistSortBy('title')} style={{ ...styles.headerBtn, ...phoneSidebarActionBtnStyle, flex: 1, fontSize: phoneLayout ? '8px' : '9px', ...(setlistSortBy === 'title' ? { borderColor: '#007aff', color: '#007aff' } : {}) }}>A–Z SHOW</button>
+              <button type="button" onClick={() => setSetlistSortBy('time')} style={{ ...styles.headerBtn, ...phoneSidebarActionBtnStyle, flex: 1, fontSize: phoneLayout ? '8px' : '9px', ...(setlistSortBy === 'time' ? { borderColor: '#007aff', color: '#007aff' } : {}) }}>DATA</button>
             </div>
           )}
 
           {view === 'library' && (
-            <div style={{ padding: '8px', borderBottom: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ padding: '8px', borderBottom: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '8px', ...phoneSidebarControlsStyle }}>
               <div style={{ display: 'flex', gap: '6px' }}>
-                <button type="button" onClick={() => { setSortBy('title'); setFilterArtist(''); }} style={{ ...styles.headerBtn, flex: 1, fontSize: '9px', ...(sortBy === 'title' ? { borderColor: '#007aff', color: '#007aff' } : {}) }}>A–Z TÍTULO</button>
-                <button type="button" onClick={() => { setSortBy('artist'); setFilterArtist(''); }} style={{ ...styles.headerBtn, flex: 1, fontSize: '9px', ...(sortBy === 'artist' ? { borderColor: '#007aff', color: '#007aff' } : {}) }}>A–Z ARTISTA</button>
+                <button type="button" onClick={() => { setSortBy('title'); setFilterArtist(''); }} style={{ ...styles.headerBtn, ...phoneSidebarActionBtnStyle, flex: 1, fontSize: phoneLayout ? '8px' : '9px', ...(sortBy === 'title' ? { borderColor: '#007aff', color: '#007aff' } : {}) }}>A–Z TÍTULO</button>
+                <button type="button" onClick={() => { setSortBy('artist'); setFilterArtist(''); }} style={{ ...styles.headerBtn, ...phoneSidebarActionBtnStyle, flex: 1, fontSize: phoneLayout ? '8px' : '9px', ...(sortBy === 'artist' ? { borderColor: '#007aff', color: '#007aff' } : {}) }}>A–Z ARTISTA</button>
               </div>
               <select
                 value={filterArtist}
                 onChange={(e) => setFilterArtist(e.target.value)}
                 style={{
-                  width: '100%', padding: '6px 8px', borderRadius: '6px', backgroundColor: '#2c2c2e', fontSize: '11px', cursor: 'pointer',
+                  width: '100%', padding: phoneLayout ? '4px 6px' : '6px 8px', borderRadius: '6px', backgroundColor: '#2c2c2e', fontSize: phoneLayout ? '10px' : '11px', cursor: 'pointer',
                   ...(filterArtist !== '' ? { color: '#4cd964', border: '1px solid #4cd964' } : { color: '#fff', border: '1px solid #444' })
                 }}
               >
@@ -817,26 +837,26 @@ export default function App() {
             }) : <div style={{padding:'20px', color:'#888', fontSize:'11px', textAlign:'center'}}>Menu lateral ativo.</div>}
           </div>
 
-          <div style={styles.sidebarFooter}>
+          <div style={{ ...styles.sidebarFooter, ...phoneSidebarFooterStyle }}>
             {view === 'library' && (
               <>
                 <input ref={importSongFileRef} type="file" accept=".showpad,application/json" style={{ display: 'none' }} onChange={handleImportShowpadSongFile} />
                 <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
-                  <button type="button" onClick={() => importSongFileRef.current?.click()} style={{ ...styles.importBtnLabel, flex: 1, border: 'none', cursor: 'pointer' }}>IMPORTAR</button>
-                  <button type="button" onClick={handleCreateNew} style={{ ...styles.addBtn, flex: 1 }}>+ NOVO</button>
+                  <button type="button" onClick={() => importSongFileRef.current?.click()} style={{ ...styles.importBtnLabel, ...phoneSidebarActionBtnStyle, flex: 1, border: 'none', cursor: 'pointer' }}>IMPORTAR</button>
+                  <button type="button" onClick={handleCreateNew} style={{ ...styles.addBtn, ...phoneSidebarActionBtnStyle, flex: 1 }}>+ NOVO</button>
                 </div>
               </>
             )}
             {view === 'setlists' && (
-              <button type="button" onClick={handleCreateNew} style={styles.addBtn}>+ NOVO</button>
+              <button type="button" onClick={handleCreateNew} style={{ ...styles.addBtn, ...phoneSidebarActionBtnStyle }}>+ NOVO</button>
             )}
           </div>
         </div>
 
         <div style={styles.mainEditor}>
-          {view === 'garimpo' ? <GarimpoView isServerOnline={isServerOnline} styles={styles} refresh={refreshData} session={session} />
-          : view === 'bands' ? <BandView session={session} styles={styles} onSelectShow={openBandShow} refreshData={refreshData} />
-          : selectedItem ? <MainEditor key={selectedItem.data.id} item={selectedItem} songs={songs} bands={bands} triggerDL={triggerDL} onClose={()=>setSelectedItem(null)} onShow={()=>setShowMode(true)} refresh={refreshData} styles={styles} session={session} />
+          {view === 'garimpo' ? <GarimpoView isServerOnline={isServerOnline} styles={styles} refresh={refreshData} session={session} phoneLayout={phoneLayout} />
+          : view === 'bands' ? <BandView session={session} styles={styles} onSelectShow={openBandShow} refreshData={refreshData} phoneLayout={phoneLayout} />
+          : selectedItem ? <MainEditor key={selectedItem.data.id} item={selectedItem} songs={songs} bands={bands} triggerDL={triggerDL} onClose={()=>setSelectedItem(null)} onShow={()=>setShowMode(true)} refresh={refreshData} styles={styles} session={session} phoneLayout={phoneLayout} />
           : <div style={styles.empty}>
               <Music size={120} color="#111" />
               <h1 style={{fontSize:'40px', fontWeight:'900', color:'#111', margin:0}}>SHOWPAD PRO</h1>

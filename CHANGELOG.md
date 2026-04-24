@@ -2,6 +2,16 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.9.2] - 2026-04-23
+
+### Corrigido
+
+- **Mobile (somente celular):** novo `phoneLayout` para telas pequenas (`max-width: 500px` ou `max-width: 900px` com `max-height: 440px`), reduzindo altura dos menus sem alterar o iPad.
+- **Header no celular:** remoção do badge MIDI, perfil sem texto e botões de nuvem em modo compacto (somente ícones), evitando sumiço das ações de sincronização em portrait.
+- **Sidebar no celular:** tabs, filtros/ordenação e rodapé com paddings e botões menores, liberando mais área para lista de músicas/shows.
+- **Editor no celular:** cabeçalho e botões (`TOM`, `BPM`, `SHOW`, `CONCLUIR`) com espaçamento menor para aumentar a área visível de observações e letra.
+- **Aba Bandas/Garimpo no celular:** redução de padding, margens e tamanhos de título/botões para evitar que o topo ocupe espaço excessivo.
+
 ## [8.9.1] - 2026-04-23
 
 ### Corrigido

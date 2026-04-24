@@ -3,7 +3,7 @@ import { Plus, RefreshCw, Trash2, Layout, Music, X, Settings, Save, UserMinus, Z
 import { supabase, db, deleteBandComplete, broadcastBandChanges, pullFromCloud, filterDexieSongsForCreator } from './ShowPadCore';
 import { BandShowManager } from './BandShowManager';
 
-export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
+export const BandView = ({ session, styles, onSelectShow, refreshData, phoneLayout = false }) => {
     const [loading, setLoading] = useState(false);
     const [bands, setBands] = useState([]);
     const [newBandName, setNewBandName] = useState('');
@@ -557,9 +557,9 @@ export const BandView = ({ session, styles, onSelectShow, refreshData }) => {
     };
 
     return (
-        <div style={{ ...styles.garimpoPanel, flex: 1, minHeight: 0, overflow: 'hidden' }}>
-            <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-                <h1 style={{ color: '#fff', fontSize: '28px', fontWeight: '900', margin: 0 }}>BANDAS</h1>
+        <div style={{ ...styles.garimpoPanel, ...(phoneLayout ? { padding: '16px' } : {}), flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: phoneLayout ? '12px' : '30px' }}>
+                <h1 style={{ color: '#fff', fontSize: phoneLayout ? '18px' : '28px', fontWeight: '900', margin: 0 }}>BANDAS</h1>
                 <div style={{display:'flex', gap:'10px'}}>
                     {hasUpdates && (
                         <div style={{backgroundColor:'#ff9500', color:'#000', padding:'8px 15px', borderRadius:'10px', fontSize:'11px', fontWeight:'900', display:'flex', alignItems:'center', gap:'8px', animation:'pulse 2s infinite'}}>

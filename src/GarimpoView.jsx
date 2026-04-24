@@ -100,7 +100,7 @@ async function scrapeViaCorsproxy(url) {
     }
 }
 
-export const GarimpoView = ({ styles, refresh, session }) => {
+export const GarimpoView = ({ styles, refresh, session, phoneLayout = false }) => {
     const [garimpoInput, setGarimpoInput] = useState('');
     const [garimpoQueue, setGarimpoQueue] = useState([]);
     const [isScraping, setIsScraping] = useState(false);
@@ -196,13 +196,13 @@ export const GarimpoView = ({ styles, refresh, session }) => {
     };
 
     return (
-        <div style={{ ...styles.garimpoPanel, padding: '30px', background: '#000', height: '100%', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px' }}>
+        <div style={{ ...styles.garimpoPanel, padding: phoneLayout ? '16px' : '30px', background: '#000', height: '100%', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: phoneLayout ? '12px' : '30px' }}>
                 <h1 style={{ color: '#fff', fontWeight: '900', margin: 0 }}>GARIMPO</h1>
                 {status && <span style={{ color: '#007aff', fontWeight: '900', fontSize: '12px', textAlign: 'right', maxWidth: '55%' }}>{status}</span>}
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '30px', background: '#1c1c1e', padding: '10px', borderRadius: '18px', border: '1px solid #333' }}>
+            <div style={{ display: 'flex', gap: phoneLayout ? '8px' : '12px', marginBottom: phoneLayout ? '12px' : '30px', background: '#1c1c1e', padding: phoneLayout ? '8px' : '10px', borderRadius: '18px', border: '1px solid #333' }}>
                 <input
                     style={{ flex: 1, background: 'none', border: 'none', color: '#fff', outline: 'none', paddingLeft: '10px', fontSize: '16px' }}
                     placeholder="Cole o link aqui..."
@@ -256,10 +256,11 @@ export const GarimpoView = ({ styles, refresh, session }) => {
                 type="button"
                 style={{
                     width: '100%',
-                    height: '60px',
+                    height: phoneLayout ? 'auto' : '60px',
                     borderRadius: '18px',
                     border: 'none',
-                    marginTop: '30px',
+                    marginTop: phoneLayout ? '12px' : '30px',
+                    padding: phoneLayout ? '12px' : undefined,
                     backgroundColor: garimpoQueue.length > 0 ? '#34c759' : '#1c1c1e',
                     color: '#fff',
                     fontWeight: '900',

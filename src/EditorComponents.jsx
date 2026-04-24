@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Trash2, ArrowUp, ArrowDown, Plus, X, Monitor, Music, ChevronUp, ChevronDown } from 'lucide-react';
 import { db, transposeContent, supabase, hydrateBandSetlistSongsFromRepertoire, deleteSongFromCloudForUser } from './ShowPadCore';
 
-export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, refresh, styles, session }) => {
+export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, refresh, styles, session, phoneLayout = false }) => {
   const [lC, setLC] = useState(item.data.content || "");
   const [lT, setLT] = useState(item.data.title || "");
   const [lA, setLA] = useState(item.data.artist || "");
@@ -111,7 +111,7 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
   const yellowInputStyle = {
     ...styles.artistInput,
     color: '#FFD700',
-    fontSize: '15px',
+    fontSize: phoneLayout ? '13px' : '15px',
     fontWeight: 'bold',
     colorScheme: 'dark'
   };
@@ -132,7 +132,13 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
                     Podes consultar ou remover da lista na agenda de shows da banda.
                 </div>
             )}
-            <div style={{...styles.editorHeader, borderLeft: band ? '6px solid #ff9500' : 'none'}}>
+            <div
+              style={{
+                ...styles.editorHeader,
+                ...(phoneLayout ? { padding: '8px 10px', gap: '6px' } : {}),
+                borderLeft: band ? '6px solid #ff9500' : 'none',
+              }}
+            >
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                     <input style={styles.hInput} value={lT} onChange={e=>setLT(e.target.value)} onBlur={save} placeholder="Título do Show" />
                     {band && (
@@ -146,9 +152,9 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
                         </div>
                     )}
                 </div>
-                <div style={{display:'flex', gap:'15px', alignItems: 'center'}}>
+                <div style={{display:'flex', gap: phoneLayout ? '8px' : '15px', alignItems: 'center', flexWrap: phoneLayout ? 'wrap' : 'nowrap'}}>
                     <input style={yellowInputStyle} value={lLoc} onChange={e=>setLLoc(e.target.value)} onBlur={save} placeholder="Local" />
-                    <input type="datetime-local" style={{...yellowInputStyle, width: 'auto'}} value={lTim} onChange={e=>setLTim(e.target.value)} onBlur={save} />
+                    <input type="datetime-local" style={{...yellowInputStyle, width: phoneLayout ? '100%' : 'auto'}} value={lTim} onChange={e=>setLTim(e.target.value)} onBlur={save} />
                 </div>
             </div>
             
@@ -196,9 +202,9 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
                     ))}
                 </div>
             </div>
-            <div style={{padding:'20px', borderTop:'1px solid #333', display:'flex', justifyContent:'space-between'}}>
-                <button onClick={onClose} style={styles.saveBtn}>CONCLUIR</button>
-                <button onClick={()=>onShow(item.data)} style={styles.showBtn}><Monitor size={16} style={{marginRight:'8px'}}/> MODO SHOW</button>
+            <div style={{padding: phoneLayout ? '10px' : '20px', borderTop:'1px solid #333', display:'flex', justifyContent:'space-between', gap: '8px'}}>
+                <button onClick={onClose} style={{...styles.saveBtn, ...(phoneLayout ? { padding: '8px 10px', fontSize: '11px' } : {})}}>CONCLUIR</button>
+                <button onClick={()=>onShow(item.data)} style={{...styles.showBtn, ...(phoneLayout ? { padding: '8px 10px', fontSize: '11px' } : {})}}><Monitor size={16} style={{marginRight:'8px'}}/> MODO SHOW</button>
             </div>
         </div>
     );
@@ -206,13 +212,13 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
 
   return (
     <div style={styles.mainEditor}>
-      <div style={styles.editorHeader}>
+      <div style={{ ...styles.editorHeader, ...(phoneLayout ? { padding: '8px 10px', gap: '6px' } : {}) }}>
         <input style={styles.hInput} value={lT} onChange={e=>setLT(e.target.value)} onBlur={save} placeholder="Título da Música" />
         <input style={styles.artistInput} value={lA} onChange={e=>setLA(e.target.value)} onBlur={save} placeholder="Artista / Banda" />
         
         <div style={styles.btnGroup}>
-          <button onClick={() => handleTranspose(-1)} style={{...styles.headerBtn, padding:'8px 15px'}}>- TOM</button>
-          <button onClick={() => handleTranspose(1)} style={{...styles.headerBtn, padding:'8px 15px'}}>+ TOM</button>
+          <button onClick={() => handleTranspose(-1)} style={{...styles.headerBtn, padding: phoneLayout ? '5px 8px' : '8px 15px'}}>- TOM</button>
+          <button onClick={() => handleTranspose(1)} style={{...styles.headerBtn, padding: phoneLayout ? '5px 8px' : '8px 15px'}}>+ TOM</button>
           
           <div style={styles.bpmControlGroup}>
             <span style={{fontSize:'9px', color:'#666', fontWeight:'bold'}}>BPM</span>
@@ -223,10 +229,10 @@ export const MainEditor = ({ item, songs, bands, triggerDL, onClose, onShow, ref
             </div>
           </div>
 
-          <button onClick={async () => { await save(); onShow(item.data); }} style={styles.showBtn}>
+          <button onClick={async () => { await save(); onShow(item.data); }} style={{...styles.showBtn, ...(phoneLayout ? { padding: '8px 10px', fontSize: '11px' } : {})}}>
             <Monitor size={16} style={{marginRight:'8px'}}/> SHOW
           </button>
-          <button onClick={onClose} style={styles.saveBtn}>CONCLUIR</button>
+          <button onClick={onClose} style={{...styles.saveBtn, ...(phoneLayout ? { padding: '8px 10px', fontSize: '11px' } : {})}}>CONCLUIR</button>
         </div>
       </div>
 
