@@ -1,7 +1,7 @@
 {
   "name": "showpad-web",
   "private": true,
-  "version": "8.9.2",
+  "version": "8.9.3",
   "engines": {
     "node": "20.x"
   },

@@ -2,6 +2,18 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.9.3] - 2026-04-24
+
+### Adicionado
+
+- **PWA completo:** configuração de instalação com `manifest.json` enriquecido, ícones PNG (`192`, `512` e `maskable`) e metas Apple para melhor suporte de “Adicionar à Tela de Início” no iPad.
+- **Service Worker:** registro automático em `src/main.jsx` via `virtual:pwa-register`.
+
+### Corrigido
+
+- **Offline básico:** adicionado Service Worker em `public/sw.js` com cache da app shell (`/`, `index.html`, `manifest`, ícones) e estratégia de cache para CSS/JS, com fallback SPA (`index.html`) sem rede.
+- **Recursos PWA:** `index.html` agora referencia um favicon real (`/pwa-192.png`) em vez de `/favicon.svg` inexistente.
+
 ## [8.9.2] - 2026-04-23
 
 ### Corrigido
