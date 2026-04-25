@@ -7,6 +7,14 @@ const THRESHOLD_BY_SENSITIVITY = {
   medium: 0.075,
   high: 0.055,
 };
+const START_TIMEOUT_MS = 10000;
+const CAMERA_PERMISSION_TIMEOUT_MS = 30000;
+const RETRY_DELAY_MS = 450;
+const LOCAL_MEDIAPIPE_BASE = '/mediapipe/hands';
+const CDN_MEDIAPIPE_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands';
+
+let cachedHandsCtor = null;
+let preferredRuntimeBase = LOCAL_MEDIAPIPE_BASE;
 
 function countRaisedFingers(landmarks) {
   const tipVsPip = [
@@ -71,6 +79,57 @@ function commandFromGestureToken(token, gestureBindings) {
   return null;
 }
 
+function withTimeout(promise, timeoutMs, timeoutMessage) {
+  let timerId = 0;
+  const timeout = new Promise((_, reject) => {
+    timerId = window.setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    window.clearTimeout(timerId);
+  });
+}
+
+function isTransientGestureInitError(err) {
+  const name = String(err?.name || '');
+  const msg = String(err?.message || '').toLowerCase();
+  return (
+    name === 'AbortError' ||
+    name === 'NotReadableError' ||
+    name === 'SecurityError' ||
+    msg.includes('network') ||
+    msg.includes('timeout')
+  );
+}
+
+function friendlyGestureError(err) {
+  const name = String(err?.name || '');
+  const msg = String(err?.message || '').toLowerCase();
+  if (name === 'NotAllowedError') return 'Permissão da câmera negada. Autorize o acesso e tente novamente.';
+  if (name === 'NotFoundError') return 'Nenhuma câmera encontrada neste dispositivo.';
+  if (name === 'NotReadableError' || msg.includes('in use') || msg.includes('ocupad')) {
+    return 'Câmera indisponível ou em uso por outro app/aba.';
+  }
+  if (msg.includes('gesture runtime') || msg.includes('biblioteca de gestos') || msg.includes('hands')) {
+    return 'Falha ao carregar o motor de gestos.';
+  }
+  if (msg.includes('tempo esgotado') || msg.includes('timeout')) {
+    return 'Tempo esgotado ao iniciar a câmera/gestos. Tente novamente.';
+  }
+  return err?.message || 'Falha ao inicializar gestos.';
+}
+
+async function resolveHandsCtor() {
+  if (cachedHandsCtor) return cachedHandsCtor;
+  let HandsCtor = window.Hands;
+  if (!HandsCtor) {
+    await import('@mediapipe/hands/hands');
+    HandsCtor = window.Hands;
+  }
+  if (!HandsCtor) throw new Error('Biblioteca de gestos não carregada.');
+  cachedHandsCtor = HandsCtor;
+  return HandsCtor;
+}
+
 export function useHandGestures({
   enabled,
   cameraEnabled = true,
@@ -86,13 +145,17 @@ export function useHandGestures({
   const processingRef = useRef(false);
   const lastPointRef = useRef(null);
   const cooldownRef = useRef(0);
+  const retryCountRef = useRef(0);
   const [gestureStatus, setGestureStatus] = useState('inativo');
   const [gestureError, setGestureError] = useState('');
+  const [gesturePhase, setGesturePhase] = useState('idle');
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     if (!enabled || !cameraEnabled) {
       setGestureStatus(enabled ? 'pausado' : 'inativo');
       setGestureError('');
+      setGesturePhase(enabled ? 'paused' : 'idle');
       return;
     }
 
@@ -134,14 +197,21 @@ export function useHandGestures({
       rafRef.current = requestAnimationFrame(processLoop);
     };
 
-    const start = async () => {
+    const start = async (runtimeBase) => {
       try {
-        setGestureStatus('solicitando câmera...');
+        setGesturePhase('requesting_permission');
+        setGestureStatus('solicitando permissão da câmera...');
         setGestureError('');
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-          audio: false,
-        });
+        // Em iPad/Safari o prompt de permissão pode demorar mais para o utilizador aceitar.
+        // Usamos timeout maior aqui para não abortar cedo um fluxo válido.
+        const stream = await withTimeout(
+          navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false,
+          }),
+          CAMERA_PERMISSION_TIMEOUT_MS,
+          'Tempo esgotado ao solicitar câmera.'
+        );
         if (cancelled) {
           stream.getTracks().forEach((track) => track.stop());
           return;
@@ -150,19 +220,14 @@ export function useHandGestures({
         const video = videoRef.current;
         if (!video) return;
         video.srcObject = stream;
-        await video.play();
+        await withTimeout(video.play(), START_TIMEOUT_MS, 'Tempo esgotado ao iniciar preview da câmera.');
 
-        let HandsCtor = window.Hands;
-        if (!HandsCtor) {
-          await import('@mediapipe/hands/hands');
-          HandsCtor = window.Hands;
-        }
-        if (!HandsCtor) {
-          throw new Error('Biblioteca de gestos não carregada.');
-        }
+        setGesturePhase('loading_engine');
+        setGestureStatus('carregando motor de gestos...');
+        const HandsCtor = await withTimeout(resolveHandsCtor(), START_TIMEOUT_MS, 'Tempo esgotado ao carregar motor de gestos.');
 
         const hands = new HandsCtor({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+          locateFile: (file) => `${runtimeBase}/${file}`,
         });
         hands.setOptions({
           maxNumHands: 1,
@@ -175,9 +240,11 @@ export function useHandGestures({
           if (!marks) {
             lastPointRef.current = null;
             setGestureStatus('mão não detectada');
+            setGesturePhase('active');
             return;
           }
-          setGestureStatus('gestos ativos');
+          setGestureStatus('câmera ativa');
+          setGesturePhase('active');
           const wrist = marks[0];
           if (!lastPointRef.current) {
             lastPointRef.current = { x: wrist.x, y: wrist.y };
@@ -194,26 +261,45 @@ export function useHandGestures({
           if (command) emitIfReady(command);
         });
         handsRef.current = hands;
-        setGestureStatus('gestos ativos');
+        setGestureStatus('câmera ativa');
+        setGesturePhase('active');
         rafRef.current = requestAnimationFrame(processLoop);
+        preferredRuntimeBase = runtimeBase;
       } catch (err) {
-        console.error('useHandGestures:', err);
-        setGestureError(err?.message || 'Falha ao inicializar gestos.');
+        console.error('useHandGestures:', { err, retry: retryCountRef.current, runtimeBase });
+        stopAll();
+        const canRetry = retryCountRef.current === 0 && isTransientGestureInitError(err);
+        if (canRetry) {
+          retryCountRef.current = 1;
+          setGesturePhase('retrying');
+          setGestureStatus('tentando novamente...');
+          window.setTimeout(async () => {
+            if (cancelled) return;
+            const fallbackBase = runtimeBase === LOCAL_MEDIAPIPE_BASE ? CDN_MEDIAPIPE_BASE : LOCAL_MEDIAPIPE_BASE;
+            await start(fallbackBase);
+          }, RETRY_DELAY_MS);
+          return;
+        }
+        setGestureError(friendlyGestureError(err));
         setGestureStatus('erro na câmera');
+        setGesturePhase('error');
       }
     };
 
-    start();
+    retryCountRef.current = 0;
+    start(preferredRuntimeBase);
 
     return () => {
       cancelled = true;
       stopAll();
     };
-  }, [enabled, cameraEnabled, onCommand, onGestureSample, sensitivity, gestureBindings]);
+  }, [enabled, cameraEnabled, onCommand, onGestureSample, sensitivity, gestureBindings, retryToken]);
 
   return {
     videoRef,
     gestureStatus,
     gestureError,
+    gesturePhase,
+    retry: () => setRetryToken((v) => v + 1),
   };
 }

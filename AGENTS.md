@@ -37,7 +37,7 @@ Antes de cada `git push origin main`:
 
 React + Vite, Dexie local, Supabase na nuvem. Convenções detalhadas de código e negócio: **`.cursorrules`**.
 
-Versão de referência publicada na UI e nos metadados de backup: **8.9.8**; pormenores em **`CHANGELOG.md`**.
+Versão de referência publicada na UI e nos metadados de backup: **8.9.9**; pormenores em **`CHANGELOG.md`**.
 
 ## Estabilidade
 

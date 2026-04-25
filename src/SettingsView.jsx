@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Zap, Database, ChevronLeft, ChevronRight, Ban, Camera, Keyboard, TestTube2 } from 'lucide-react';
 import { useHandGestures } from './hooks/useHandGestures';
-import { GESTURE_PRESETS, GESTURE_TOKEN_OPTIONS, gestureBindingConflicts, mapKeyboardToStageCommand, StageCommand, stageInputEnabled } from './stageControls';
+import { GESTURE_PRESETS, GESTURE_TOKEN_OPTIONS, getGestureTokenLabel, gestureBindingConflicts, mapKeyboardToStageCommand, StageCommand, stageInputEnabled } from './stageControls';
 
 export const SettingsView = ({
   onClose,
@@ -32,12 +32,12 @@ export const SettingsView = ({
     onStageCommandTest?.(command, source);
   }, [onStageCommandTest]);
 
-  const { videoRef, gestureStatus, gestureError } = useHandGestures({
-    enabled: testModeOpen && gesturesEnabled,
+  const { videoRef, gestureStatus, gestureError, gesturePhase, retry } = useHandGestures({
+    enabled: testModeOpen,
     cameraEnabled: testModeOpen,
     sensitivity,
-    gestureBindings: stageControls?.gestureBindings,
-    onCommand: (command) => handleTestCommand(command, 'gesture-test'),
+    gestureBindings: gesturesEnabled ? stageControls?.gestureBindings : {},
+    onCommand: gesturesEnabled ? (command) => handleTestCommand(command, 'gesture-test') : undefined,
   });
 
   useEffect(() => {
@@ -57,6 +57,14 @@ export const SettingsView = ({
   }, [testModeOpen, pedalEnabled, handleTestCommand]);
 
   const isFlashing = (command) => Date.now() - (testFlash[command] || 0) < 550;
+  const currentBindings = stageControls?.gestureBindings || {};
+  const testConflicts = gestureBindingConflicts(currentBindings);
+  const commandCards = [
+    { command: StageCommand.SCROLL_UP, title: 'PAG ↑', binding: currentBindings.scroll_up },
+    { command: StageCommand.SCROLL_DOWN, title: 'PAG ↓', binding: currentBindings.scroll_down },
+    { command: StageCommand.NEXT_SONG, title: 'PRÓX MÚSICA', binding: currentBindings.next_song },
+    { command: StageCommand.PREV_SONG, title: 'MÚSICA ANT', binding: currentBindings.prev_song },
+  ];
 
   return (
     <div style={styles.settingsOverlay}>
@@ -273,11 +281,38 @@ export const SettingsView = ({
                 <X size={14} /> FECHAR
               </button>
             </div>
+            {testConflicts.length > 0 && (
+              <div style={{ marginBottom: 10, background: '#3a2a12', border: '1px solid #ff950055', borderRadius: 8, padding: '7px 9px', fontSize: 11, color: '#ffd285' }}>
+                Atenção: há conflito de gestos em mais de uma ação.
+              </div>
+            )}
+            {!gesturesEnabled && (
+              <div style={{ marginBottom: 10, background: '#2c2c2e', border: '1px solid #4b4b4d', borderRadius: 8, padding: '7px 9px', fontSize: 11, color: '#c7c7cc' }}>
+                Gestos desativados neste modo de entrada.
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 12 }}>
-              <button type="button" onClick={() => handleTestCommand(StageCommand.SCROLL_UP, 'manual-test')} style={{ border: '1px solid #3a3a3c', borderRadius: 8, padding: '10px 8px', background: isFlashing(StageCommand.SCROLL_UP) ? '#34c759' : '#2a2a2d', color: isFlashing(StageCommand.SCROLL_UP) ? '#03220d' : '#fff', fontWeight: 700 }}>PAG ↑</button>
-              <button type="button" onClick={() => handleTestCommand(StageCommand.SCROLL_DOWN, 'manual-test')} style={{ border: '1px solid #3a3a3c', borderRadius: 8, padding: '10px 8px', background: isFlashing(StageCommand.SCROLL_DOWN) ? '#34c759' : '#2a2a2d', color: isFlashing(StageCommand.SCROLL_DOWN) ? '#03220d' : '#fff', fontWeight: 700 }}>PAG ↓</button>
-              <button type="button" onClick={() => handleTestCommand(StageCommand.NEXT_SONG, 'manual-test')} style={{ border: '1px solid #3a3a3c', borderRadius: 8, padding: '10px 8px', background: isFlashing(StageCommand.NEXT_SONG) ? '#34c759' : '#2a2a2d', color: isFlashing(StageCommand.NEXT_SONG) ? '#03220d' : '#fff', fontWeight: 700 }}>PRÓX MÚSICA</button>
-              <button type="button" onClick={() => handleTestCommand(StageCommand.PREV_SONG, 'manual-test')} style={{ border: '1px solid #3a3a3c', borderRadius: 8, padding: '10px 8px', background: isFlashing(StageCommand.PREV_SONG) ? '#34c759' : '#2a2a2d', color: isFlashing(StageCommand.PREV_SONG) ? '#03220d' : '#fff', fontWeight: 700 }}>MÚSICA ANT</button>
+              {commandCards.map((card) => (
+                <button
+                  key={card.command}
+                  type="button"
+                  onClick={() => handleTestCommand(card.command, 'manual-test')}
+                  style={{
+                    border: '1px solid #3a3a3c',
+                    borderRadius: 8,
+                    padding: '8px 8px',
+                    background: isFlashing(card.command) ? '#34c759' : '#2a2a2d',
+                    color: isFlashing(card.command) ? '#03220d' : '#fff',
+                    fontWeight: 700,
+                    textAlign: 'left',
+                  }}
+                >
+                  <div>{card.title}</div>
+                  <div style={{ fontWeight: 500, fontSize: 10, opacity: isFlashing(card.command) ? 0.8 : 0.75, marginTop: 2 }}>
+                    Gesto: {getGestureTokenLabel(card.binding)}
+                  </div>
+                </button>
+              ))}
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <video ref={videoRef} playsInline muted style={{ width: 170, height: 120, borderRadius: 8, border: '1px solid #555', objectFit: 'cover', background: '#000', transform: 'scaleX(-1)' }} />
@@ -285,9 +320,21 @@ export const SettingsView = ({
                 <p style={{ margin: 0 }}>
                   Status Gestos: <span style={{ color: '#fff' }}>{gestureError ? `erro: ${gestureError}` : gestureStatus}</span>
                 </p>
+                <p style={{ margin: '4px 0 0 0' }}>
+                  Fase: <span style={{ color: '#fff' }}>{gesturePhase}</span>
+                </p>
                 <p style={{ margin: '6px 0 0 0' }}>
                   Você pode testar por toque (botões acima), pedal HID e gestos configurados.
                 </p>
+                {gestureError && (
+                  <button
+                    type="button"
+                    onClick={retry}
+                    style={{ ...styles.headerBtn, marginTop: 8, fontSize: 10 }}
+                  >
+                    Tentar novamente
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -2,6 +2,19 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.9.9] - 2026-04-25
+
+### Corrigido
+
+- **Robustez da câmera no teste/calibração (iPad/Safari):** `useHandGestures` agora expõe fases explícitas de inicialização, timeout de arranque, retry automático para falhas transitórias e mensagens diagnósticas amigáveis (permissão negada, câmera ocupada/indisponível, timeout, runtime de gestos).
+- **Inicialização do runtime de gestos:** adicionada estratégia de preferência local (`/mediapipe/hands`) com fallback para CDN (`jsdelivr`) e cache de construtor para evitar recarregamentos desnecessários durante a sessão.
+
+### Adicionado
+
+- **UX de mapeamento visível no modal de teste:** cada quadrante (`PAG ↑`, `PAG ↓`, `PRÓX MÚSICA`, `MÚSICA ANT`) agora exibe o gesto atualmente mapeado em texto humano.
+- **Diagnóstico no modal de teste:** alerta de conflito de bindings, aviso quando gestos estão desativados no modo de entrada atual e botão **Tentar novamente** quando ocorrer erro de inicialização.
+- **Helper de rótulo de gestos:** `getGestureTokenLabel()` em `stageControls` para reutilizar labels consistentes no UI de teste/calibração.
+
 ## [8.9.8] - 2026-04-25
 
 ### Corrigido

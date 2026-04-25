@@ -35,6 +35,11 @@ export const GESTURE_TOKEN_OPTIONS = [
   { value: GestureToken.SWIPE_RIGHT, label: 'Swipe para direita' },
 ];
 
+const GESTURE_LABEL_BY_TOKEN = GESTURE_TOKEN_OPTIONS.reduce((acc, item) => {
+  acc[item.value] = item.label;
+  return acc;
+}, {});
+
 export const GESTURE_PRESETS = {
   default: {
     scroll_up: GestureToken.TWO_FINGERS_UP,
@@ -118,6 +123,10 @@ export function gestureBindingConflicts(bindings) {
     else seen.set(gesture, action);
   });
   return conflicts;
+}
+
+export function getGestureTokenLabel(token) {
+  return GESTURE_LABEL_BY_TOKEN[token] || token || 'não definido';
 }
 
 export function stageInputEnabled(profile, mode) {
