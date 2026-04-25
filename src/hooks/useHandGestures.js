@@ -7,14 +7,22 @@ const THRESHOLD_BY_SENSITIVITY = {
   medium: 0.075,
   high: 0.055,
 };
+const SWIPE_DISTANCE_BY_SENSITIVITY = {
+  low: 0.09,
+  medium: 0.07,
+  high: 0.055,
+};
+const SWIPE_VERTICAL_TOLERANCE_RATIO = 0.7;
+const SWIPE_HORIZONTAL_DOMINANCE = 1.35;
+const SWIPE_WINDOW_MS = 280;
 const START_TIMEOUT_MS = 10000;
 const CAMERA_PERMISSION_TIMEOUT_MS = 30000;
 const RETRY_DELAY_MS = 450;
-const LOCAL_MEDIAPIPE_BASE = '/mediapipe/hands';
 const CDN_MEDIAPIPE_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands';
+const ALT_CDN_MEDIAPIPE_BASE = 'https://unpkg.com/@mediapipe/hands';
 
 let cachedHandsCtor = null;
-let preferredRuntimeBase = LOCAL_MEDIAPIPE_BASE;
+let preferredRuntimeBase = CDN_MEDIAPIPE_BASE;
 
 function countRaisedFingers(landmarks) {
   const tipVsPip = [
@@ -38,17 +46,17 @@ function isRockSign(landmarks) {
   return indexUp && middleDown && ringDown && pinkyUp;
 }
 
-function isOpenPalmStable(landmarks) {
-  return countRaisedFingers(landmarks) >= 4;
-}
-
 function isClosedFist(landmarks) {
   return countRaisedFingers(landmarks) === 0 && !isThumbRaised(landmarks);
 }
 
-function resolveGestureToken(landmarks, dx, dy, threshold) {
+function resolveGestureToken(landmarks, dx, dy, threshold, swipeDistanceThreshold) {
   if (!landmarks) return null;
-  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > threshold) {
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+  const horizontalDominant = absDx > absDy * SWIPE_HORIZONTAL_DOMINANCE;
+  const withinVerticalTolerance = absDy < swipeDistanceThreshold * SWIPE_VERTICAL_TOLERANCE_RATIO;
+  if (horizontalDominant && withinVerticalTolerance && absDx > swipeDistanceThreshold) {
     return dx > 0 ? GestureToken.SWIPE_RIGHT : GestureToken.SWIPE_LEFT;
   }
   const raised = countRaisedFingers(landmarks);
@@ -58,9 +66,7 @@ function resolveGestureToken(landmarks, dx, dy, threshold) {
     if (dy > threshold) return GestureToken.ONE_FINGER_DOWN;
   }
   if (raised >= 4) {
-    if (Math.abs(dy) <= threshold * 0.65) return GestureToken.OPEN_PALM;
-    if (dy < -threshold) return GestureToken.OPEN_PALM_UP;
-    if (dy > threshold) return GestureToken.OPEN_PALM_DOWN;
+    if (Math.abs(dy) <= threshold * 1.1) return GestureToken.OPEN_PALM;
   }
   if (isClosedFist(landmarks)) return GestureToken.CLOSED_FIST;
   if (raised === 2) {
@@ -144,12 +150,29 @@ export function useHandGestures({
   const handsRef = useRef(null);
   const processingRef = useRef(false);
   const lastPointRef = useRef(null);
+  const swipeAccumulatorRef = useRef({ x: 0, y: 0, t: 0 });
   const cooldownRef = useRef(0);
   const retryCountRef = useRef(0);
+  const onCommandRef = useRef(onCommand);
+  const onGestureSampleRef = useRef(onGestureSample);
+  const gestureBindingsRef = useRef(gestureBindings);
   const [gestureStatus, setGestureStatus] = useState('inativo');
   const [gestureError, setGestureError] = useState('');
   const [gesturePhase, setGesturePhase] = useState('idle');
+  const [lastDetectedGesture, setLastDetectedGesture] = useState('');
   const [retryToken, setRetryToken] = useState(0);
+
+  useEffect(() => {
+    onCommandRef.current = onCommand;
+  }, [onCommand]);
+
+  useEffect(() => {
+    onGestureSampleRef.current = onGestureSample;
+  }, [onGestureSample]);
+
+  useEffect(() => {
+    gestureBindingsRef.current = gestureBindings;
+  }, [gestureBindings]);
 
   useEffect(() => {
     if (!enabled || !cameraEnabled) {
@@ -161,6 +184,7 @@ export function useHandGestures({
 
     let cancelled = false;
     const threshold = THRESHOLD_BY_SENSITIVITY[sensitivity] ?? THRESHOLD_BY_SENSITIVITY.medium;
+    const swipeDistanceThreshold = SWIPE_DISTANCE_BY_SENSITIVITY[sensitivity] ?? SWIPE_DISTANCE_BY_SENSITIVITY.medium;
 
     const stopAll = () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -173,13 +197,14 @@ export function useHandGestures({
       handsRef.current = null;
       processingRef.current = false;
       lastPointRef.current = null;
+      swipeAccumulatorRef.current = { x: 0, y: 0, t: 0 };
     };
 
     const emitIfReady = (command) => {
       const now = Date.now();
       if (now - cooldownRef.current < 600) return;
       cooldownRef.current = now;
-      onCommand?.(command, 'gesture');
+      onCommandRef.current?.(command, 'gesture');
     };
 
     const processLoop = async () => {
@@ -239,6 +264,7 @@ export function useHandGestures({
           const marks = results.multiHandLandmarks?.[0];
           if (!marks) {
             lastPointRef.current = null;
+            swipeAccumulatorRef.current = { x: 0, y: 0, t: 0 };
             setGestureStatus('mão não detectada');
             setGesturePhase('active');
             return;
@@ -253,11 +279,28 @@ export function useHandGestures({
           const dx = wrist.x - lastPointRef.current.x;
           const dy = wrist.y - lastPointRef.current.y;
           lastPointRef.current = { x: wrist.x, y: wrist.y };
+          const now = performance.now();
+          if (now - swipeAccumulatorRef.current.t > SWIPE_WINDOW_MS) {
+            swipeAccumulatorRef.current = { x: dx, y: dy, t: now };
+          } else {
+            swipeAccumulatorRef.current = {
+              x: swipeAccumulatorRef.current.x * 0.6 + dx,
+              y: swipeAccumulatorRef.current.y * 0.6 + dy,
+              t: now,
+            };
+          }
 
-          const token = resolveGestureToken(marks, dx, dy, threshold);
+          const token = resolveGestureToken(
+            marks,
+            swipeAccumulatorRef.current.x,
+            swipeAccumulatorRef.current.y,
+            threshold,
+            swipeDistanceThreshold
+          );
           if (!token) return;
-          onGestureSample?.(token);
-          const command = commandFromGestureToken(token, gestureBindings);
+          setLastDetectedGesture(token);
+          onGestureSampleRef.current?.(token);
+          const command = commandFromGestureToken(token, gestureBindingsRef.current);
           if (command) emitIfReady(command);
         });
         handsRef.current = hands;
@@ -267,7 +310,9 @@ export function useHandGestures({
         preferredRuntimeBase = runtimeBase;
       } catch (err) {
         console.error('useHandGestures:', { err, retry: retryCountRef.current, runtimeBase });
-        stopAll();
+        const hadStream = Boolean(streamRef.current);
+        // Mantém preview quando a falha é do runtime de gestos (não derrubar vídeo no teste).
+        if (!hadStream) stopAll();
         const canRetry = retryCountRef.current === 0 && isTransientGestureInitError(err);
         if (canRetry) {
           retryCountRef.current = 1;
@@ -275,13 +320,13 @@ export function useHandGestures({
           setGestureStatus('tentando novamente...');
           window.setTimeout(async () => {
             if (cancelled) return;
-            const fallbackBase = runtimeBase === LOCAL_MEDIAPIPE_BASE ? CDN_MEDIAPIPE_BASE : LOCAL_MEDIAPIPE_BASE;
-            await start(fallbackBase);
+            const retryBase = runtimeBase === CDN_MEDIAPIPE_BASE ? ALT_CDN_MEDIAPIPE_BASE : CDN_MEDIAPIPE_BASE;
+            await start(retryBase);
           }, RETRY_DELAY_MS);
           return;
         }
         setGestureError(friendlyGestureError(err));
-        setGestureStatus('erro na câmera');
+        setGestureStatus(hadStream ? 'câmera ativa, motor de gestos com erro' : 'erro na câmera');
         setGesturePhase('error');
       }
     };
@@ -293,13 +338,14 @@ export function useHandGestures({
       cancelled = true;
       stopAll();
     };
-  }, [enabled, cameraEnabled, onCommand, onGestureSample, sensitivity, gestureBindings, retryToken]);
+  }, [enabled, cameraEnabled, sensitivity, retryToken]);
 
   return {
     videoRef,
     gestureStatus,
     gestureError,
     gesturePhase,
+    lastDetectedGesture,
     retry: () => setRetryToken((v) => v + 1),
   };
 }

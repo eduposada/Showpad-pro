@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Zap, Database, ChevronLeft, ChevronRight, Ban, Camera, Keyboard, TestTube2 } from 'lucide-react';
+import { X, Zap, Database, ChevronLeft, ChevronRight, Ban, Camera, TestTube2 } from 'lucide-react';
 import { useHandGestures } from './hooks/useHandGestures';
 import { GESTURE_PRESETS, GESTURE_TOKEN_OPTIONS, getGestureTokenLabel, gestureBindingConflicts, mapKeyboardToStageCommand, StageCommand, stageInputEnabled } from './stageControls';
 
 export const SettingsView = ({
   onClose,
-  inputs,
   setMidiLearning,
   midiLearning,
   midiStatus,
@@ -14,14 +13,12 @@ export const SettingsView = ({
   stageControls,
   onStageControlsChange,
   onApplyGesturePreset,
-  onStartGestureLearning,
-  onCancelGestureLearning,
   onStageCommandTest,
   lastStageCommand,
-  learningAction,
 }) => {
   const [testModeOpen, setTestModeOpen] = useState(false);
   const [testFlash, setTestFlash] = useState({});
+  const [flashNow, setFlashNow] = useState(Date.now());
   const keyDebounceRef = useRef({});
   const gesturesEnabled = stageInputEnabled(stageControls, 'gestures');
   const pedalEnabled = stageInputEnabled(stageControls, 'pedal');
@@ -32,7 +29,7 @@ export const SettingsView = ({
     onStageCommandTest?.(command, source);
   }, [onStageCommandTest]);
 
-  const { videoRef, gestureStatus, gestureError, gesturePhase, retry } = useHandGestures({
+  const { videoRef, gestureStatus, gestureError, gesturePhase, lastDetectedGesture, retry } = useHandGestures({
     enabled: testModeOpen,
     cameraEnabled: testModeOpen,
     sensitivity,
@@ -56,7 +53,13 @@ export const SettingsView = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [testModeOpen, pedalEnabled, handleTestCommand]);
 
-  const isFlashing = (command) => Date.now() - (testFlash[command] || 0) < 550;
+  useEffect(() => {
+    if (!testModeOpen) return undefined;
+    const intervalId = window.setInterval(() => setFlashNow(Date.now()), 120);
+    return () => window.clearInterval(intervalId);
+  }, [testModeOpen]);
+
+  const isFlashing = (command) => flashNow - (testFlash[command] || 0) < 550;
   const currentBindings = stageControls?.gestureBindings || {};
   const testConflicts = gestureBindingConflicts(currentBindings);
   const commandCards = [
@@ -170,66 +173,6 @@ export const SettingsView = ({
               <option value="oneFinger">1 dedo (cima/baixo)</option>
             </select>
 
-            <label style={{ fontSize: 11, color: '#888', fontWeight: 700 }}>MAPEAMENTO POR AÇÃO</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, alignItems: 'center' }}>
-              <span style={{ fontSize: 11, color: '#aaa' }}>Subir</span>
-              <select
-                value={stageControls?.gestureBindings?.scroll_up || GESTURE_PRESETS.default.scroll_up}
-                onChange={(e) => onStageControlsChange?.({ gestureBindings: { ...stageControls?.gestureBindings, scroll_up: e.target.value } })}
-                style={{ ...styles.inputField, height: 34, fontSize: 11 }}
-              >
-                {GESTURE_TOKEN_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select>
-              <button type="button" style={{ ...styles.headerBtn, fontSize: 10, height: 34 }} onClick={() => onStartGestureLearning?.('scroll_up')}>
-                Aprender
-              </button>
-
-              <span style={{ fontSize: 11, color: '#aaa' }}>Descer</span>
-              <select
-                value={stageControls?.gestureBindings?.scroll_down || GESTURE_PRESETS.default.scroll_down}
-                onChange={(e) => onStageControlsChange?.({ gestureBindings: { ...stageControls?.gestureBindings, scroll_down: e.target.value } })}
-                style={{ ...styles.inputField, height: 34, fontSize: 11 }}
-              >
-                {GESTURE_TOKEN_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select>
-              <button type="button" style={{ ...styles.headerBtn, fontSize: 10, height: 34 }} onClick={() => onStartGestureLearning?.('scroll_down')}>
-                Aprender
-              </button>
-
-              <span style={{ fontSize: 11, color: '#aaa' }}>Próxima</span>
-              <select
-                value={stageControls?.gestureBindings?.next_song || GESTURE_PRESETS.default.next_song}
-                onChange={(e) => onStageControlsChange?.({ gestureBindings: { ...stageControls?.gestureBindings, next_song: e.target.value } })}
-                style={{ ...styles.inputField, height: 34, fontSize: 11 }}
-              >
-                {GESTURE_TOKEN_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select>
-              <button type="button" style={{ ...styles.headerBtn, fontSize: 10, height: 34 }} onClick={() => onStartGestureLearning?.('next_song')}>
-                Aprender
-              </button>
-
-              <span style={{ fontSize: 11, color: '#aaa' }}>Anterior</span>
-              <select
-                value={stageControls?.gestureBindings?.prev_song || GESTURE_PRESETS.default.prev_song}
-                onChange={(e) => onStageControlsChange?.({ gestureBindings: { ...stageControls?.gestureBindings, prev_song: e.target.value } })}
-                style={{ ...styles.inputField, height: 34, fontSize: 11 }}
-              >
-                {GESTURE_TOKEN_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select>
-              <button type="button" style={{ ...styles.headerBtn, fontSize: 10, height: 34 }} onClick={() => onStartGestureLearning?.('prev_song')}>
-                Aprender
-              </button>
-            </div>
-            {learningAction && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#2a2210', border: '1px solid #ff950055', borderRadius: 8, padding: '8px 10px' }}>
-                <span style={{ fontSize: 11, color: '#ffcc6b', fontWeight: 700 }}>
-                  Aprendendo gesto para: {learningAction}
-                </span>
-                <button type="button" onClick={onCancelGestureLearning} style={{ ...styles.headerBtn, color: '#ff3b30', borderColor: '#ff3b30', fontSize: 10 }}>
-                  Cancelar
-                </button>
-              </div>
-            )}
             {gestureBindingConflicts(stageControls?.gestureBindings || {}).length > 0 && (
               <p style={{ fontSize: 10, color: '#ff9500', margin: 0 }}>
                 Atenção: há gestos repetidos em mais de uma ação.
@@ -237,7 +180,7 @@ export const SettingsView = ({
             )}
 
             <button type="button" onClick={() => setTestModeOpen(true)} style={{ ...styles.headerBtn, height: 40, fontSize: 11, width: '100%' }}>
-              <TestTube2 size={15} /> ABRIR TESTE/CALIBRAÇÃO
+              <TestTube2 size={15} /> CONFIGURAR GESTOS
             </button>
             <p style={{ fontSize: 10, color: '#666', margin: 0 }}>
               Último comando: <span style={{ color: '#fff' }}>{lastStageCommand || 'nenhum'}</span>
@@ -276,7 +219,7 @@ export const SettingsView = ({
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
           <div style={{ width: '100%', maxWidth: 520, background: '#1c1c1e', border: '1px solid #3a3a3c', borderRadius: 12, padding: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <strong style={{ fontSize: 14, color: '#fff' }}>Teste/Calibração de Comandos</strong>
+              <strong style={{ fontSize: 14, color: '#fff' }}>Configurar gestos</strong>
               <button onClick={() => setTestModeOpen(false)} style={{ ...styles.headerBtn, color: '#ff3b30', borderColor: '#ff3b30', fontSize: 10 }}>
                 <X size={14} /> FECHAR
               </button>
@@ -293,10 +236,8 @@ export const SettingsView = ({
             )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 12 }}>
               {commandCards.map((card) => (
-                <button
+                <div
                   key={card.command}
-                  type="button"
-                  onClick={() => handleTestCommand(card.command, 'manual-test')}
                   style={{
                     border: '1px solid #3a3a3c',
                     borderRadius: 8,
@@ -307,11 +248,56 @@ export const SettingsView = ({
                     textAlign: 'left',
                   }}
                 >
-                  <div>{card.title}</div>
+                  <button
+                    type="button"
+                    onClick={() => handleTestCommand(card.command, 'manual-test')}
+                    style={{
+                      width: '100%',
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'inherit',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      padding: 0,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {card.title}
+                  </button>
                   <div style={{ fontWeight: 500, fontSize: 10, opacity: isFlashing(card.command) ? 0.8 : 0.75, marginTop: 2 }}>
                     Gesto: {getGestureTokenLabel(card.binding)}
                   </div>
-                </button>
+                  <select
+                    value={
+                      card.binding ||
+                      {
+                        [StageCommand.SCROLL_UP]: GESTURE_PRESETS.default.scroll_up,
+                        [StageCommand.SCROLL_DOWN]: GESTURE_PRESETS.default.scroll_down,
+                        [StageCommand.NEXT_SONG]: GESTURE_PRESETS.default.next_song,
+                        [StageCommand.PREV_SONG]: GESTURE_PRESETS.default.prev_song,
+                      }[card.command]
+                    }
+                    onChange={(e) => {
+                      const bindingKeyByCommand = {
+                        [StageCommand.SCROLL_UP]: 'scroll_up',
+                        [StageCommand.SCROLL_DOWN]: 'scroll_down',
+                        [StageCommand.NEXT_SONG]: 'next_song',
+                        [StageCommand.PREV_SONG]: 'prev_song',
+                      };
+                      const bindingKey = bindingKeyByCommand[card.command];
+                      if (!bindingKey) return;
+                      onStageControlsChange?.({
+                        gestureBindings: {
+                          ...stageControls?.gestureBindings,
+                          [bindingKey]: e.target.value,
+                        },
+                      });
+                    }}
+                    style={{ ...styles.inputField, marginTop: 6, height: 30, fontSize: 10 }}
+                  >
+                    {GESTURE_TOKEN_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </select>
+                </div>
               ))}
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -322,6 +308,12 @@ export const SettingsView = ({
                 </p>
                 <p style={{ margin: '4px 0 0 0' }}>
                   Fase: <span style={{ color: '#fff' }}>{gesturePhase}</span>
+                </p>
+                <p style={{ margin: '6px 0 0 0' }}>
+                  Último gesto detectado:{' '}
+                  <span style={{ color: '#fff' }}>
+                    {lastDetectedGesture ? getGestureTokenLabel(lastDetectedGesture) : 'nenhum gesto válido reconhecido ainda'}
+                  </span>
                 </p>
                 <p style={{ margin: '6px 0 0 0' }}>
                   Você pode testar por toque (botões acima), pedal HID e gestos configurados.
@@ -336,6 +328,18 @@ export const SettingsView = ({
                   </button>
                 )}
               </div>
+            </div>
+            <div style={{ marginTop: 10, borderTop: '1px solid #343437', paddingTop: 10 }}>
+              <p style={{ margin: 0, fontSize: 11, color: '#ddd', fontWeight: 700 }}>Ajuda de execução</p>
+              <p style={{ margin: '4px 0 0 0', fontSize: 10, color: '#b3b3b7' }}>
+                Swipe: faça deslocamento horizontal rápido mantendo a mão detectada no quadro.
+              </p>
+              <p style={{ margin: '2px 0 0 0', fontSize: 10, color: '#b3b3b7' }}>
+                Palma/punho: mantenha o gesto estável por um instante para evitar falsos positivos.
+              </p>
+              <p style={{ margin: '6px 0 0 0', fontSize: 10, color: '#b3b3b7' }}>
+                Gestos disponíveis: {GESTURE_TOKEN_OPTIONS.map((opt) => opt.label).join(', ')}.
+              </p>
             </div>
           </div>
         </div>

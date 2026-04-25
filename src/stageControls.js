@@ -10,8 +10,6 @@ export const StageCommand = {
 export const GestureToken = {
   ONE_FINGER_UP: 'one_finger_up',
   ONE_FINGER_DOWN: 'one_finger_down',
-  OPEN_PALM_UP: 'open_palm_up',
-  OPEN_PALM_DOWN: 'open_palm_down',
   OPEN_PALM: 'open_palm',
   CLOSED_FIST: 'closed_fist',
   TWO_FINGERS_UP: 'two_fingers_up',
@@ -24,8 +22,6 @@ export const GestureToken = {
 export const GESTURE_TOKEN_OPTIONS = [
   { value: GestureToken.ONE_FINGER_UP, label: '1 dedo para cima' },
   { value: GestureToken.ONE_FINGER_DOWN, label: '1 dedo para baixo' },
-  { value: GestureToken.OPEN_PALM_UP, label: 'Palma aberta para cima' },
-  { value: GestureToken.OPEN_PALM_DOWN, label: 'Palma aberta para baixo' },
   { value: GestureToken.OPEN_PALM, label: 'Mão espalmada' },
   { value: GestureToken.CLOSED_FIST, label: 'Punho fechado' },
   { value: GestureToken.TWO_FINGERS_UP, label: '2 dedos para cima' },
@@ -42,14 +38,14 @@ const GESTURE_LABEL_BY_TOKEN = GESTURE_TOKEN_OPTIONS.reduce((acc, item) => {
 
 export const GESTURE_PRESETS = {
   default: {
-    scroll_up: GestureToken.TWO_FINGERS_UP,
-    scroll_down: GestureToken.TWO_FINGERS_DOWN,
+    scroll_up: GestureToken.OPEN_PALM,
+    scroll_down: GestureToken.CLOSED_FIST,
     next_song: GestureToken.ROCK_SIGN,
-    prev_song: GestureToken.SWIPE_LEFT,
+    prev_song: GestureToken.SWIPE_RIGHT,
   },
   palm: {
-    scroll_up: GestureToken.OPEN_PALM_UP,
-    scroll_down: GestureToken.OPEN_PALM_DOWN,
+    scroll_up: GestureToken.OPEN_PALM,
+    scroll_down: GestureToken.CLOSED_FIST,
     next_song: GestureToken.SWIPE_RIGHT,
     prev_song: GestureToken.SWIPE_LEFT,
   },

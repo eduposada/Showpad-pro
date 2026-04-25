@@ -2,6 +2,16 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.9.11] - 2026-04-25
+
+### Alterado
+
+- **Gestos padrão de palco (novo default):** `scroll_up` agora usa **mão espalmada**, `scroll_down` usa **punho fechado**, `next_song` usa **sinal de rock** e `prev_song` usa **swipe para direita**.
+- **Catálogo simplificado de palma aberta:** removidas as variações direcionais (`open_palm_up` / `open_palm_down`), mantendo apenas o token único `open_palm` em presets, validação e labels de UI.
+- **Detecção de swipe mais confiável:** heurística atualizada com limiar dedicado por sensibilidade, dominância horizontal e janela curta de acumulação para melhorar principalmente o reconhecimento de `swipe_left`.
+- **Configurações de palco mais diretas:** o fluxo de seleção + teste foi unificado no modal **Configurar gestos**, com dropdown de gesto abaixo de cada ação (`PAG ↑`, `PAG ↓`, `PRÓX MÚSICA`, `MÚSICA ANT`).
+- **Treino no próprio modal:** painel de status agora mostra o **último gesto detectado** em tempo real e inclui ajuda prática com lista de gestos disponíveis e dicas rápidas de execução.
+
 ## [8.9.9] - 2026-04-25
 
 ### Corrigido
