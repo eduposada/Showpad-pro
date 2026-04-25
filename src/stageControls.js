@@ -38,8 +38,8 @@ const GESTURE_LABEL_BY_TOKEN = GESTURE_TOKEN_OPTIONS.reduce((acc, item) => {
 
 export const GESTURE_PRESETS = {
   default: {
-    scroll_up: GestureToken.OPEN_PALM,
-    scroll_down: GestureToken.CLOSED_FIST,
+    scroll_up: GestureToken.CLOSED_FIST,
+    scroll_down: GestureToken.OPEN_PALM,
     next_song: GestureToken.ROCK_SIGN,
     prev_song: GestureToken.SWIPE_RIGHT,
   },

@@ -936,6 +936,7 @@ export default function App() {
           stageControls={stageControls}
           onStageCommand={handleStageCommandEvent}
           onToggleStageCamera={handleToggleStageCamera}
+          onOpenSettings={() => setShowSettings(true)}
           learningAction={learningGestureAction}
           onLearnGestureSample={handleLearnGestureSample}
         />

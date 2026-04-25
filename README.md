@@ -4,7 +4,7 @@ Aplicação web para músicos: **repertórios**, **cifras**, **setlists**, **tra
 
 ## Versão atual
 
-**8.8.1** — ver [`CHANGELOG.md`](CHANGELOG.md); a tag Git de release segue o número indicado no changelog (ex.: **`v8.8.1`**).
+**8.10.0** — ver [`CHANGELOG.md`](CHANGELOG.md); a tag Git de release segue o número indicado no changelog (ex.: **`v8.10.0`**).
 
 ## Stack
 
@@ -24,6 +24,8 @@ Aplicação web para músicos: **repertórios**, **cifras**, **setlists**, **tra
 | [`supabase/README.md`](supabase/README.md) | Migrações SQL, ordem de deploy e troubleshooting |
 | [`AGENTS.md`](AGENTS.md) | Orientação para assistentes de IA no repositório |
 | [`.cursorrules`](.cursorrules) | Regras de negócio, código e limites do projeto |
+| [`REQUISITOS_FUNCIONAIS.md`](REQUISITOS_FUNCIONAIS.md) | Escopo funcional validado por release |
+| [`CONCEITO_DE_OPERACOES.md`](CONCEITO_DE_OPERACOES.md) | Cenários operacionais e princípios de uso em campo |
 
 ## Desenvolvimento local
 

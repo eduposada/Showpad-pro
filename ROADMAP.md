@@ -1,5 +1,7 @@
 # ShowPad — visão de futuro e roadmap
 
+Baseline estável atual: **8.10.0** (2026-04-25)
+
 ## Contexto
 
 O ShowPad nasceu como ferramenta pessoal para músicos gerenciarem cifras e repertório. A visão de longo prazo é evoluir para uma plataforma colaborativa completa, do ensaio ao palco, com suporte a bandas, dispositivos físicos e, eventualmente, comercialização.
@@ -71,7 +73,19 @@ Poucos concorrentes combinam colaboração real entre membros, governança de re
 
 ## Prioridades
 
-A prioridade imediata é consolidar bandas e repertório colaborativo. O restante deste documento serve de referência até essa base estar estável em produção.
+A prioridade imediata é consolidar bandas e repertório colaborativo, mantendo o bloco de controles de palco recém-estabilizado em `8.10.0`. O restante deste documento serve de referência até essa base estar estável em produção.
+
+### Consolidação recém-concluída (v8.10.0)
+
+- Modal único de **Configurar gestos** (configuração + teste no mesmo fluxo).
+- Catálogo de gestos simplificado com `open_palm` único.
+- Feedback de último gesto detectado para treino operacional.
+- Acesso ao painel de configurações também no **Modo Show**.
+- Default de palco ajustado para operação prática:
+  - subir: punho fechado
+  - descer: mão espalmada
+  - próxima música: sinal de rock
+  - música anterior: swipe direita
 
 ### Em curso na aba Bandas
 
@@ -91,4 +105,4 @@ Itens já descritos em **Funcionalidades planejadas**; ordem sugerida apenas par
 
 ---
 
-*Documento iniciado em abril de 2026. Atualizar conforme o projeto evoluir.*
+*Documento iniciado em abril de 2026. Revisado para baseline estável 8.10.0.*

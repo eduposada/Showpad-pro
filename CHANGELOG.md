@@ -2,6 +2,18 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.10.0] - 2026-04-25
+
+### Adicionado
+
+- **Acesso direto às configurações no Modo Show:** novo botão de `Configurações` na barra superior do show, posicionado à esquerda dos controles de ajuste de tom, para abrir rapidamente o painel sem sair do palco.
+- **Documentação funcional e operacional da release estável:** criação dos documentos `REQUISITOS_FUNCIONAIS.md` e `CONCEITO_DE_OPERACOES.md`, com escopo do produto, fluxos principais e limites operacionais da versão.
+
+### Alterado
+
+- **Default oficial de gestos ajustado conforme operação de palco:** `scroll_up` usa **punho fechado** e `scroll_down` usa **mão espalmada**; mantidos `next_song = rock_sign` e `prev_song = swipe_right`.
+- **Roadmap de produto revisado:** `ROADMAP.md` atualizado para refletir a baseline estável `8.10.0`, consolidando o bloco de controles de palco e priorizando próximos passos.
+
 ## [8.9.11] - 2026-04-25
 
 ### Alterado

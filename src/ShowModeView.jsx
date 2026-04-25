@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronLeft, PanelLeftOpen, Type, ChevronUp, ChevronDown, X, ChevronRight, Zap, RefreshCw, Camera, FileMusic } from 'lucide-react';
+import { ChevronLeft, PanelLeftOpen, Type, ChevronUp, ChevronDown, X, ChevronRight, Zap, RefreshCw, Camera, FileMusic, Settings } from 'lucide-react';
 import { formatChordsVisual, transposeContent } from './ShowPadCore';
 import { useHandGestures } from './hooks/useHandGestures';
 import { mapKeyboardToStageCommand, stageInputEnabled, StageCommand } from './stageControls';
@@ -17,6 +17,7 @@ export const ShowModeView = ({
     stageControls,
     onStageCommand,
     onToggleStageCamera,
+    onOpenSettings,
     learningAction,
     onLearnGestureSample,
 }) => {
@@ -212,6 +213,14 @@ export const ShowModeView = ({
                 </div>
 
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <button
+                        type="button"
+                        onClick={onOpenSettings}
+                        title="Abrir configurações"
+                        style={controlBtnStyle}
+                    >
+                        <Settings size={18} />
+                    </button>
                     {/* CONTROLE DE TRANSPOSE TEMPORÁRIO (v7.1) */}
                     <div style={{display:'flex', gap:'4px', backgroundColor:'rgba(0,0,0,0.3)', padding:'4px', borderRadius:'10px', border:'1px solid #444'}}>
                         <button style={{...controlBtnStyle, height:'36px', width:'36px'}} onClick={() => setTempTranspose(t => t - 1)}>-1</button>
