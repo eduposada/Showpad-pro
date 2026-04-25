@@ -93,7 +93,6 @@ export default function App() {
   const midiLearningRef = useRef(null);
   const showScrollRef = useRef(null);
   const importSongFileRef = useRef(null);
-  const preCalibrationCameraRef = useRef(null);
 
   const getUserDisplayName = () => {
     if (!session?.user) return "Usuário";
@@ -410,27 +409,6 @@ export default function App() {
     setStageControls((prev) =>
       normalizeStageControls({ ...prev, cameraPreviewVisible: !prev.cameraPreviewVisible })
     );
-  };
-
-  const handleToggleCalibrationMode = () => {
-    setStageControls((prev) => {
-      const nextCalibration = !prev.calibrationMode;
-      if (nextCalibration) {
-        preCalibrationCameraRef.current = Boolean(prev.cameraEnabled);
-        return normalizeStageControls({
-          ...prev,
-          calibrationMode: true,
-          cameraEnabled: true,
-        });
-      }
-      const restoreCameraEnabled = preCalibrationCameraRef.current ?? prev.cameraEnabled;
-      preCalibrationCameraRef.current = null;
-      return normalizeStageControls({
-        ...prev,
-        calibrationMode: false,
-        cameraEnabled: Boolean(restoreCameraEnabled),
-      });
-    });
   };
 
   const handleApplyGesturePreset = (preset) => {
@@ -973,7 +951,6 @@ export default function App() {
           styles={styles}
           stageControls={stageControls}
           onStageControlsChange={updateStageControls}
-          onToggleCalibrationMode={handleToggleCalibrationMode}
           onApplyGesturePreset={handleApplyGesturePreset}
           onStartGestureLearning={handleStartGestureLearning}
           onCancelGestureLearning={handleCancelGestureLearning}

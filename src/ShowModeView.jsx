@@ -22,7 +22,6 @@ export const ShowModeView = ({
 }) => {
     const [idx, setIdx] = useState(0), [dr, setDr] = useState(false);
     const [btnPressed, setBtnPressed] = useState(null); 
-    const [calibrationFlash, setCalibrationFlash] = useState({});
     const [tabsVisible, setTabsVisible] = useState(true);
     const keyDebounceRef = useRef({});
     
@@ -60,7 +59,6 @@ export const ShowModeView = ({
         if (command === StageCommand.SCROLL_DOWN) scrollPage(downDir);
         if (command === StageCommand.PREV_SONG) handleNav(-1);
         if (command === StageCommand.NEXT_SONG) handleNav(1);
-        setCalibrationFlash((prev) => ({ ...prev, [command]: Date.now() }));
         onStageCommand?.(command, source);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNav depende de idx atual
     }, [scrollPage, stageControls?.invertScroll, onStageCommand, idx, songsArr.length]);
@@ -118,8 +116,6 @@ export const ShowModeView = ({
     const midiOk = midiStatus === 'ready';
     const gesturesEnabled = stageInputEnabled(stageControls, 'gestures');
     const showCameraPreview = gesturesEnabled && stageControls?.cameraEnabled && stageControls?.cameraPreviewVisible;
-    const isCalibrationMode = Boolean(stageControls?.calibrationMode);
-    const isFlashing = (command) => Date.now() - (calibrationFlash[command] || 0) < 500;
     const hasTablature = Boolean(song?.content && song.content.split('\n').some((line) => isTablatureLine(line)));
 
     return (
@@ -288,17 +284,6 @@ export const ShowModeView = ({
                             ? `Gestos: ${gestureError}`
                             : `Gestos: ${gestureStatus}`
                     }
-                </div>
-            )}
-            {isCalibrationMode && (
-                <div style={{ position: 'absolute', top: 120, left: 14, width: 250, background: '#111e', border: '1px solid #444', borderRadius: 10, padding: 8, zIndex: 46 }}>
-                    <div style={{ fontSize: 10, color: '#8e8e93', marginBottom: 6, fontWeight: 700 }}>TESTE/CALIBRAÇÃO</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                        <div style={{ padding: '8px 6px', borderRadius: 8, fontSize: 11, border: '1px solid #3a3a3c', background: isFlashing(StageCommand.SCROLL_UP) ? '#34c759' : '#1f1f21', color: isFlashing(StageCommand.SCROLL_UP) ? '#052b10' : '#d1d1d6', fontWeight: 700, textAlign: 'center' }}>PAG ↑</div>
-                        <div style={{ padding: '8px 6px', borderRadius: 8, fontSize: 11, border: '1px solid #3a3a3c', background: isFlashing(StageCommand.SCROLL_DOWN) ? '#34c759' : '#1f1f21', color: isFlashing(StageCommand.SCROLL_DOWN) ? '#052b10' : '#d1d1d6', fontWeight: 700, textAlign: 'center' }}>PAG ↓</div>
-                        <div style={{ padding: '8px 6px', borderRadius: 8, fontSize: 11, border: '1px solid #3a3a3c', background: isFlashing(StageCommand.NEXT_SONG) ? '#34c759' : '#1f1f21', color: isFlashing(StageCommand.NEXT_SONG) ? '#052b10' : '#d1d1d6', fontWeight: 700, textAlign: 'center' }}>PRÓX MÚSICA</div>
-                        <div style={{ padding: '8px 6px', borderRadius: 8, fontSize: 11, border: '1px solid #3a3a3c', background: isFlashing(StageCommand.PREV_SONG) ? '#34c759' : '#1f1f21', color: isFlashing(StageCommand.PREV_SONG) ? '#052b10' : '#d1d1d6', fontWeight: 700, textAlign: 'center' }}>MÚSICA ANT</div>
-                    </div>
                 </div>
             )}
             <video

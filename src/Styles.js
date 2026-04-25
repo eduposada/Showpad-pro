@@ -62,10 +62,10 @@ export const styles = {
 
     empty: { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '10px' },
     settingsOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 5000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' },
-    settingsCard: { backgroundColor: '#1c1c1e', borderRadius: '20px', width: '100%', maxWidth: '500px', border: '1px solid #333', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
+    settingsCard: { backgroundColor: '#1c1c1e', borderRadius: '20px', width: '100%', maxWidth: '560px', maxHeight: 'min(92vh, 860px)', border: '1px solid #333', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
     settingsHeader: { padding: '20px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#2c2c2e' },
     settingsTitle: { fontSize: '18px', fontWeight: 'bold', color: '#fff', margin: 0 },
-    settingsContent: { padding: '20px', overflowY: 'auto' },
+    settingsContent: { padding: '20px', overflowY: 'auto', flex: 1, minHeight: 0 },
     settingsSection: { marginBottom: '24px', padding: '15px', backgroundColor: '#2c2c2e', borderRadius: '12px', border: '1px solid #444' },
     settingsLabel: { fontSize: '11px', color: '#007aff', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '10px', display: 'block' },
     garimpoPanel: { padding: '40px', display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#000', color: '#fff' },

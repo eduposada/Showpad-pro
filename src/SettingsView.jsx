@@ -1,6 +1,7 @@
-import React from 'react';
-import { X, Zap, Database, ChevronLeft, ChevronRight, Ban, Camera, Keyboard } from 'lucide-react';
-import { GESTURE_PRESETS, GESTURE_TOKEN_OPTIONS, gestureBindingConflicts } from './stageControls';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { X, Zap, Database, ChevronLeft, ChevronRight, Ban, Camera, Keyboard, TestTube2 } from 'lucide-react';
+import { useHandGestures } from './hooks/useHandGestures';
+import { GESTURE_PRESETS, GESTURE_TOKEN_OPTIONS, gestureBindingConflicts, mapKeyboardToStageCommand, StageCommand, stageInputEnabled } from './stageControls';
 
 export const SettingsView = ({
   onClose,
@@ -12,16 +13,54 @@ export const SettingsView = ({
   styles,
   stageControls,
   onStageControlsChange,
-  onToggleCalibrationMode,
   onApplyGesturePreset,
   onStartGestureLearning,
   onCancelGestureLearning,
   onStageCommandTest,
   lastStageCommand,
   learningAction,
-}) => (
-  <div style={styles.settingsOverlay}>
-    <div style={styles.settingsCard}>
+}) => {
+  const [testModeOpen, setTestModeOpen] = useState(false);
+  const [testFlash, setTestFlash] = useState({});
+  const keyDebounceRef = useRef({});
+  const gesturesEnabled = stageInputEnabled(stageControls, 'gestures');
+  const pedalEnabled = stageInputEnabled(stageControls, 'pedal');
+  const sensitivity = stageControls?.gestureSensitivity || 'medium';
+
+  const handleTestCommand = useCallback((command, source) => {
+    setTestFlash((prev) => ({ ...prev, [command]: Date.now() }));
+    onStageCommandTest?.(command, source);
+  }, [onStageCommandTest]);
+
+  const { videoRef, gestureStatus, gestureError } = useHandGestures({
+    enabled: testModeOpen && gesturesEnabled,
+    cameraEnabled: testModeOpen,
+    sensitivity,
+    gestureBindings: stageControls?.gestureBindings,
+    onCommand: (command) => handleTestCommand(command, 'gesture-test'),
+  });
+
+  useEffect(() => {
+    if (!testModeOpen || !pedalEnabled) return undefined;
+    const onKeyDown = (event) => {
+      const command = mapKeyboardToStageCommand(event.code);
+      if (!command) return;
+      event.preventDefault();
+      const now = Date.now();
+      const last = keyDebounceRef.current[command] || 0;
+      if (now - last < 150) return;
+      keyDebounceRef.current[command] = now;
+      handleTestCommand(command, 'pedal-test');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [testModeOpen, pedalEnabled, handleTestCommand]);
+
+  const isFlashing = (command) => Date.now() - (testFlash[command] || 0) < 550;
+
+  return (
+    <div style={styles.settingsOverlay}>
+      <div style={styles.settingsCard}>
       
       {/* CABEÇALHO DO PAINEL */}
       <div style={styles.settingsHeader}>
@@ -123,20 +162,6 @@ export const SettingsView = ({
               <option value="oneFinger">1 dedo (cima/baixo)</option>
             </select>
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#ccc', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={Boolean(stageControls?.calibrationMode)}
-                onChange={onToggleCalibrationMode}
-              />
-              Modo teste/calibração
-            </label>
-            {stageControls?.calibrationMode && (
-              <p style={{ fontSize: 10, color: '#5ac8fa', margin: 0, lineHeight: 1.4 }}>
-                A câmera será ligada temporariamente e o display no Modo Show acenderá por comando recebido.
-              </p>
-            )}
-
             <label style={{ fontSize: 11, color: '#888', fontWeight: 700 }}>MAPEAMENTO POR AÇÃO</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, alignItems: 'center' }}>
               <span style={{ fontSize: 11, color: '#aaa' }}>Subir</span>
@@ -174,6 +199,18 @@ export const SettingsView = ({
               <button type="button" style={{ ...styles.headerBtn, fontSize: 10, height: 34 }} onClick={() => onStartGestureLearning?.('next_song')}>
                 Aprender
               </button>
+
+              <span style={{ fontSize: 11, color: '#aaa' }}>Anterior</span>
+              <select
+                value={stageControls?.gestureBindings?.prev_song || GESTURE_PRESETS.default.prev_song}
+                onChange={(e) => onStageControlsChange?.({ gestureBindings: { ...stageControls?.gestureBindings, prev_song: e.target.value } })}
+                style={{ ...styles.inputField, height: 34, fontSize: 11 }}
+              >
+                {GESTURE_TOKEN_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+              <button type="button" style={{ ...styles.headerBtn, fontSize: 10, height: 34 }} onClick={() => onStartGestureLearning?.('prev_song')}>
+                Aprender
+              </button>
             </div>
             {learningAction && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#2a2210', border: '1px solid #ff950055', borderRadius: 8, padding: '8px 10px' }}>
@@ -191,20 +228,9 @@ export const SettingsView = ({
               </p>
             )}
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" onClick={() => onStageCommandTest?.('scroll_up', 'test')} style={{ ...styles.headerBtn, fontSize: 10 }}>
-                <Keyboard size={14} /> TESTE CIMA
-              </button>
-              <button type="button" onClick={() => onStageCommandTest?.('scroll_down', 'test')} style={{ ...styles.headerBtn, fontSize: 10 }}>
-                <Keyboard size={14} /> TESTE BAIXO
-              </button>
-              <button type="button" onClick={() => onStageCommandTest?.('prev_song', 'test')} style={{ ...styles.headerBtn, fontSize: 10 }}>
-                <ChevronLeft size={14} /> TESTE ANT
-              </button>
-              <button type="button" onClick={() => onStageCommandTest?.('next_song', 'test')} style={{ ...styles.headerBtn, fontSize: 10 }}>
-                <ChevronRight size={14} /> TESTE PRÓX
-              </button>
-            </div>
+            <button type="button" onClick={() => setTestModeOpen(true)} style={{ ...styles.headerBtn, height: 40, fontSize: 11, width: '100%' }}>
+              <TestTube2 size={15} /> ABRIR TESTE/CALIBRAÇÃO
+            </button>
             <p style={{ fontSize: 10, color: '#666', margin: 0 }}>
               Último comando: <span style={{ color: '#fff' }}>{lastStageCommand || 'nenhum'}</span>
             </p>
@@ -229,15 +255,45 @@ export const SettingsView = ({
           </div>
         </div>
 
-        {/* BOTÃO CONCLUIR */}
+      </div>
+      <div style={{ borderTop: '1px solid #333', padding: '14px 20px', background: '#1c1c1e' }}>
         <button 
-          style={{...styles.addBtn, height: '50px', fontSize: '14px', marginTop: '10px'}} 
+          style={{...styles.addBtn, height: '46px', fontSize: '14px'}} 
           onClick={onClose}
         >
           CONCLUIR AJUSTES
         </button>
-
       </div>
+      {testModeOpen && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
+          <div style={{ width: '100%', maxWidth: 520, background: '#1c1c1e', border: '1px solid #3a3a3c', borderRadius: 12, padding: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <strong style={{ fontSize: 14, color: '#fff' }}>Teste/Calibração de Comandos</strong>
+              <button onClick={() => setTestModeOpen(false)} style={{ ...styles.headerBtn, color: '#ff3b30', borderColor: '#ff3b30', fontSize: 10 }}>
+                <X size={14} /> FECHAR
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 12 }}>
+              <button type="button" onClick={() => handleTestCommand(StageCommand.SCROLL_UP, 'manual-test')} style={{ border: '1px solid #3a3a3c', borderRadius: 8, padding: '10px 8px', background: isFlashing(StageCommand.SCROLL_UP) ? '#34c759' : '#2a2a2d', color: isFlashing(StageCommand.SCROLL_UP) ? '#03220d' : '#fff', fontWeight: 700 }}>PAG ↑</button>
+              <button type="button" onClick={() => handleTestCommand(StageCommand.SCROLL_DOWN, 'manual-test')} style={{ border: '1px solid #3a3a3c', borderRadius: 8, padding: '10px 8px', background: isFlashing(StageCommand.SCROLL_DOWN) ? '#34c759' : '#2a2a2d', color: isFlashing(StageCommand.SCROLL_DOWN) ? '#03220d' : '#fff', fontWeight: 700 }}>PAG ↓</button>
+              <button type="button" onClick={() => handleTestCommand(StageCommand.NEXT_SONG, 'manual-test')} style={{ border: '1px solid #3a3a3c', borderRadius: 8, padding: '10px 8px', background: isFlashing(StageCommand.NEXT_SONG) ? '#34c759' : '#2a2a2d', color: isFlashing(StageCommand.NEXT_SONG) ? '#03220d' : '#fff', fontWeight: 700 }}>PRÓX MÚSICA</button>
+              <button type="button" onClick={() => handleTestCommand(StageCommand.PREV_SONG, 'manual-test')} style={{ border: '1px solid #3a3a3c', borderRadius: 8, padding: '10px 8px', background: isFlashing(StageCommand.PREV_SONG) ? '#34c759' : '#2a2a2d', color: isFlashing(StageCommand.PREV_SONG) ? '#03220d' : '#fff', fontWeight: 700 }}>MÚSICA ANT</button>
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <video ref={videoRef} playsInline muted style={{ width: 170, height: 120, borderRadius: 8, border: '1px solid #555', objectFit: 'cover', background: '#000', transform: 'scaleX(-1)' }} />
+              <div style={{ fontSize: 11, color: '#aaa', lineHeight: 1.45, flex: 1 }}>
+                <p style={{ margin: 0 }}>
+                  Status Gestos: <span style={{ color: '#fff' }}>{gestureError ? `erro: ${gestureError}` : gestureStatus}</span>
+                </p>
+                <p style={{ margin: '6px 0 0 0' }}>
+                  Você pode testar por toque (botões acima), pedal HID e gestos configurados.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   </div>
-);
+  );
+};

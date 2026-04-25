@@ -2,6 +2,19 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.9.8] - 2026-04-25
+
+### Corrigido
+
+- **Configurações no iPad:** modal reorganizado com `maxHeight` por viewport, área interna com scroll real (`flex` + `minHeight: 0`) e botão de concluir fixado no rodapé, evitando seções ocultas sem rolagem.
+- **Fluxo de teste/calibração:** removidos os quatro botões de teste inline; o painel agora abre por um único botão dedicado.
+
+### Adicionado
+
+- **Janela dedicada de teste/calibração:** novo modal interno com 4 subdivisões (`PAG ↑`, `PAG ↓`, `PRÓX MÚSICA`, `MÚSICA ANT`) que acendem em verde quando o comando é reconhecido por toque, pedal HID ou gesto.
+- **Preview da câmera no teste:** a câmera frontal e sua imagem ficam visíveis durante a calibração, com status de gestos em tempo real.
+- **Mapeamento de gesto para música anterior:** inclusão de `prev_song` em presets, bindings, dropdown de mapeamento e resolução de comandos no hook de gestos.
+
 ## [8.9.7] - 2026-04-25
 
 ### Corrigido

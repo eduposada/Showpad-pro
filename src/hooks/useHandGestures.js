@@ -67,6 +67,7 @@ function commandFromGestureToken(token, gestureBindings) {
   if (gestureBindings.scroll_up === token) return StageCommand.SCROLL_UP;
   if (gestureBindings.scroll_down === token) return StageCommand.SCROLL_DOWN;
   if (gestureBindings.next_song === token) return StageCommand.NEXT_SONG;
+  if (gestureBindings.prev_song === token) return StageCommand.PREV_SONG;
   return null;
 }
 

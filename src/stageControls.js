@@ -40,21 +40,25 @@ export const GESTURE_PRESETS = {
     scroll_up: GestureToken.TWO_FINGERS_UP,
     scroll_down: GestureToken.TWO_FINGERS_DOWN,
     next_song: GestureToken.ROCK_SIGN,
+    prev_song: GestureToken.SWIPE_LEFT,
   },
   palm: {
     scroll_up: GestureToken.OPEN_PALM_UP,
     scroll_down: GestureToken.OPEN_PALM_DOWN,
     next_song: GestureToken.SWIPE_RIGHT,
+    prev_song: GestureToken.SWIPE_LEFT,
   },
   swipe: {
     scroll_up: GestureToken.SWIPE_LEFT,
     scroll_down: GestureToken.SWIPE_RIGHT,
     next_song: GestureToken.ROCK_SIGN,
+    prev_song: GestureToken.OPEN_PALM,
   },
   oneFinger: {
     scroll_up: GestureToken.ONE_FINGER_UP,
     scroll_down: GestureToken.ONE_FINGER_DOWN,
     next_song: GestureToken.OPEN_PALM,
+    prev_song: GestureToken.CLOSED_FIST,
   },
 };
 
@@ -86,6 +90,7 @@ export function normalizeStageControls(raw) {
     scroll_up: allowedTokens.has(candidateBindings.scroll_up) ? candidateBindings.scroll_up : fromPreset.scroll_up,
     scroll_down: allowedTokens.has(candidateBindings.scroll_down) ? candidateBindings.scroll_down : fromPreset.scroll_down,
     next_song: allowedTokens.has(candidateBindings.next_song) ? candidateBindings.next_song : fromPreset.next_song,
+    prev_song: allowedTokens.has(candidateBindings.prev_song) ? candidateBindings.prev_song : fromPreset.prev_song,
   };
   merged.invertScroll = Boolean(merged.invertScroll);
   merged.cameraEnabled = Boolean(merged.cameraEnabled);
