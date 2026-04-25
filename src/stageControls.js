@@ -8,8 +8,12 @@ export const StageCommand = {
 };
 
 export const GestureToken = {
+  ONE_FINGER_UP: 'one_finger_up',
+  ONE_FINGER_DOWN: 'one_finger_down',
   OPEN_PALM_UP: 'open_palm_up',
   OPEN_PALM_DOWN: 'open_palm_down',
+  OPEN_PALM: 'open_palm',
+  CLOSED_FIST: 'closed_fist',
   TWO_FINGERS_UP: 'two_fingers_up',
   TWO_FINGERS_DOWN: 'two_fingers_down',
   ROCK_SIGN: 'rock_sign',
@@ -18,8 +22,12 @@ export const GestureToken = {
 };
 
 export const GESTURE_TOKEN_OPTIONS = [
+  { value: GestureToken.ONE_FINGER_UP, label: '1 dedo para cima' },
+  { value: GestureToken.ONE_FINGER_DOWN, label: '1 dedo para baixo' },
   { value: GestureToken.OPEN_PALM_UP, label: 'Palma aberta para cima' },
   { value: GestureToken.OPEN_PALM_DOWN, label: 'Palma aberta para baixo' },
+  { value: GestureToken.OPEN_PALM, label: 'Mão espalmada' },
+  { value: GestureToken.CLOSED_FIST, label: 'Punho fechado' },
   { value: GestureToken.TWO_FINGERS_UP, label: '2 dedos para cima' },
   { value: GestureToken.TWO_FINGERS_DOWN, label: '2 dedos para baixo' },
   { value: GestureToken.ROCK_SIGN, label: 'Sinal de rock' },
@@ -43,6 +51,11 @@ export const GESTURE_PRESETS = {
     scroll_down: GestureToken.SWIPE_RIGHT,
     next_song: GestureToken.ROCK_SIGN,
   },
+  oneFinger: {
+    scroll_up: GestureToken.ONE_FINGER_UP,
+    scroll_down: GestureToken.ONE_FINGER_DOWN,
+    next_song: GestureToken.OPEN_PALM,
+  },
 };
 
 export const DEFAULT_STAGE_CONTROLS = {
@@ -51,6 +64,7 @@ export const DEFAULT_STAGE_CONTROLS = {
   gestureSensitivity: 'medium',
   cameraEnabled: true,
   cameraPreviewVisible: true,
+  calibrationMode: false,
   gesturePreset: 'default',
   gestureBindings: { ...GESTURE_PRESETS.default },
 };
@@ -76,6 +90,7 @@ export function normalizeStageControls(raw) {
   merged.invertScroll = Boolean(merged.invertScroll);
   merged.cameraEnabled = Boolean(merged.cameraEnabled);
   merged.cameraPreviewVisible = Boolean(merged.cameraPreviewVisible);
+  merged.calibrationMode = Boolean(merged.calibrationMode);
   return merged;
 }
 

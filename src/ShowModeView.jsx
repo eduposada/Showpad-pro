@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronLeft, PanelLeftOpen, Type, ChevronUp, ChevronDown, X, ChevronRight, Zap, RefreshCw, Camera, Eye, EyeOff } from 'lucide-react';
+import { ChevronLeft, PanelLeftOpen, Type, ChevronUp, ChevronDown, X, ChevronRight, Zap, RefreshCw, Camera, FileMusic } from 'lucide-react';
 import { formatChordsVisual, transposeContent } from './ShowPadCore';
 import { useHandGestures } from './hooks/useHandGestures';
 import { mapKeyboardToStageCommand, stageInputEnabled, StageCommand } from './stageControls';
@@ -17,12 +17,13 @@ export const ShowModeView = ({
     stageControls,
     onStageCommand,
     onToggleStageCamera,
-    onToggleCameraPreview,
     learningAction,
     onLearnGestureSample,
 }) => {
     const [idx, setIdx] = useState(0), [dr, setDr] = useState(false);
     const [btnPressed, setBtnPressed] = useState(null); 
+    const [calibrationFlash, setCalibrationFlash] = useState({});
+    const [tabsVisible, setTabsVisible] = useState(true);
     const keyDebounceRef = useRef({});
     
     // ESTADO DE TRANSPOSIÇÃO VOLÁTIL (v7.1)
@@ -35,6 +36,9 @@ export const ShowModeView = ({
     useEffect(() => {
         setTempTranspose(0);
     }, [idx]);
+    useEffect(() => {
+        setTabsVisible(true);
+    }, [idx, item?.data?.id]);
 
     const controlBtnStyle = {
         width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -56,6 +60,7 @@ export const ShowModeView = ({
         if (command === StageCommand.SCROLL_DOWN) scrollPage(downDir);
         if (command === StageCommand.PREV_SONG) handleNav(-1);
         if (command === StageCommand.NEXT_SONG) handleNav(1);
+        setCalibrationFlash((prev) => ({ ...prev, [command]: Date.now() }));
         onStageCommand?.(command, source);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNav depende de idx atual
     }, [scrollPage, stageControls?.invertScroll, onStageCommand, idx, songsArr.length]);
@@ -92,7 +97,20 @@ export const ShowModeView = ({
         if (tempTranspose !== 0) {
             text = transposeContent(text, tempTranspose);
         }
+        if (!tabsVisible) {
+            text = text
+                .split('\n')
+                .filter((line) => !isTablatureLine(line))
+                .join('\n');
+        }
         return formatChordsVisual(text);
+    };
+    const isTablatureLine = (line) => {
+        const t = String(line || '').trim();
+        if (!t) return false;
+        const explicitString = /^[eEbBgGdDaA]\|/.test(t);
+        const fretPattern = /[\-|]{4,}/.test(t) && /\d/.test(t);
+        return explicitString || fretPattern;
     };
 
     // ESTILO DO LED MIDI NO SHOW (v7.1)
@@ -100,6 +118,9 @@ export const ShowModeView = ({
     const midiOk = midiStatus === 'ready';
     const gesturesEnabled = stageInputEnabled(stageControls, 'gestures');
     const showCameraPreview = gesturesEnabled && stageControls?.cameraEnabled && stageControls?.cameraPreviewVisible;
+    const isCalibrationMode = Boolean(stageControls?.calibrationMode);
+    const isFlashing = (command) => Date.now() - (calibrationFlash[command] || 0) < 500;
+    const hasTablature = Boolean(song?.content && song.content.split('\n').some((line) => isTablatureLine(line)));
 
     return (
         <div style={styles.showOverlay}>
@@ -154,31 +175,31 @@ export const ShowModeView = ({
                             <button
                                 type="button"
                                 onClick={onToggleStageCamera}
-                                title={stageControls?.cameraEnabled ? 'Desligar câmera de gestos' : 'Ligar câmera de gestos'}
+                                title={stageControls?.cameraPreviewVisible ? 'Ocultar imagem da câmera' : 'Mostrar imagem da câmera'}
                                 style={{
                                     ...controlBtnStyle,
                                     width: '40px',
                                     height: '40px',
-                                    backgroundColor: stageControls?.cameraEnabled ? '#007aff' : '#3a3a3c',
-                                    borderColor: stageControls?.cameraEnabled ? '#5ac8fa' : '#555',
+                                    backgroundColor: stageControls?.cameraPreviewVisible ? '#007aff' : '#3a3a3c',
+                                    borderColor: stageControls?.cameraPreviewVisible ? '#5ac8fa' : '#555',
                                 }}
                             >
                                 <Camera size={18} />
                             </button>
-                            {stageControls?.cameraEnabled && (
+                            {hasTablature && (
                                 <button
                                     type="button"
-                                    onClick={onToggleCameraPreview}
-                                    title={stageControls?.cameraPreviewVisible ? 'Ocultar preview da câmera' : 'Mostrar preview da câmera'}
+                                    onClick={() => setTabsVisible((v) => !v)}
+                                    title={tabsVisible ? 'Ocultar tablaturas' : 'Mostrar tablaturas'}
                                     style={{
                                         ...controlBtnStyle,
                                         width: '40px',
                                         height: '40px',
-                                        backgroundColor: stageControls?.cameraPreviewVisible ? '#34c759' : '#3a3a3c',
-                                        borderColor: stageControls?.cameraPreviewVisible ? '#75e69a' : '#555',
+                                        backgroundColor: tabsVisible ? '#ff9f0a' : '#3a3a3c',
+                                        borderColor: tabsVisible ? '#ffbd59' : '#555',
                                     }}
                                 >
-                                    {stageControls?.cameraPreviewVisible ? <Eye size={18} /> : <EyeOff size={18} />}
+                                    <FileMusic size={18} />
                                 </button>
                             )}
                         </>
@@ -267,6 +288,17 @@ export const ShowModeView = ({
                             ? `Gestos: ${gestureError}`
                             : `Gestos: ${gestureStatus}`
                     }
+                </div>
+            )}
+            {isCalibrationMode && (
+                <div style={{ position: 'absolute', top: 120, left: 14, width: 250, background: '#111e', border: '1px solid #444', borderRadius: 10, padding: 8, zIndex: 46 }}>
+                    <div style={{ fontSize: 10, color: '#8e8e93', marginBottom: 6, fontWeight: 700 }}>TESTE/CALIBRAÇÃO</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                        <div style={{ padding: '8px 6px', borderRadius: 8, fontSize: 11, border: '1px solid #3a3a3c', background: isFlashing(StageCommand.SCROLL_UP) ? '#34c759' : '#1f1f21', color: isFlashing(StageCommand.SCROLL_UP) ? '#052b10' : '#d1d1d6', fontWeight: 700, textAlign: 'center' }}>PAG ↑</div>
+                        <div style={{ padding: '8px 6px', borderRadius: 8, fontSize: 11, border: '1px solid #3a3a3c', background: isFlashing(StageCommand.SCROLL_DOWN) ? '#34c759' : '#1f1f21', color: isFlashing(StageCommand.SCROLL_DOWN) ? '#052b10' : '#d1d1d6', fontWeight: 700, textAlign: 'center' }}>PAG ↓</div>
+                        <div style={{ padding: '8px 6px', borderRadius: 8, fontSize: 11, border: '1px solid #3a3a3c', background: isFlashing(StageCommand.NEXT_SONG) ? '#34c759' : '#1f1f21', color: isFlashing(StageCommand.NEXT_SONG) ? '#052b10' : '#d1d1d6', fontWeight: 700, textAlign: 'center' }}>PRÓX MÚSICA</div>
+                        <div style={{ padding: '8px 6px', borderRadius: 8, fontSize: 11, border: '1px solid #3a3a3c', background: isFlashing(StageCommand.PREV_SONG) ? '#34c759' : '#1f1f21', color: isFlashing(StageCommand.PREV_SONG) ? '#052b10' : '#d1d1d6', fontWeight: 700, textAlign: 'center' }}>MÚSICA ANT</div>
+                    </div>
                 </div>
             )}
             <video

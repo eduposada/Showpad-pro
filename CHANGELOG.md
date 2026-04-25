@@ -2,6 +2,19 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.9.7] - 2026-04-25
+
+### Corrigido
+
+- **Modo Show — semântica dos botões de palco:** o botão de câmera agora controla apenas a exibição do preview da câmera (mostrar/ocultar imagem), sem interferir em outros controles.
+- **Controle de tablaturas no toolbar:** substituição do antigo botão de olho por botão dedicado de tablaturas (`FileMusic`), com toggle de exibição apenas quando a música contém linhas de tablatura.
+
+### Adicionado
+
+- **Modo teste/calibração:** novo toggle em Configurações (Controles de Palco), com painel visual no Modo Show que acende por comando recebido (`PAG ↑`, `PAG ↓`, `PRÓX MÚSICA`, `MÚSICA ANT`).
+- **Forçar câmera temporária na calibração:** ao ativar calibração, a câmera é ligada automaticamente; ao sair, o estado anterior da câmera é restaurado.
+- **Novos gestos configuráveis:** `one_finger_up`, `one_finger_down`, `open_palm`, `closed_fist` no catálogo de mapeamento e no detector de gestos.
+
 ## [8.9.6] - 2026-04-25
 
 ### Adicionado

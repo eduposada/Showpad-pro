@@ -18,12 +18,24 @@ function countRaisedFingers(landmarks) {
   return tipVsPip.reduce((acc, [tip, pip]) => (landmarks[tip].y < landmarks[pip].y ? acc + 1 : acc), 0);
 }
 
+function isThumbRaised(landmarks) {
+  return landmarks[4].x > landmarks[3].x;
+}
+
 function isRockSign(landmarks) {
   const indexUp = landmarks[8].y < landmarks[6].y;
   const middleDown = landmarks[12].y > landmarks[10].y;
   const ringDown = landmarks[16].y > landmarks[14].y;
   const pinkyUp = landmarks[20].y < landmarks[18].y;
   return indexUp && middleDown && ringDown && pinkyUp;
+}
+
+function isOpenPalmStable(landmarks) {
+  return countRaisedFingers(landmarks) >= 4;
+}
+
+function isClosedFist(landmarks) {
+  return countRaisedFingers(landmarks) === 0 && !isThumbRaised(landmarks);
 }
 
 function resolveGestureToken(landmarks, dx, dy, threshold) {
@@ -33,10 +45,16 @@ function resolveGestureToken(landmarks, dx, dy, threshold) {
   }
   const raised = countRaisedFingers(landmarks);
   if (isRockSign(landmarks)) return GestureToken.ROCK_SIGN;
+  if (raised === 1) {
+    if (dy < -threshold) return GestureToken.ONE_FINGER_UP;
+    if (dy > threshold) return GestureToken.ONE_FINGER_DOWN;
+  }
   if (raised >= 4) {
+    if (Math.abs(dy) <= threshold * 0.65) return GestureToken.OPEN_PALM;
     if (dy < -threshold) return GestureToken.OPEN_PALM_UP;
     if (dy > threshold) return GestureToken.OPEN_PALM_DOWN;
   }
+  if (isClosedFist(landmarks)) return GestureToken.CLOSED_FIST;
   if (raised === 2) {
     if (dy < -threshold) return GestureToken.TWO_FINGERS_UP;
     if (dy > threshold) return GestureToken.TWO_FINGERS_DOWN;

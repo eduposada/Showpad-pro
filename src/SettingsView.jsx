@@ -12,6 +12,7 @@ export const SettingsView = ({
   styles,
   stageControls,
   onStageControlsChange,
+  onToggleCalibrationMode,
   onApplyGesturePreset,
   onStartGestureLearning,
   onCancelGestureLearning,
@@ -119,7 +120,22 @@ export const SettingsView = ({
               <option value="default">Default (2 dedos/rock)</option>
               <option value="palm">Palma + swipe</option>
               <option value="swipe">Swipe predominante</option>
+              <option value="oneFinger">1 dedo (cima/baixo)</option>
             </select>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#ccc', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={Boolean(stageControls?.calibrationMode)}
+                onChange={onToggleCalibrationMode}
+              />
+              Modo teste/calibração
+            </label>
+            {stageControls?.calibrationMode && (
+              <p style={{ fontSize: 10, color: '#5ac8fa', margin: 0, lineHeight: 1.4 }}>
+                A câmera será ligada temporariamente e o display no Modo Show acenderá por comando recebido.
+              </p>
+            )}
 
             <label style={{ fontSize: 11, color: '#888', fontWeight: 700 }}>MAPEAMENTO POR AÇÃO</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, alignItems: 'center' }}>
