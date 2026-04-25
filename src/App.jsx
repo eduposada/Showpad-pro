@@ -29,6 +29,7 @@ import { GarimpoView } from './GarimpoView';
 import { InfoModal } from './InfoModal';
 import { ProfileOnboardingView } from './ProfileOnboardingView';
 import { styles } from './Styles';
+import { DEFAULT_STAGE_CONTROLS, normalizeStageControls, STAGE_CONTROLS_STORAGE_KEY } from './stageControls';
 
 /** Valor de `datetime-local` no editor de show → texto legível na lista lateral (pt-BR). */
 function formatSetlistListDate(timeRaw) {
@@ -78,6 +79,15 @@ export default function App() {
   const [profileReady, setProfileReady] = useState(false);
   const [profileNeedsOnboarding, setProfileNeedsOnboarding] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [stageControls, setStageControls] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STAGE_CONTROLS_STORAGE_KEY);
+      return raw ? normalizeStageControls(JSON.parse(raw)) : DEFAULT_STAGE_CONTROLS;
+    } catch {
+      return DEFAULT_STAGE_CONTROLS;
+    }
+  });
+  const [lastStageCommand, setLastStageCommand] = useState('');
 
   const midiLearningRef = useRef(null);
   const showScrollRef = useRef(null);
@@ -382,6 +392,21 @@ export default function App() {
   }, []);
 
   useEffect(() => { midiLearningRef.current = midiLearning; }, [midiLearning]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(STAGE_CONTROLS_STORAGE_KEY, JSON.stringify(stageControls));
+    } catch (err) {
+      console.warn('Falha ao persistir stageControls:', err);
+    }
+  }, [stageControls]);
+
+  const updateStageControls = (patch) => {
+    setStageControls((prev) => normalizeStageControls({ ...prev, ...patch }));
+  };
+
+  const handleStageCommandEvent = (command, source = 'unknown') => {
+    setLastStageCommand(`${command} via ${source}`);
+  };
 
   const refreshData = async () => { 
     if (!session) return;
@@ -865,8 +890,36 @@ export default function App() {
         </div>
       </div>
 
-      {showMode && <ShowModeView item={selectedItem} fontSize={fontSize} setFontSize={setFontSize} scrollPage={scrollPage} onClose={()=>setShowMode(false)} showScrollRef={showScrollRef} lastSignal={lastSignalUI} styles={styles} midiStatus={midiStatus} />}
-      {showSettings && <SettingsView onClose={()=>setShowSettings(false)} inputs={allInputs} setMidiLearning={setMidiLearning} midiLearning={midiLearning} midiStatus={midiStatus} handleImport={handleImport} styles={styles} />}
+      {showMode && (
+        <ShowModeView
+          item={selectedItem}
+          fontSize={fontSize}
+          setFontSize={setFontSize}
+          scrollPage={scrollPage}
+          onClose={() => setShowMode(false)}
+          showScrollRef={showScrollRef}
+          lastSignal={lastSignalUI}
+          styles={styles}
+          midiStatus={midiStatus}
+          stageControls={stageControls}
+          onStageCommand={handleStageCommandEvent}
+        />
+      )}
+      {showSettings && (
+        <SettingsView
+          onClose={() => setShowSettings(false)}
+          inputs={allInputs}
+          setMidiLearning={setMidiLearning}
+          midiLearning={midiLearning}
+          midiStatus={midiStatus}
+          handleImport={handleImport}
+          styles={styles}
+          stageControls={stageControls}
+          onStageControlsChange={updateStageControls}
+          onStageCommandTest={handleStageCommandEvent}
+          lastStageCommand={lastStageCommand}
+        />
+      )}
       {showInfo && <InfoModal onClose={() => setShowInfo(false)} />}
       {showProfileEdit && (
         <div

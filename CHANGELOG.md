@@ -2,6 +2,19 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.9.4] - 2026-04-24
+
+### Adicionado
+
+- **Controles de palco por pedal HID:** suporte a teclas de page-turner no Modo Show (`Arrow/PageUp/PageDown/Space/Left/Right`) com debounce para evitar múltiplos disparos.
+- **Gestos por câmera (MVP local):** novo hook `useHandGestures` com MediaPipe Hands para rolagem e navegação de músicas sem backend externo.
+- **Configuração de palco:** novo painel em `SettingsView` para método de entrada (`Toque`, `Pedal`, `Gestos`, `Pedal+Gestos`), inversão de rolagem e sensibilidade dos gestos.
+- **Roadmap nativo:** documento `docs/NATIVE_STAGE_CONTROLS_ROADMAP.md` com plano de migração para iOS/Android mantendo contrato de comandos unificado.
+
+### Alterado
+
+- **ShowMode:** centralização dos comandos de palco (`scroll_up`, `scroll_down`, `prev_song`, `next_song`) para reuso por toque, pedal e gestos.
+
 ## [8.9.3] - 2026-04-24
 
 ### Adicionado

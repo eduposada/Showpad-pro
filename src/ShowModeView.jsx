@@ -1,10 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronLeft, PanelLeftOpen, Type, ChevronUp, ChevronDown, X, ChevronRight, Zap, RefreshCw } from 'lucide-react';
 import { formatChordsVisual, transposeContent } from './ShowPadCore';
+import { useHandGestures } from './hooks/useHandGestures';
+import { mapKeyboardToStageCommand, stageInputEnabled, StageCommand } from './stageControls';
 
-export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose, showScrollRef, lastSignal, styles, midiStatus }) => {
+export const ShowModeView = ({
+    item,
+    fontSize,
+    setFontSize,
+    scrollPage,
+    onClose,
+    showScrollRef,
+    lastSignal,
+    styles,
+    midiStatus,
+    stageControls,
+    onStageCommand,
+}) => {
     const [idx, setIdx] = useState(0), [dr, setDr] = useState(false);
     const [btnPressed, setBtnPressed] = useState(null); 
+    const keyDebounceRef = useRef({});
     
     // ESTADO DE TRANSPOSIÇÃO VOLÁTIL (v7.1)
     const [tempTranspose, setTempTranspose] = useState(0);
@@ -29,6 +44,39 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
             if (showScrollRef.current) showScrollRef.current.scrollTop = 0;
         }
     };
+
+    const executeStageCommand = useCallback((command, source = 'touch') => {
+        const upDir = stageControls?.invertScroll ? 1 : -1;
+        const downDir = stageControls?.invertScroll ? -1 : 1;
+        if (command === StageCommand.SCROLL_UP) scrollPage(upDir);
+        if (command === StageCommand.SCROLL_DOWN) scrollPage(downDir);
+        if (command === StageCommand.PREV_SONG) handleNav(-1);
+        if (command === StageCommand.NEXT_SONG) handleNav(1);
+        onStageCommand?.(command, source);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNav depende de idx atual
+    }, [scrollPage, stageControls?.invertScroll, onStageCommand, idx, songsArr.length]);
+
+    useEffect(() => {
+        if (!stageInputEnabled(stageControls, 'pedal')) return;
+        const onKeyDown = (event) => {
+            const command = mapKeyboardToStageCommand(event.code);
+            if (!command) return;
+            event.preventDefault();
+            const now = Date.now();
+            const last = keyDebounceRef.current[command] || 0;
+            if (now - last < 150) return;
+            keyDebounceRef.current[command] = now;
+            executeStageCommand(command, 'pedal');
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [stageControls, executeStageCommand]);
+
+    const { videoRef, gestureStatus, gestureError } = useHandGestures({
+        enabled: stageInputEnabled(stageControls, 'gestures'),
+        sensitivity: stageControls?.gestureSensitivity || 'medium',
+        onCommand: executeStageCommand,
+    });
 
     // PROCESSAMENTO DA CIFRA COM TRANSPOSE TEMPORÁRIO
     const getTransposedContent = () => {
@@ -143,7 +191,7 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
                 <button 
                     onMouseDown={() => setBtnPressed('prev')}
                     onMouseUp={() => setBtnPressed(null)}
-                    onClick={() => handleNav(-1)}
+                    onClick={() => executeStageCommand(StageCommand.PREV_SONG, 'touch')}
                     style={{
                         ...styles.navBtn3D,
                         ...(btnPressed === 'prev' ? styles.navBtn3DActive : {}),
@@ -157,7 +205,7 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
                 <button 
                     onMouseDown={() => setBtnPressed('next')}
                     onMouseUp={() => setBtnPressed(null)}
-                    onClick={() => handleNav(1)}
+                    onClick={() => executeStageCommand(StageCommand.NEXT_SONG, 'touch')}
                     style={{
                         ...styles.navBtn3D,
                         ...(btnPressed === 'next' ? styles.navBtn3DActive : {}),
@@ -168,6 +216,12 @@ export const ShowModeView = ({ item, fontSize, setFontSize, scrollPage, onClose,
                     PRÓXIMA <ChevronRight size={30}/>
                 </button>
             </div>
+            {stageInputEnabled(stageControls, 'gestures') && (
+                <div style={{ position: 'absolute', bottom: 104, right: 14, background: '#111d', border: '1px solid #333', borderRadius: 8, padding: '6px 8px', fontSize: 11, color: '#8e8e93', zIndex: 40 }}>
+                    {gestureError ? `Gestos: ${gestureError}` : `Gestos: ${gestureStatus}`}
+                </div>
+            )}
+            <video ref={videoRef} playsInline muted style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }} />
         </div>
     );
 };

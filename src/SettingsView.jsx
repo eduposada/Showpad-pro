@@ -1,7 +1,19 @@
 import React from 'react';
-import { X, Zap, Database, ChevronLeft, ChevronRight, Ban } from 'lucide-react';
+import { X, Zap, Database, ChevronLeft, ChevronRight, Ban, Camera, Keyboard } from 'lucide-react';
 
-export const SettingsView = ({ onClose, inputs, setMidiLearning, midiLearning, midiStatus, handleImport, styles }) => (
+export const SettingsView = ({
+  onClose,
+  inputs,
+  setMidiLearning,
+  midiLearning,
+  midiStatus,
+  handleImport,
+  styles,
+  stageControls,
+  onStageControlsChange,
+  onStageCommandTest,
+  lastStageCommand,
+}) => (
   <div style={styles.settingsOverlay}>
     <div style={styles.settingsCard}>
       
@@ -55,6 +67,66 @@ export const SettingsView = ({ onClose, inputs, setMidiLearning, midiLearning, m
               </p>
             </div>
           )}
+        </div>
+
+        {/* SEÇÃO CONTROLES DE PALCO */}
+        <div style={styles.settingsSection}>
+          <span style={styles.settingsLabel}>CONTROLES DE PALCO</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <label style={{ fontSize: 11, color: '#888', fontWeight: 700 }}>MÉTODO DE ENTRADA</label>
+            <select
+              value={stageControls?.inputMode || 'touch'}
+              onChange={(e) => onStageControlsChange?.({ inputMode: e.target.value })}
+              style={{ ...styles.inputField, height: 40, fontSize: 12 }}
+            >
+              <option value="touch">Toque</option>
+              <option value="pedal">Pedal HID</option>
+              <option value="gestures">Gestos por Câmera</option>
+              <option value="pedal+gestures">Pedal + Gestos</option>
+            </select>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#ccc', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={Boolean(stageControls?.invertScroll)}
+                onChange={(e) => onStageControlsChange?.({ invertScroll: e.target.checked })}
+              />
+              Inverter rolagem
+            </label>
+
+            <label style={{ fontSize: 11, color: '#888', fontWeight: 700 }}>SENSIBILIDADE DOS GESTOS</label>
+            <select
+              value={stageControls?.gestureSensitivity || 'medium'}
+              onChange={(e) => onStageControlsChange?.({ gestureSensitivity: e.target.value })}
+              style={{ ...styles.inputField, height: 40, fontSize: 12 }}
+            >
+              <option value="low">Baixa</option>
+              <option value="medium">Média</option>
+              <option value="high">Alta</option>
+            </select>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => onStageCommandTest?.('scroll_up', 'test')} style={{ ...styles.headerBtn, fontSize: 10 }}>
+                <Keyboard size={14} /> TESTE CIMA
+              </button>
+              <button type="button" onClick={() => onStageCommandTest?.('scroll_down', 'test')} style={{ ...styles.headerBtn, fontSize: 10 }}>
+                <Keyboard size={14} /> TESTE BAIXO
+              </button>
+              <button type="button" onClick={() => onStageCommandTest?.('prev_song', 'test')} style={{ ...styles.headerBtn, fontSize: 10 }}>
+                <ChevronLeft size={14} /> TESTE ANT
+              </button>
+              <button type="button" onClick={() => onStageCommandTest?.('next_song', 'test')} style={{ ...styles.headerBtn, fontSize: 10 }}>
+                <ChevronRight size={14} /> TESTE PRÓX
+              </button>
+            </div>
+            <p style={{ fontSize: 10, color: '#666', margin: 0 }}>
+              Último comando: <span style={{ color: '#fff' }}>{lastStageCommand || 'nenhum'}</span>
+            </p>
+            <p style={{ fontSize: 10, color: '#666', margin: 0, lineHeight: 1.4 }}>
+              <Camera size={11} style={{ display: 'inline', marginRight: 4 }} />
+              Gestos só atuam no Modo Show e usam câmera local (sem envio para nuvem).
+            </p>
+          </div>
         </div>
 
         {/* SEÇÃO BACKUP / RESTAURAÇÃO */}

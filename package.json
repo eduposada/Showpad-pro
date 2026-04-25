@@ -1,7 +1,7 @@
 {
   "name": "showpad-web",
   "private": true,
-  "version": "8.9.3",
+  "version": "8.9.4",
   "engines": {
     "node": "20.x"
   },
@@ -13,6 +13,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@mediapipe/hands": "^0.4.1675469240",
     "@supabase/supabase-js": "^2.100.1",
     "axios": "^1.14.0",
     "cheerio": "^1.2.0",
