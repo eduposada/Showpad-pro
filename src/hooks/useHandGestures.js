@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import '@mediapipe/hands';
+import '@mediapipe/hands/hands';
 import { StageCommand } from '../stageControls';
 
 const THRESHOLD_BY_SENSITIVITY = {
@@ -93,7 +93,11 @@ export function useHandGestures({ enabled, sensitivity = 'medium', onCommand }) 
         video.srcObject = stream;
         await video.play();
 
-        const HandsCtor = window.Hands;
+        let HandsCtor = window.Hands;
+        if (!HandsCtor) {
+          await import('@mediapipe/hands/hands');
+          HandsCtor = window.Hands;
+        }
         if (!HandsCtor) {
           throw new Error('Biblioteca de gestos não carregada.');
         }

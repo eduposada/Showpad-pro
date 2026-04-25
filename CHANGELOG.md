@@ -2,6 +2,12 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.9.5] - 2026-04-25
+
+### Corrigido
+
+- **Gestos no Modo Show (iPad):** correção do carregamento da biblioteca `@mediapipe/hands` para garantir disponibilidade de `window.Hands` no runtime; elimina erro “Biblioteca de gestos não carregada”.
+
 ## [8.9.4] - 2026-04-24
 
 ### Adicionado
