@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronLeft, PanelLeftOpen, Type, ChevronUp, ChevronDown, X, ChevronRight, Zap, RefreshCw } from 'lucide-react';
+import { ChevronLeft, PanelLeftOpen, Type, ChevronUp, ChevronDown, X, ChevronRight, Zap, RefreshCw, Camera, Eye, EyeOff } from 'lucide-react';
 import { formatChordsVisual, transposeContent } from './ShowPadCore';
 import { useHandGestures } from './hooks/useHandGestures';
 import { mapKeyboardToStageCommand, stageInputEnabled, StageCommand } from './stageControls';
@@ -16,6 +16,10 @@ export const ShowModeView = ({
     midiStatus,
     stageControls,
     onStageCommand,
+    onToggleStageCamera,
+    onToggleCameraPreview,
+    learningAction,
+    onLearnGestureSample,
 }) => {
     const [idx, setIdx] = useState(0), [dr, setDr] = useState(false);
     const [btnPressed, setBtnPressed] = useState(null); 
@@ -74,8 +78,11 @@ export const ShowModeView = ({
 
     const { videoRef, gestureStatus, gestureError } = useHandGestures({
         enabled: stageInputEnabled(stageControls, 'gestures'),
+        cameraEnabled: Boolean(stageControls?.cameraEnabled),
         sensitivity: stageControls?.gestureSensitivity || 'medium',
+        gestureBindings: stageControls?.gestureBindings,
         onCommand: executeStageCommand,
+        onGestureSample: onLearnGestureSample,
     });
 
     // PROCESSAMENTO DA CIFRA COM TRANSPOSE TEMPORÁRIO
@@ -91,6 +98,8 @@ export const ShowModeView = ({
     // ESTILO DO LED MIDI NO SHOW (v7.1)
     const midiPulse = lastSignal !== "";
     const midiOk = midiStatus === 'ready';
+    const gesturesEnabled = stageInputEnabled(stageControls, 'gestures');
+    const showCameraPreview = gesturesEnabled && stageControls?.cameraEnabled && stageControls?.cameraPreviewVisible;
 
     return (
         <div style={styles.showOverlay}>
@@ -140,6 +149,40 @@ export const ShowModeView = ({
                     }}>
                         <Zap size={20} color={midiOk ? (midiPulse ? '#fff' : '#4cd964') : '#888'} fill={midiPulse ? "#fff" : "none"} />
                     </div>
+                    {gesturesEnabled && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={onToggleStageCamera}
+                                title={stageControls?.cameraEnabled ? 'Desligar câmera de gestos' : 'Ligar câmera de gestos'}
+                                style={{
+                                    ...controlBtnStyle,
+                                    width: '40px',
+                                    height: '40px',
+                                    backgroundColor: stageControls?.cameraEnabled ? '#007aff' : '#3a3a3c',
+                                    borderColor: stageControls?.cameraEnabled ? '#5ac8fa' : '#555',
+                                }}
+                            >
+                                <Camera size={18} />
+                            </button>
+                            {stageControls?.cameraEnabled && (
+                                <button
+                                    type="button"
+                                    onClick={onToggleCameraPreview}
+                                    title={stageControls?.cameraPreviewVisible ? 'Ocultar preview da câmera' : 'Mostrar preview da câmera'}
+                                    style={{
+                                        ...controlBtnStyle,
+                                        width: '40px',
+                                        height: '40px',
+                                        backgroundColor: stageControls?.cameraPreviewVisible ? '#34c759' : '#3a3a3c',
+                                        borderColor: stageControls?.cameraPreviewVisible ? '#75e69a' : '#555',
+                                    }}
+                                >
+                                    {stageControls?.cameraPreviewVisible ? <Eye size={18} /> : <EyeOff size={18} />}
+                                </button>
+                            )}
+                        </>
+                    )}
                 </div>
 
                 <div style={{ flex: 1, textAlign: 'center' }}>
@@ -216,12 +259,37 @@ export const ShowModeView = ({
                     PRÓXIMA <ChevronRight size={30}/>
                 </button>
             </div>
-            {stageInputEnabled(stageControls, 'gestures') && (
+            {gesturesEnabled && (
                 <div style={{ position: 'absolute', bottom: 104, right: 14, background: '#111d', border: '1px solid #333', borderRadius: 8, padding: '6px 8px', fontSize: 11, color: '#8e8e93', zIndex: 40 }}>
-                    {gestureError ? `Gestos: ${gestureError}` : `Gestos: ${gestureStatus}`}
+                    {learningAction
+                        ? `Aprendendo gesto para ${learningAction}...`
+                        : gestureError
+                            ? `Gestos: ${gestureError}`
+                            : `Gestos: ${gestureStatus}`
+                    }
                 </div>
             )}
-            <video ref={videoRef} playsInline muted style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }} />
+            <video
+                ref={videoRef}
+                playsInline
+                muted
+                style={showCameraPreview
+                    ? {
+                        position: 'absolute',
+                        top: 120,
+                        right: 14,
+                        width: 140,
+                        height: 100,
+                        objectFit: 'cover',
+                        borderRadius: 8,
+                        border: '1px solid #555',
+                        boxShadow: '0 8px 20px rgba(0,0,0,0.45)',
+                        zIndex: 45,
+                        transform: 'scaleX(-1)',
+                        background: '#000',
+                    }
+                    : { position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+            />
         </div>
     );
 };

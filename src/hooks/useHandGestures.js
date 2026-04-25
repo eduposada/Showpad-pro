@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import '@mediapipe/hands/hands';
-import { StageCommand } from '../stageControls';
+import { GestureToken, StageCommand } from '../stageControls';
 
 const THRESHOLD_BY_SENSITIVITY = {
   low: 0.1,
@@ -8,18 +8,58 @@ const THRESHOLD_BY_SENSITIVITY = {
   high: 0.055,
 };
 
-function isOpenPalm(landmarks) {
-  if (!landmarks || landmarks.length < 21) return false;
+function countRaisedFingers(landmarks) {
   const tipVsPip = [
     [8, 6],
     [12, 10],
     [16, 14],
     [20, 18],
   ];
-  return tipVsPip.every(([tip, pip]) => landmarks[tip].y < landmarks[pip].y);
+  return tipVsPip.reduce((acc, [tip, pip]) => (landmarks[tip].y < landmarks[pip].y ? acc + 1 : acc), 0);
 }
 
-export function useHandGestures({ enabled, sensitivity = 'medium', onCommand }) {
+function isRockSign(landmarks) {
+  const indexUp = landmarks[8].y < landmarks[6].y;
+  const middleDown = landmarks[12].y > landmarks[10].y;
+  const ringDown = landmarks[16].y > landmarks[14].y;
+  const pinkyUp = landmarks[20].y < landmarks[18].y;
+  return indexUp && middleDown && ringDown && pinkyUp;
+}
+
+function resolveGestureToken(landmarks, dx, dy, threshold) {
+  if (!landmarks) return null;
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > threshold) {
+    return dx > 0 ? GestureToken.SWIPE_RIGHT : GestureToken.SWIPE_LEFT;
+  }
+  const raised = countRaisedFingers(landmarks);
+  if (isRockSign(landmarks)) return GestureToken.ROCK_SIGN;
+  if (raised >= 4) {
+    if (dy < -threshold) return GestureToken.OPEN_PALM_UP;
+    if (dy > threshold) return GestureToken.OPEN_PALM_DOWN;
+  }
+  if (raised === 2) {
+    if (dy < -threshold) return GestureToken.TWO_FINGERS_UP;
+    if (dy > threshold) return GestureToken.TWO_FINGERS_DOWN;
+  }
+  return null;
+}
+
+function commandFromGestureToken(token, gestureBindings) {
+  if (!token || !gestureBindings) return null;
+  if (gestureBindings.scroll_up === token) return StageCommand.SCROLL_UP;
+  if (gestureBindings.scroll_down === token) return StageCommand.SCROLL_DOWN;
+  if (gestureBindings.next_song === token) return StageCommand.NEXT_SONG;
+  return null;
+}
+
+export function useHandGestures({
+  enabled,
+  cameraEnabled = true,
+  sensitivity = 'medium',
+  gestureBindings,
+  onCommand,
+  onGestureSample,
+}) {
   const videoRef = useRef(null);
   const rafRef = useRef(0);
   const streamRef = useRef(null);
@@ -31,8 +71,8 @@ export function useHandGestures({ enabled, sensitivity = 'medium', onCommand }) 
   const [gestureError, setGestureError] = useState('');
 
   useEffect(() => {
-    if (!enabled) {
-      setGestureStatus('inativo');
+    if (!enabled || !cameraEnabled) {
+      setGestureStatus(enabled ? 'pausado' : 'inativo');
       setGestureError('');
       return;
     }
@@ -113,7 +153,7 @@ export function useHandGestures({ enabled, sensitivity = 'medium', onCommand }) 
         });
         hands.onResults((results) => {
           const marks = results.multiHandLandmarks?.[0];
-          if (!marks || !isOpenPalm(marks)) {
+          if (!marks) {
             lastPointRef.current = null;
             setGestureStatus('mão não detectada');
             return;
@@ -128,13 +168,11 @@ export function useHandGestures({ enabled, sensitivity = 'medium', onCommand }) 
           const dy = wrist.y - lastPointRef.current.y;
           lastPointRef.current = { x: wrist.x, y: wrist.y };
 
-          if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > threshold) {
-            emitIfReady(dx > 0 ? StageCommand.NEXT_SONG : StageCommand.PREV_SONG);
-            return;
-          }
-          if (Math.abs(dy) > threshold) {
-            emitIfReady(dy > 0 ? StageCommand.SCROLL_DOWN : StageCommand.SCROLL_UP);
-          }
+          const token = resolveGestureToken(marks, dx, dy, threshold);
+          if (!token) return;
+          onGestureSample?.(token);
+          const command = commandFromGestureToken(token, gestureBindings);
+          if (command) emitIfReady(command);
         });
         handsRef.current = hands;
         setGestureStatus('gestos ativos');
@@ -152,7 +190,7 @@ export function useHandGestures({ enabled, sensitivity = 'medium', onCommand }) 
       cancelled = true;
       stopAll();
     };
-  }, [enabled, onCommand, sensitivity]);
+  }, [enabled, cameraEnabled, onCommand, onGestureSample, sensitivity, gestureBindings]);
 
   return {
     videoRef,

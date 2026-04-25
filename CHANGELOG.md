@@ -2,6 +2,20 @@
 
 Todas as alterações relevantes do projeto serão documentadas neste arquivo.
 
+## [8.9.6] - 2026-04-25
+
+### Adicionado
+
+- **Modo Show — preview da câmera frontal:** mini-janela no canto superior direito quando gestos estão ativos e a câmera está ligada, com espelhamento visual para facilitar uso no palco.
+- **Controle de visibilidade do preview:** novo botão no toolbar do show para mostrar/ocultar a mini-janela sem desligar os gestos.
+- **Mapeamento avançado de gestos:** presets (`default`, `palm`, `swipe`), bindings por ação (`scroll_up`, `scroll_down`, `next_song`) e validação centralizada no perfil de controles de palco.
+- **Modo aprender (MVP):** configuração no Settings para aprender o próximo gesto válido por ação, com alerta de conflitos quando duas ações usam o mesmo gesto.
+
+### Alterado
+
+- **Hook de gestos:** `useHandGestures` passa a respeitar `cameraEnabled` (estado pausado sem interromper toque/pedal) e a mapear comandos com base em `gestureBindings` configuráveis.
+- **Orquestração de palco no App:** inclusão de handlers para toggle de câmera, toggle de preview e fluxo de aprendizado com persistência no `localStorage` (`stage-controls-profile`).
+
 ## [8.9.5] - 2026-04-25
 
 ### Corrigido

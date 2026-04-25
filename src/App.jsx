@@ -29,7 +29,7 @@ import { GarimpoView } from './GarimpoView';
 import { InfoModal } from './InfoModal';
 import { ProfileOnboardingView } from './ProfileOnboardingView';
 import { styles } from './Styles';
-import { DEFAULT_STAGE_CONTROLS, normalizeStageControls, STAGE_CONTROLS_STORAGE_KEY } from './stageControls';
+import { applyGesturePreset, DEFAULT_STAGE_CONTROLS, normalizeStageControls, STAGE_CONTROLS_STORAGE_KEY } from './stageControls';
 
 /** Valor de `datetime-local` no editor de show → texto legível na lista lateral (pt-BR). */
 function formatSetlistListDate(timeRaw) {
@@ -88,6 +88,7 @@ export default function App() {
     }
   });
   const [lastStageCommand, setLastStageCommand] = useState('');
+  const [learningGestureAction, setLearningGestureAction] = useState(null);
 
   const midiLearningRef = useRef(null);
   const showScrollRef = useRef(null);
@@ -402,6 +403,41 @@ export default function App() {
 
   const updateStageControls = (patch) => {
     setStageControls((prev) => normalizeStageControls({ ...prev, ...patch }));
+  };
+
+  const handleToggleStageCamera = () => {
+    setStageControls((prev) => normalizeStageControls({ ...prev, cameraEnabled: !prev.cameraEnabled }));
+  };
+
+  const handleToggleCameraPreview = () => {
+    setStageControls((prev) =>
+      normalizeStageControls({ ...prev, cameraPreviewVisible: !prev.cameraPreviewVisible })
+    );
+  };
+
+  const handleApplyGesturePreset = (preset) => {
+    setStageControls((prev) => applyGesturePreset(prev, preset));
+  };
+
+  const handleStartGestureLearning = (action) => {
+    setLearningGestureAction(action);
+  };
+
+  const handleCancelGestureLearning = () => {
+    setLearningGestureAction(null);
+  };
+
+  const handleLearnGestureSample = (gestureToken) => {
+    if (!learningGestureAction || !gestureToken) return;
+    setStageControls((prev) => normalizeStageControls({
+      ...prev,
+      gestureBindings: {
+        ...(prev.gestureBindings || {}),
+        [learningGestureAction]: gestureToken,
+      },
+    }));
+    setLastStageCommand(`aprendido: ${learningGestureAction} => ${gestureToken}`);
+    setLearningGestureAction(null);
   };
 
   const handleStageCommandEvent = (command, source = 'unknown') => {
@@ -903,6 +939,10 @@ export default function App() {
           midiStatus={midiStatus}
           stageControls={stageControls}
           onStageCommand={handleStageCommandEvent}
+          onToggleStageCamera={handleToggleStageCamera}
+          onToggleCameraPreview={handleToggleCameraPreview}
+          learningAction={learningGestureAction}
+          onLearnGestureSample={handleLearnGestureSample}
         />
       )}
       {showSettings && (
@@ -916,8 +956,12 @@ export default function App() {
           styles={styles}
           stageControls={stageControls}
           onStageControlsChange={updateStageControls}
+          onApplyGesturePreset={handleApplyGesturePreset}
+          onStartGestureLearning={handleStartGestureLearning}
+          onCancelGestureLearning={handleCancelGestureLearning}
           onStageCommandTest={handleStageCommandEvent}
           lastStageCommand={lastStageCommand}
+          learningAction={learningGestureAction}
         />
       )}
       {showInfo && <InfoModal onClose={() => setShowInfo(false)} />}

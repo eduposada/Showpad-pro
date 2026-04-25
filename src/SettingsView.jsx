@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Zap, Database, ChevronLeft, ChevronRight, Ban, Camera, Keyboard } from 'lucide-react';
+import { GESTURE_PRESETS, GESTURE_TOKEN_OPTIONS, gestureBindingConflicts } from './stageControls';
 
 export const SettingsView = ({
   onClose,
@@ -11,8 +12,12 @@ export const SettingsView = ({
   styles,
   stageControls,
   onStageControlsChange,
+  onApplyGesturePreset,
+  onStartGestureLearning,
+  onCancelGestureLearning,
   onStageCommandTest,
   lastStageCommand,
+  learningAction,
 }) => (
   <div style={styles.settingsOverlay}>
     <div style={styles.settingsCard}>
@@ -104,6 +109,71 @@ export const SettingsView = ({
               <option value="medium">Média</option>
               <option value="high">Alta</option>
             </select>
+
+            <label style={{ fontSize: 11, color: '#888', fontWeight: 700 }}>PRESET DE GESTOS</label>
+            <select
+              value={stageControls?.gesturePreset || 'default'}
+              onChange={(e) => onApplyGesturePreset?.(e.target.value)}
+              style={{ ...styles.inputField, height: 40, fontSize: 12 }}
+            >
+              <option value="default">Default (2 dedos/rock)</option>
+              <option value="palm">Palma + swipe</option>
+              <option value="swipe">Swipe predominante</option>
+            </select>
+
+            <label style={{ fontSize: 11, color: '#888', fontWeight: 700 }}>MAPEAMENTO POR AÇÃO</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: '#aaa' }}>Subir</span>
+              <select
+                value={stageControls?.gestureBindings?.scroll_up || GESTURE_PRESETS.default.scroll_up}
+                onChange={(e) => onStageControlsChange?.({ gestureBindings: { ...stageControls?.gestureBindings, scroll_up: e.target.value } })}
+                style={{ ...styles.inputField, height: 34, fontSize: 11 }}
+              >
+                {GESTURE_TOKEN_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+              <button type="button" style={{ ...styles.headerBtn, fontSize: 10, height: 34 }} onClick={() => onStartGestureLearning?.('scroll_up')}>
+                Aprender
+              </button>
+
+              <span style={{ fontSize: 11, color: '#aaa' }}>Descer</span>
+              <select
+                value={stageControls?.gestureBindings?.scroll_down || GESTURE_PRESETS.default.scroll_down}
+                onChange={(e) => onStageControlsChange?.({ gestureBindings: { ...stageControls?.gestureBindings, scroll_down: e.target.value } })}
+                style={{ ...styles.inputField, height: 34, fontSize: 11 }}
+              >
+                {GESTURE_TOKEN_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+              <button type="button" style={{ ...styles.headerBtn, fontSize: 10, height: 34 }} onClick={() => onStartGestureLearning?.('scroll_down')}>
+                Aprender
+              </button>
+
+              <span style={{ fontSize: 11, color: '#aaa' }}>Próxima</span>
+              <select
+                value={stageControls?.gestureBindings?.next_song || GESTURE_PRESETS.default.next_song}
+                onChange={(e) => onStageControlsChange?.({ gestureBindings: { ...stageControls?.gestureBindings, next_song: e.target.value } })}
+                style={{ ...styles.inputField, height: 34, fontSize: 11 }}
+              >
+                {GESTURE_TOKEN_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+              <button type="button" style={{ ...styles.headerBtn, fontSize: 10, height: 34 }} onClick={() => onStartGestureLearning?.('next_song')}>
+                Aprender
+              </button>
+            </div>
+            {learningAction && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#2a2210', border: '1px solid #ff950055', borderRadius: 8, padding: '8px 10px' }}>
+                <span style={{ fontSize: 11, color: '#ffcc6b', fontWeight: 700 }}>
+                  Aprendendo gesto para: {learningAction}
+                </span>
+                <button type="button" onClick={onCancelGestureLearning} style={{ ...styles.headerBtn, color: '#ff3b30', borderColor: '#ff3b30', fontSize: 10 }}>
+                  Cancelar
+                </button>
+              </div>
+            )}
+            {gestureBindingConflicts(stageControls?.gestureBindings || {}).length > 0 && (
+              <p style={{ fontSize: 10, color: '#ff9500', margin: 0 }}>
+                Atenção: há gestos repetidos em mais de uma ação.
+              </p>
+            )}
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" onClick={() => onStageCommandTest?.('scroll_up', 'test')} style={{ ...styles.headerBtn, fontSize: 10 }}>
